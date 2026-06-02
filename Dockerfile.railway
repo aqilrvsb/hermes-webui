@@ -36,6 +36,8 @@ RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpow
 COPY railway-skills /opt/skills-extra
 # Live pixel-art AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
 COPY pixel.html /apptoo/static/pixel.html
+# Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
 
 # Boot-time helpers
