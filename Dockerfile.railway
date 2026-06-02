@@ -48,12 +48,15 @@ RUN git clone --depth 1 https://github.com/irinabuht12-oss/marketing-skills /tmp
  && /opt/node/bin/node /opt/import_marketing_skills.js /tmp/mkskills /opt/skills-extra/marketing \
  && rm -rf /tmp/mkskills
 
+# Fold the 2 'marketer' skills (new-client, whatsapp-whacenter) INTO 'marketing' so there is
+# no separate 'marketer' category — everything marketing-related lives under one group.
+RUN cp -r /opt/skills-extra/marketer/. /opt/skills-extra/marketing/ && rm -rf /opt/skills-extra/marketer
+
 # Per-role skill bundles (category-preserving). mcp_setup points each profile at its own bundle:
-#   marketer -> /opt/skills-mkt (marketing + meta-ads + marketer)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)
+#   marketer -> /opt/skills-mkt (marketing + meta-ads)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)
 RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
  && cp -r /opt/skills-extra/marketing /opt/skills-mkt/marketing \
  && cp -r /opt/skills-extra/meta-ads  /opt/skills-mkt/meta-ads \
- && cp -r /opt/skills-extra/marketer  /opt/skills-mkt/marketer \
  && cp -r /opt/skills-extra/dev       /opt/skills-dev/dev \
  && cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew
 
