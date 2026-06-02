@@ -55,11 +55,13 @@ servers = {
 }
 # Per-profile skill scoping: each role sees ONLY its relevant skills (cleaner Skills tab).
 # Dirs are category-preserving bundles built in Dockerfile.railway.
+# /opt/skills-common holds skills EVERY profile should have (e.g. whatsapp-whacenter messaging).
+COMMON = ["/opt/skills-common"]
 SKILLS_BY_PROFILE = {
-    "marketer":  ["/opt/skills-mkt"],                               # marketing + meta-ads + marketer
-    "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"],  # general + dev + cavecrew
+    "marketer":  ["/opt/skills-mkt"] + COMMON,                               # marketing + meta-ads + messaging
+    "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"] + COMMON,  # general + dev + cavecrew + messaging
 }
-SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"]  # default profile = everything
+SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"] + COMMON  # default = everything + messaging
 def homes():
     out = [HOME]
     pdir = os.path.join(HOME, "profiles")

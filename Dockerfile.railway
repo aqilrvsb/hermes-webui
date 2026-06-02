@@ -48,12 +48,15 @@ RUN git clone --depth 1 https://github.com/irinabuht12-oss/marketing-skills /tmp
  && /opt/node/bin/node /opt/import_marketing_skills.js /tmp/mkskills /opt/skills-extra/marketing \
  && rm -rf /tmp/mkskills
 
-# Fold the 2 'marketer' skills (new-client, whatsapp-whacenter) INTO 'marketing' so there is
-# no separate 'marketer' category — everything marketing-related lives under one group.
+# Fold the remaining 'marketer' skill (new-client) INTO 'marketing' (single marketing group).
 RUN cp -r /opt/skills-extra/marketer/. /opt/skills-extra/marketing/ && rm -rf /opt/skills-extra/marketer
 
-# Per-role skill bundles (category-preserving). mcp_setup points each profile at its own bundle:
-#   marketer -> /opt/skills-mkt (marketing + meta-ads)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)
+# SHARED 'general' skills every profile gets (whatsapp-whacenter, etc.). Placed DIRECTLY under
+# /opt/skills-common (no sub-folder) so they show in the GENERAL category for every profile.
+RUN mkdir -p /opt/skills-common && cp -r /opt/skills-extra/common/. /opt/skills-common/ && rm -rf /opt/skills-extra/common
+
+# Per-role skill bundles (category-preserving). mcp_setup points each profile at its own bundle + the shared common dir:
+#   marketer -> /opt/skills-mkt (marketing + meta-ads)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)   ALL -> /opt/skills-common
 RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
  && cp -r /opt/skills-extra/marketing /opt/skills-mkt/marketing \
  && cp -r /opt/skills-extra/meta-ads  /opt/skills-mkt/meta-ads \
