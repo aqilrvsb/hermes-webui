@@ -33,6 +33,7 @@ servers = {
     "railway": {"command": NPX, "args": ["-y", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
     "vercel": {"command": NPX, "args": ["-y", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
     "zernio": {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}},
+    "peninglab": {"command": NPX, "args": ["-y", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
     "playwright": {"command": NPX, "args": ["-y", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
 m = cfg.get("mcp_servers") or {}
