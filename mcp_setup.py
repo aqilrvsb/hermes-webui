@@ -102,3 +102,53 @@ for home in homes():
     except Exception:
         pass
 print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
+
+# ---- Heal workspace paths: /app/<x> (ephemeral, wiped on redeploy) -> /workspace/<x> (persistent) ----
+# Spaces saved with an absolute /app path fail with "Path does not exist" after a redeploy.
+import glob as _glob, json as _json
+def _heal_workspaces():
+    wfiles = set(_glob.glob(os.path.join(HOME, "**", "workspaces.json"), recursive=True))
+    sd = os.environ.get("HERMES_WEBUI_STATE_DIR")
+    if sd:
+        wfiles.add(os.path.join(sd, "workspaces.json"))
+    healed = 0
+    for wf in wfiles:
+        try:
+            data = _json.load(open(wf, encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, list):
+            continue
+        ch = False
+        for e in data:
+            if not isinstance(e, dict):
+                continue
+            pth = str(e.get("path") or "")
+            if pth.startswith("/app/"):
+                e["path"] = "/workspace/" + os.path.basename(pth.rstrip("/"))
+                ch = True
+            if e.get("path"):
+                try:
+                    os.makedirs(e["path"], exist_ok=True)
+                except Exception:
+                    pass
+        if ch:
+            try:
+                _json.dump(data, open(wf, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+                healed += 1
+            except Exception:
+                pass
+    for lf in _glob.glob(os.path.join(HOME, "**", "last_workspace.txt"), recursive=True):
+        try:
+            v = open(lf, encoding="utf-8").read().strip()
+            if v.startswith("/app/"):
+                nv = "/workspace/" + os.path.basename(v.rstrip("/"))
+                os.makedirs(nv, exist_ok=True)
+                open(lf, "w", encoding="utf-8").write(nv)
+        except Exception:
+            pass
+    print("== workspace heal: rewrote %d file(s) (/app -> /workspace) ==" % healed)
+try:
+    _heal_workspaces()
+except Exception:
+    pass
