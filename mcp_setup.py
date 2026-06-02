@@ -1,22 +1,21 @@
-# Runs at boot. Writes mcp_servers + skills.external_dirs into EVERY profile's config.yaml
-# (default + ~/.hermes/profiles/*), so all roles get the same tools + skills.
-# Tokens are read from env at boot, so adding a Railway var + restart activates a server.
+# Runs at boot. Writes mcp_servers + skills.external_dirs into EVERY profile's config.yaml.
+# Calls the PRE-INSTALLED binaries in /opt/node/bin directly (NOT npx) for fast, reliable,
+# stdio-clean MCP startup. Tokens read from env => add a Railway var + restart to activate.
 import os
 try:
     import yaml
 except Exception:
     raise SystemExit(0)
 HOME = os.path.expanduser("~/.hermes")
-NB = "/opt/node/bin"; NPX = NB + "/npx"
-PATHV = NB + ":" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+BIN = "/opt/node/bin/"
+PATHV = "/opt/node/bin:" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
 def E(*keys):
-    e = {"PATH": PATHV}
+    e = {"PATH": PATHV, "NO_UPDATE_NOTIFIER": "1", "NODE_NO_WARNINGS": "1", "npm_config_update_notifier": "false"}
     for k in keys:
         v = os.environ.get(k)
         if v:
             e[k] = v
     return e
-# Zernio tools for the marketer role: ADS + ANALYTICS + WhatsApp/messaging (reporting) + accounts/connect
 MKT_TOOLS = [
  "ad_audiences_list_ad_audiences","ad_audiences_create_ad_audience","ad_audiences_get_ad_audience","ad_audiences_delete_ad_audience","ad_audiences_add_users_to_ad_audience",
  "ad_campaigns_list_ad_campaigns","ad_campaigns_update_ad_campaign_status","ad_campaigns_update_ad_campaign","ad_campaigns_delete_ad_campaign","ad_campaigns_bulk_update_ad_campaign_status","ad_campaigns_duplicate_ad_campaign","ad_campaigns_update_ad_set","ad_campaigns_update_ad_set_status","ad_campaigns_get_ad_tree","ad_campaigns_get_ads_timeline",
@@ -32,15 +31,26 @@ MKT_TOOLS = [
  "broadcasts_list_broadcasts","broadcasts_create_broadcast","broadcasts_add_broadcast_recipients","broadcasts_send_broadcast","broadcasts_schedule_broadcast",
  "whatsapp_get_whats_app_templates","whatsapp_create_whats_app_template","whatsapp_get_whats_app_business_profile","whatsapp_phone_numbers_get_whats_app_phone_numbers",
 ]
+# Trim railway to deploy-relevant tools (was 150 -> ~30) to cut startup load + tool bloat
+RAILWAY_TOOLS = [
+ "project_list","project_info","project_create","project_environments",
+ "service_list","service_info","service_create_from_repo","service_create_from_image","service_update","service_delete","service_restart",
+ "deployment_list","deployment_trigger","deployment_logs","deployment_status",
+ "environment_list","environment_info","environment_create",
+ "domain_list","domain_create","domain_update","domain_delete","custom_domain_list","custom_domain_create",
+ "variable_set","variable_delete","variable_bulk_set","list_service_variables",
+ "volume_list","volume_create","volume_update","logs_build","logs_deployment","logs_http","metrics_get",
+ "github_repo_list","github_repo_deploy","github_repo_link","database_list_types","database_deploy_from_template",
+]
 servers = {
-    "supabase": {"command": NPX, "args": ["-y", "--prefer-offline", "@supabase/mcp-server-supabase@latest"], "env": E("SUPABASE_ACCESS_TOKEN")},
-    "github": {"command": NPX, "args": ["-y", "--prefer-offline", "@modelcontextprotocol/server-github"], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
-    "agentql": {"command": NPX, "args": ["-y", "--prefer-offline", "agentql-mcp"], "env": E("AGENTQL_API_KEY")},
-    "railway": {"command": NPX, "args": ["-y", "--prefer-offline", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
-    "vercel": {"command": NPX, "args": ["-y", "--prefer-offline", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
-    "peninglab": {"command": NPX, "args": ["-y", "--prefer-offline", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
-    "zernio": {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}},
-    "playwright": {"command": NPX, "args": ["-y", "--prefer-offline", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
+    "supabase":  {"command": BIN+"mcp-server-supabase", "args": [], "env": E("SUPABASE_ACCESS_TOKEN")},
+    "github":    {"command": BIN+"mcp-server-github",    "args": [], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
+    "agentql":   {"command": BIN+"agentql-mcp",          "args": [], "env": E("AGENTQL_API_KEY")},
+    "railway":   {"command": BIN+"railway-mcp",          "args": [], "env": E("RAILWAY_API_TOKEN","RAILWAY_TOKEN"), "tools": {"include": RAILWAY_TOOLS}},
+    "vercel":    {"command": BIN+"vercel-mcp",           "args": [], "env": E("VERCEL_TOKEN","VERCEL_API_TOKEN")},
+    "peninglab": {"command": BIN+"peninglab-mcp",        "args": [], "env": E("PENINGLAB_API_KEY")},
+    "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}},
+    "playwright":{"command": BIN+"playwright-mcp", "args": ["--headless","--browser","chromium","--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
 EXT_SKILLS = ["/opt/skills/superpowers/skills", "/opt/skills-extra"]
 def homes():
@@ -80,4 +90,4 @@ for home in homes():
         done.append(os.path.basename(home) if home != HOME else "default")
     except Exception:
         pass
-print("== mcp_setup: configured profiles:", ", ".join(done), "==")
+print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
