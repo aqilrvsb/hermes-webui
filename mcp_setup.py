@@ -86,6 +86,11 @@ for home in homes():
             ed.append(d)
     sk["external_dirs"] = ed
     cfg["skills"] = sk
+    # Clarify timeout: default is 120s — far too short, the agent gave up while the
+    # user was still typing an answer ("clarification timed out"). Give 15 minutes.
+    cl = cfg.get("clarify") or {}
+    cl["timeout"] = 900
+    cfg["clarify"] = cl
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
