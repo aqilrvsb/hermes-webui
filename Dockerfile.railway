@@ -43,6 +43,8 @@ COPY init_workspaces.sh /opt/init_workspaces.sh
 
 # Make the "New space" form auto-create the folder (force the backend create flag on)
 RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
+# Relative workspace names resolve under /workspace (persistent), not /app (ephemeral)
+RUN sed -i '/path_str = _strip_surrounding_quotes/a\    if path_str and path_str[0] not in ("/", "~"): path_str = "/workspace/" + path_str' /apptoo/api/routes.py || true
 
 # Patch the upstream init: (1) line-164 env-reload crash guard,
 # (2) auto-create workspaces + write MCP config + launch the gateway daemon before the server.
