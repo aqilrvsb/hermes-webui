@@ -59,10 +59,9 @@
 
   /* ---------- segmented tabs ---------- */
   .seg{position:relative;display:inline-flex;gap:4px;padding:5px;border-radius:999px;background:var(--glass);border:1px solid var(--line);margin-bottom:24px;backdrop-filter:blur(10px)}
-  .seg .thumb{position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 5px);border-radius:999px;
+  .seg .thumb{position:absolute;top:5px;bottom:5px;left:0;width:0;border-radius:999px;
     background:linear-gradient(160deg,rgba(55,231,207,.22),rgba(154,134,255,.22));border:1px solid rgba(255,255,255,.14);
-    box-shadow:0 6px 20px -8px var(--teal);transition:transform .42s cubic-bezier(.6,.05,.1,1)}
-  .seg[data-i="1"] .thumb{transform:translateX(100%)}
+    box-shadow:0 6px 20px -8px var(--teal);transition:left .42s cubic-bezier(.6,.05,.1,1),width .42s cubic-bezier(.6,.05,.1,1)}
   .seg button{position:relative;z-index:1;font-family:var(--disp);font-weight:600;font-size:14px;color:var(--dim);
     background:none;border:0;padding:11px 22px;border-radius:999px;cursor:pointer;transition:color .3s;white-space:nowrap}
   .seg button.active{color:#fff}
@@ -179,6 +178,37 @@
   .act .cp:active{transform:scale(.96)}
   .col.mkt .act .cp{box-shadow:0 0 0 0 var(--violet)} .col.dev .act .cp{box-shadow:0 0 0 0 var(--sky)}
 
+  /* agent detail (sessions + assigned tasks inside each operator tile) */
+  .op .detail{margin-top:13px;border-top:1px solid var(--line-2);padding-top:12px;display:grid;gap:9px}
+  .op .drow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .op .drow .lbl{color:var(--faint);letter-spacing:.08em;text-transform:uppercase;font-size:10px;min-width:62px}
+  .op .drow b{color:var(--ink);font-weight:700}
+  .op .stagechips{display:flex;flex-wrap:wrap;gap:5px}
+  .op .sc{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--line-2);color:var(--dim)}
+  .op .sc.run{color:var(--lime);border-color:rgba(184,255,91,.3)} .op .sc.blk{color:var(--rose);border-color:rgba(255,100,133,.3)}
+  .op .sess{border:1px solid var(--line-2);border-radius:9px;background:rgba(255,255,255,.025);padding:8px 10px}
+  .op .sess .tt{font-family:var(--disp);font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .op .sess .mt{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:2px;display:flex;gap:7px;align-items:center}
+  .op .sess .now{color:var(--lime)}
+  .op .none{font-family:var(--mono);font-size:11px;color:var(--faint);font-style:italic}
+  /* skills scoreboard */
+  .scoreboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:14px 0}
+  .sb{border:1px solid var(--line-2);border-radius:12px;background:rgba(255,255,255,.022);padding:14px}
+  .sb .n{font-family:var(--mono);font-weight:700;font-size:25px;letter-spacing:-.02em;line-height:1}
+  .sb .l{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin-top:7px}
+  .sb.total .n{color:var(--teal)}
+  .skillsearch{width:100%;font-family:var(--mono);font-size:14px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none}
+  .skillsearch:focus{border-color:rgba(55,231,207,.45)}
+  .skgroup{margin-top:18px}
+  .skgroup h3{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--teal);margin:0 0 10px;display:flex;gap:8px;align-items:center}
+  .skgroup h3 .c{color:var(--faint)}
+  .skcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:10px}
+  .skcard{border:1px solid var(--line-2);border-radius:12px;background:var(--glass);padding:13px;transition:.2s}
+  .skcard:hover{transform:translateY(-2px);border-color:var(--line)}
+  .skcard .nm{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+  .skcard .nm .d{width:7px;height:7px;border-radius:50%;background:var(--lime);flex:none;box-shadow:0 0 7px var(--lime)}
+  .skcard .nm .d.off{background:var(--faint);box-shadow:none}
+  .skcard .ds{font-family:var(--mono);font-size:11.5px;line-height:1.5;color:var(--dim);margin-top:7px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .err{border:1px solid rgba(255,100,133,.4);background:rgba(255,100,133,.08);color:#ffd3dd;padding:15px 17px;border-radius:14px;margin-bottom:18px;font-size:14px}
   .err a{color:#fff}
   .foot{margin-top:26px;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--faint)}
@@ -209,10 +239,11 @@
     <div class="conn"><span id="dot" class="dot"></span><span id="statustxt">Connecting…</span></div>
   </header>
 
-  <div class="seg" id="seg" data-i="0">
-    <span class="thumb"></span>
-    <button id="tabFloor" class="active" onclick="show('floor',0)">Live Floor</button>
-    <button id="tabPlay" onclick="show('play',1)">Playbook</button>
+  <div class="seg" id="seg">
+    <span class="thumb" id="thumb"></span>
+    <button class="active" data-view="floor" onclick="show('floor')">Live Floor</button>
+    <button data-view="skills" onclick="show('skills')">Skills</button>
+    <button data-view="play" onclick="show('play')">Playbook</button>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
@@ -246,6 +277,16 @@
     <div class="pb" id="playbook"></div>
   </section>
 
+  <!-- ============ SKILLS SCOREBOARD ============ -->
+  <section id="skills" class="view">
+    <div class="panel" style="padding:18px">
+      <div class="ptitle"><span class="ic">🎯</span> Skill Scoreboard <small id="skillprofile"></small></div>
+      <div class="scoreboard" id="skillstats"></div>
+      <input id="skillsearch" class="skillsearch" placeholder="Search skills…" oninput="renderSkills(window._skills||[], this.value)">
+    </div>
+    <div id="skillgrid"></div>
+  </section>
+
   <div class="foot">Hermes control floor · floor refreshes every <span class="live">5s</span> · <span id="ts"></span></div>
 </div>
 
@@ -257,8 +298,13 @@ const ACCENT={marketer:"var(--violet)",developer:"var(--sky)",default:"var(--tea
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 async function j(p){const r=await fetch(p,{credentials:"include"});if(!r.ok)throw new Error(p+" "+r.status);return r.json();}
-function show(v,i){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
-  $('#seg').dataset.i=i;$('#tabFloor').classList.toggle('active',v==='floor');$('#tabPlay').classList.toggle('active',v==='play');}
+function positionThumb(){const b=document.querySelector('.seg button.active'),t=$('#thumb');if(!b||!t)return;t.style.left=b.offsetLeft+'px';t.style.width=b.offsetWidth+'px';}
+function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  positionThumb();if(v==='skills')loadSkills();}
+window.addEventListener('resize',positionThumb);
+function ago(ts){if(!ts)return"";const sec=Math.max(0,Math.floor(Date.now()/1000-ts));
+  if(sec<60)return sec+"s ago";if(sec<3600)return Math.floor(sec/60)+"m ago";if(sec<86400)return Math.floor(sec/3600)+"h ago";return Math.floor(sec/86400)+"d ago";}
 let toastT;
 function copy(txt){navigator.clipboard.writeText(txt).then(()=>{const t=$('#toast');t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1700);});}
 
@@ -297,34 +343,55 @@ function renderPlaybook(){
 renderPlaybook();
 
 /* ---------- LIVE FLOOR ---------- */
-function agentCard(p,active,liveSessions,idx){
-  const online=p.gateway_running, isActive=p.name===active, working=isActive&&liveSessions>0;
+const STAGES=["triage","todo","ready","running","blocked","done"];
+function agentCard(p,active,mySess,myTasks,idx){
+  const online=p.gateway_running, isActive=p.name===active;
+  const live=mySess.filter(s=>!s.ended_at);          // sessions still open = agent "working"
+  const working=live.length>0;
   const sprite=SPRITES[p.name]||"🧠", accent=ACCENT[p.name]||"var(--teal)";
   const role=p.name==="marketer"?"Marketer":p.name==="developer"?"Developer":p.name.replace(/^\w/,c=>c.toUpperCase());
   const cls=online?(working?"work":"idle"):"off", label=online?(working?"Working":"Online"):"Offline";
-  const doing=working?(liveSessions+" live session"+(liveSessions>1?"s":"")+" · on the job"):(online?"Idle — waiting for work":"Gateway down");
   const eq='<div class="eq"><i></i><i></i><i></i><i></i><i></i></div>';
+  const top=live[0]||mySess[0];
+  const doing=working?(esc(top&&top.title?top.title:("on the job"))):(online?"Idle — waiting for work":"Gateway down");
+  // assigned kanban tasks for this agent, by stage
+  const byStage={}; myTasks.forEach(t=>{const st=(t.column||t.status||"todo");(byStage[st]=byStage[st]||[]).push(t);});
+  const chips=STAGES.filter(st=>byStage[st]&&byStage[st].length).map(st=>{
+    const c=st==="running"?"run":st==="blocked"?"blk":""; return `<span class="sc ${c}">${st} ${byStage[st].length}</span>`;}).join("");
+  // session rows (what each agent is doing)
+  const sessHtml=live.length?live.slice(0,3).map(s=>{
+    const recent=s.last_activity&&(Date.now()/1000-s.last_activity)<150;
+    return `<div class="sess"><div class="tt">${esc(s.title||"untitled task")}</div>
+      <div class="mt">${recent?'<span class="now">● working now</span>':'<span>○ open</span>'}<span>${esc(ago(s.last_activity||s.started_at))}</span></div></div>`;
+  }).join(""):`<div class="none">no live sessions — idle</div>`;
   return `<div class="panel op rv ${working?'live':''} ${online?'':'off'}" style="--accent:${accent};animation-delay:${idx*.06}s">
     <div class="head">
       <div class="orb">${sprite}</div>
       <div class="who"><div class="role">${esc(role)}</div><div class="model">${esc(p.model||"minimax/minimax-m3")}</div></div>
       <div class="chip ${cls}"><span class="led"></span>${label}</div>
     </div>
-    <div class="doing"><span class="pre">▸</span>${esc(doing)}${working?eq:''}</div>
-    <div class="foot"><span class="tag">skills ${p.total_skills||p.skill_count||"—"}</span>
-      <span>${isActive?"<span class='on'>● active</span>":"<span class='sb'>○ standby</span>"}</span>${working?'':eq}</div>
+    <div class="doing"><span class="pre">▸</span>${doing}${working?eq:''}</div>
+    <div class="detail">
+      <div class="drow"><span class="lbl">Working</span><b>${live.length}</b> session${live.length===1?'':'s'} · <span class="lbl" style="min-width:0">skills</span><b>${p.total_skills||p.skill_count||"—"}</b> · ${isActive?"<span class='now' style='color:var(--lime)'>active</span>":"standby"}</div>
+      <div class="drow"><span class="lbl">Tasks</span>${chips||'<span class="none">none assigned</span>'}</div>
+      ${sessHtml}
+    </div>
   </div>`;
 }
 async function tick(){
   try{
-    const [prof,health,kb,sess,crons,ws]=await Promise.all([j("/api/profiles"),j("/api/health/agent"),j("/api/kanban/board"),j("/api/sessions"),j("/api/crons"),j("/api/workspaces")]);
+    const [prof,health,kb,sess,crons,ws]=await Promise.all([j("/api/profiles"),j("/api/health/agent"),j("/api/kanban/board"),j("/api/sessions?all_profiles=1"),j("/api/crons"),j("/api/workspaces")]);
     $("#err").style.display="none";
     const gw=health?.details?.gateway_state==="running";
     $("#dot").className="dot"+(gw?" on":"");$("#statustxt").textContent=gw?"Gateway Live":"Gateway Down";
-    const active=sess.active_profile, liveSessions=(sess.sessions||[]).length;
-    const profiles=(prof.profiles||[]).sort((a,b)=>(a.name==="default")-(b.name==="default"));
-    $("#agents").innerHTML=profiles.map((p,i)=>agentCard(p,active,liveSessions,i)).join("");
+    const active=sess.active_profile; window._active=active;
     const cols=kb.columns||[], total=cols.reduce((n,c)=>n+(c.tasks||[]).length,0);
+    // group sessions + assigned tasks by profile so each agent shows ITS own work
+    const sessBy={}, taskBy={};
+    (sess.sessions||[]).forEach(s=>{const k=(s.profile||"default").toLowerCase();(sessBy[k]=sessBy[k]||[]).push(s);});
+    cols.forEach(c=>(c.tasks||[]).forEach(t=>{const who=(t.assignee||t.tenant||"").toLowerCase();if(!who)return;(taskBy[who]=taskBy[who]||[]).push({...t,column:c.name});}));
+    const profiles=(prof.profiles||[]).sort((a,b)=>(a.name==="default")-(b.name==="default"));
+    $("#agents").innerHTML=profiles.map((p,i)=>agentCard(p,active,sessBy[p.name.toLowerCase()]||[],taskBy[p.name.toLowerCase()]||[],i)).join("");
     $("#kanbanmeta").textContent=total+" task"+(total!==1?"s":"");
     $("#lanes").innerHTML=cols.map(c=>{const ts=(c.tasks||[]);
       const cards=ts.length?ts.slice(0,6).map(t=>`<div class="tk"><b>${esc(t.assignee||t.tenant||"task")}</b>${esc(t.title||t.id||"task")}</div>`).join(""):`<div class="empty">—</div>`;
@@ -342,7 +409,29 @@ async function tick(){
     $("#err").innerHTML="⚠ Can't read live data ("+esc(e.message)+"). Open <a href='/'>Hermes</a> and log in first, then reload. (The Playbook tab works without login.)";
   }
 }
+/* ---------- SKILLS SCOREBOARD ---------- */
+async function loadSkills(){
+  try{
+    const d=await j("/api/skills");const sk=d.skills||[];window._skills=sk;
+    $("#skillprofile").textContent=(window._active?("profile: "+window._active+" · "):"")+sk.length+" skills";
+    renderSkills(sk,$("#skillsearch").value||"");
+  }catch(e){$("#skillgrid").innerHTML="<div class='empty'>Can't load skills — open <a href='/'>Hermes</a> and log in first.</div>";}
+}
+function renderSkills(sk,q){
+  q=(q||"").toLowerCase().trim();
+  const all={};sk.forEach(s=>{const c=s.category||"general";all[c]=(all[c]||0)+1;});
+  const allcats=Object.keys(all).sort((a,b)=>all[b]-all[a]);
+  $("#skillstats").innerHTML=`<div class="sb total"><div class="n">${sk.length}</div><div class="l">total</div></div>`+
+    allcats.map(c=>`<div class="sb"><div class="n">${all[c]}</div><div class="l">${esc(c)}</div></div>`).join("");
+  const f=q?sk.filter(s=>(s.name+" "+(s.description||"")).toLowerCase().includes(q)):sk;
+  const g={};f.forEach(s=>{const c=s.category||"general";(g[c]=g[c]||[]).push(s);});
+  const cats=Object.keys(g).sort((a,b)=>g[b].length-g[a].length);
+  $("#skillgrid").innerHTML=cats.length?cats.map(c=>`<div class="skgroup"><h3>${esc(c)} <span class="c">(${g[c].length})</span></h3>
+    <div class="skcards">${g[c].map(s=>`<div class="skcard"><div class="nm"><span class="d ${s.disabled?'off':''}"></span>${esc(s.name)}</div><div class="ds">${esc(s.description||"")}</div></div>`).join("")}</div></div>`).join(""):"<div class='empty'>no skills match your search</div>";
+}
+
 tick();setInterval(tick,5000);
+positionThumb();setTimeout(positionThumb,100);
 </script>
 </body>
 </html>

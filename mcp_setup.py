@@ -53,7 +53,13 @@ servers = {
     "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}},
     "playwright":{"command": BIN+"playwright-mcp", "args": ["--headless","--browser","chromium","--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
-EXT_SKILLS = ["/opt/skills/superpowers/skills", "/opt/skills-extra"]
+# Per-profile skill scoping: each role sees ONLY its relevant skills (cleaner Skills tab).
+# Dirs are category-preserving bundles built in Dockerfile.railway.
+SKILLS_BY_PROFILE = {
+    "marketer":  ["/opt/skills-mkt"],                               # marketing + meta-ads + marketer
+    "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"],  # general + dev + cavecrew
+}
+SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"]  # default profile = everything
 def homes():
     out = [HOME]
     pdir = os.path.join(HOME, "profiles")
@@ -65,6 +71,7 @@ def homes():
     return out
 done = []
 for home in homes():
+    name = os.path.basename(home) if home != HOME else "default"
     p = os.path.join(home, "config.yaml")
     cfg = {}
     if os.path.exists(p):
@@ -79,12 +86,9 @@ for home in homes():
     ex.pop("vercel", None)  # prune the broken stdio vercel server persisted in the volume; Vercel is CLI-only now
     ex.update(servers)
     cfg["mcp_servers"] = ex
+    # Per-profile skills: REPLACE external_dirs so each role only sees its own skills.
     sk = cfg.get("skills") or {}
-    ed = sk.get("external_dirs") or []
-    for d in EXT_SKILLS:
-        if d not in ed:
-            ed.append(d)
-    sk["external_dirs"] = ed
+    sk["external_dirs"] = list(SKILLS_BY_PROFILE.get(name, SKILLS_DEFAULT))
     cfg["skills"] = sk
     # Clarify timeout: default is 120s — far too short, the agent gave up while the
     # user was still typing an answer ("clarification timed out"). Give 15 minutes.

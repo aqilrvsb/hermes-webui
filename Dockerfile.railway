@@ -42,10 +42,20 @@ COPY pixel.html /apptoo/static/pixel.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
 # Marketing skills (irinabuht12-oss/marketing-skills): flat .md -> SKILL.md dirs under /opt/skills-extra/marketing
-COPY scripts/import_marketing_skills.py /opt/import_marketing_skills.py
+# NOTE: converted with node (the runtime venv python does not exist at build time).
+COPY scripts/import_marketing_skills.js /opt/import_marketing_skills.js
 RUN git clone --depth 1 https://github.com/irinabuht12-oss/marketing-skills /tmp/mkskills \
- && /app/venv/bin/python /opt/import_marketing_skills.py /tmp/mkskills /opt/skills-extra/marketing \
+ && /opt/node/bin/node /opt/import_marketing_skills.js /tmp/mkskills /opt/skills-extra/marketing \
  && rm -rf /tmp/mkskills
+
+# Per-role skill bundles (category-preserving). mcp_setup points each profile at its own bundle:
+#   marketer -> /opt/skills-mkt (marketing + meta-ads + marketer)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)
+RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
+ && cp -r /opt/skills-extra/marketing /opt/skills-mkt/marketing \
+ && cp -r /opt/skills-extra/meta-ads  /opt/skills-mkt/meta-ads \
+ && cp -r /opt/skills-extra/marketer  /opt/skills-mkt/marketer \
+ && cp -r /opt/skills-extra/dev       /opt/skills-dev/dev \
+ && cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew
 
 # Boot-time helpers
 COPY mcp_setup.py /opt/mcp_setup.py
