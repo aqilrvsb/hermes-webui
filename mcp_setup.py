@@ -37,7 +37,10 @@ servers = {
     "peninglab": {"command": NPX, "args": ["-y", "--prefer-offline", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
     "playwright": {"command": NPX, "args": ["-y", "--prefer-offline", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
-cfg["mcp_servers"] = servers   # authoritative: stale servers (e.g. meta_ads) are pruned
+existing = cfg.get("mcp_servers") or {}
+existing.pop("meta_ads", None)        # drop deprecated server, keep everything else
+existing.update(servers)              # refresh our managed servers; preserve user-added ones
+cfg["mcp_servers"] = existing
 sk = cfg.get("skills") or {}
 ed = sk.get("external_dirs") or []
 for d in ("/opt/skills/superpowers/skills", "/opt/skills-extra"):
