@@ -13,23 +13,30 @@ ENV PATH="/opt/node/bin:${PATH}"
 # Pre-install MCP server packages so they start instantly (no boot-time npx download race)
 RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github agentql-mcp railway-mcp vercel-mcp peninglab-mcp @playwright/mcp@latest || true
 
-# Hermes Agent backend (provides the agent/, hermes_cli, run_agent modules the WebUI imports)
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes
-ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
-
-# Claude Code skills (superpowers) registered as an external skills dir
-RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpowers
-
-# Playwright + Chromium baked into the image (with system deps)
+# Playwright + Chromium baked into the image (HEAVY — kept ABOVE the cache-bust so it stays cached)
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 RUN /opt/node/bin/npx -y playwright@latest install --with-deps chromium \
  || /opt/node/bin/npx -y playwright@latest install chromium || true
 
-# Extra skills (Meta Ads, etc.) baked as an external skills dir
+ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
+
+# ---- DAILY REFRESH BOUNDARY ----
+# The CI bumps buildstamp.txt each day; that invalidates every layer BELOW this line,
+# so hermes-agent + skills are re-cloned fresh on each scheduled build (always latest),
+# while Node/Chromium above stay cached (fast builds).
+COPY buildstamp.txt /opt/buildstamp.txt
+
+# Hermes Agent backend (provides the agent/, hermes_cli, run_agent modules the WebUI imports)
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes
+
+# Claude Code skills (superpowers) registered as an external skills dir
+RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpowers
+
+# Extra skills (Meta Ads, etc.) + caveman
 COPY railway-skills /opt/skills-extra
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
 
-# Boot-time MCP config writer
+# Boot-time helpers
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh
@@ -38,7 +45,7 @@ COPY init_workspaces.sh /opt/init_workspaces.sh
 RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
 
 # Patch the upstream init: (1) line-164 env-reload crash guard,
-# (2) write MCP config + launch the gateway daemon before the WebUI server.
+# (2) auto-create workspaces + write MCP config + launch the gateway daemon before the server.
 RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
  && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; echo "== mcp config + gateway launched =="' /hermeswebui_init.bash
 
