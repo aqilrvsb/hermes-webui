@@ -34,6 +34,8 @@ RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpow
 
 # Extra skills (Meta Ads, etc.) + caveman
 COPY railway-skills /opt/skills-extra
+# Live pixel-art AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
+COPY pixel.html /apptoo/static/pixel.html
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
 
 # Boot-time helpers
