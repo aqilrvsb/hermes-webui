@@ -47,7 +47,8 @@ servers = {
     "github":    {"command": BIN+"mcp-server-github",    "args": [], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
     "agentql":   {"command": BIN+"agentql-mcp",          "args": [], "env": E("AGENTQL_API_KEY")},
     "railway":   {"command": BIN+"railway-mcp",          "args": [], "env": E("RAILWAY_API_TOKEN","RAILWAY_TOKEN"), "tools": {"include": RAILWAY_TOOLS}},
-    "vercel":    {"command": BIN+"vercel-mcp",           "args": [], "env": E("VERCEL_TOKEN","VERCEL_API_TOKEN")},
+    # vercel: NO MCP server. The vercel-mcp npm package exits on launch (failed every boot).
+    # Developer role deploys via the Vercel CLI instead (baked into image, VERCEL_TOKEN in env) -> fully headless, reliable.
     "peninglab": {"command": BIN+"peninglab-mcp",        "args": [], "env": E("PENINGLAB_API_KEY")},
     "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}},
     "playwright":{"command": BIN+"playwright-mcp", "args": ["--headless","--browser","chromium","--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
@@ -75,6 +76,7 @@ for home in homes():
         cfg = {}
     ex = cfg.get("mcp_servers") or {}
     ex.pop("meta_ads", None)
+    ex.pop("vercel", None)  # prune the broken stdio vercel server persisted in the volume; Vercel is CLI-only now
     ex.update(servers)
     cfg["mcp_servers"] = ex
     sk = cfg.get("skills") or {}

@@ -11,7 +11,9 @@ RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -
 ENV PATH="/opt/node/bin:${PATH}"
 
 # Pre-install MCP server packages so they start instantly (no boot-time npx download race)
-RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github agentql-mcp railway-mcp vercel-mcp peninglab-mcp @playwright/mcp@latest || true
+# NOTE: 'vercel' here is the Vercel CLI (not an MCP server). vercel-mcp was removed — it exited on launch.
+# The developer role deploys with `vercel --token $VERCEL_TOKEN` instead. Fully headless + reliable.
+RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github agentql-mcp railway-mcp peninglab-mcp @playwright/mcp@latest vercel || true
 
 # Playwright + Chromium baked into the image (HEAVY — kept ABOVE the cache-bust so it stays cached)
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers

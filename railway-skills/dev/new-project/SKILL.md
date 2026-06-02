@@ -11,7 +11,7 @@ Steps (confirm before creating any PAID resource):
 2. Workspace: ensure `/workspace/<name>` exists (Add Space, or mkdir).
 3. GitHub: `create_repository` (or use existing). Record `owner/repo`.
 4. Supabase: `list_projects`; if new, `get_cost` -> `confirm_cost` -> `create_project`. Record the project **ref**.
-5. Vercel: create/link a Vercel project. Record its name.
+5. Vercel (CLI, not MCP): from the project workspace run `vercel link --yes --token=$VERCEL_TOKEN` (creates/links the project), or `vercel projects ls --token=$VERCEL_TOKEN` to reuse. Record its name. Later deploys: `vercel deploy --prod --token=$VERCEL_TOKEN`.
 6. Write `/workspace/<name>/AGENTS.md`:
    ```
    # Project: <name>
