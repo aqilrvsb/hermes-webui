@@ -1,0 +1,36 @@
+name: Daily sync with upstream
+
+on:
+  schedule:
+    - cron: "0 19 * * *"   # 19:00 UTC daily (~03:00 MYT). Adjust as you like.
+  workflow_dispatch: {}      # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream into master (keep custom files)
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/nesquena/hermes-webui.git
+          git fetch upstream
+          # Determine upstream default branch (master or main)
+          UB=$(git remote show upstream | sed -n 's/.*HEAD branch: //p')
+          echo "Upstream default branch: ${UB}"
+          git merge "upstream/${UB}" --no-edit -m "Daily sync: merge upstream ${UB}" || {
+            echo "Merge conflict — our custom files are additive so this is unexpected; aborting."; git merge --abort; exit 1; }
+          git push origin HEAD:master
