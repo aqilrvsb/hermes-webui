@@ -34,6 +34,9 @@ COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh
 
+# Make the "New space" form auto-create the folder (force the backend create flag on)
+RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
+
 # Patch the upstream init: (1) line-164 env-reload crash guard,
 # (2) write MCP config + launch the gateway daemon before the WebUI server.
 RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
