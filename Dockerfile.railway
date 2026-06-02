@@ -40,6 +40,7 @@ RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman &&
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh
+COPY seed_roles.sh /opt/seed_roles.sh
 
 # Make the "New space" form auto-create the folder (force the backend create flag on)
 RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
@@ -49,7 +50,7 @@ RUN sed -i '/path_str = _strip_surrounding_quotes/a\    if path_str and path_str
 # Patch the upstream init: (1) line-164 env-reload crash guard,
 # (2) auto-create workspaces + write MCP config + launch the gateway daemon before the server.
 RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
- && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; echo "== mcp config + gateway launched =="' /hermeswebui_init.bash
+ && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; sh /opt/seed_roles.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; echo "== mcp config + gateway launched =="' /hermeswebui_init.bash
 
 USER root
 # CMD is inherited from the base image (/hermeswebui_init.bash), now patched.
