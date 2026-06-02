@@ -22,6 +22,9 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 RUN /opt/node/bin/npx -y playwright@latest install --with-deps chromium \
  || /opt/node/bin/npx -y playwright@latest install chromium || true
 
+# Extra skills (Meta Ads, etc.) baked as an external skills dir
+COPY railway-skills /opt/skills-extra
+
 # Boot-time MCP config writer
 COPY mcp_setup.py /opt/mcp_setup.py
 

@@ -32,6 +32,7 @@ servers = {
     "agentql": {"command": NPX, "args": ["-y", "agentql-mcp"], "env": E("AGENTQL_API_KEY")},
     "railway": {"command": NPX, "args": ["-y", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
     "vercel": {"command": NPX, "args": ["-y", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
+    "meta_ads": {"command": NPX, "args": ["-y", "meta-ads-mcp"], "env": E("META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "META_PAGE_ID", "META_APP_ID", "META_APP_SECRET")},
     "playwright": {"command": NPX, "args": ["-y", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
 m = cfg.get("mcp_servers") or {}
@@ -39,10 +40,10 @@ m.update(servers)
 cfg["mcp_servers"] = m
 sk = cfg.get("skills") or {}
 ed = sk.get("external_dirs") or []
-sp = "/opt/skills/superpowers/skills"
-if sp not in ed:
-    ed.append(sp)
+for d in ("/opt/skills/superpowers/skills", "/opt/skills-extra"):
+    if d not in ed:
+        ed.append(d)
 sk["external_dirs"] = ed
 cfg["skills"] = sk
 yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
-print("== mcp_setup: 6 servers + external skills written ==")
+print("== mcp_setup: 7 servers + external skills written ==")
