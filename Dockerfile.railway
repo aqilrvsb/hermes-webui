@@ -1,0 +1,34 @@
+# Railway build for Hermes WebUI — a clean customization layer over the upstream image.
+# FROM :latest keeps daily auto-updates; this file only ADDS, so fork syncs never conflict.
+FROM ghcr.io/nesquena/hermes-webui:latest
+
+USER root
+
+# Node (required by the npx-based MCP servers)
+RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -o /tmp/node.txz \
+ && mkdir -p /opt/node && tar -xJf /tmp/node.txz -C /opt/node --strip-components=1 \
+ && rm -f /tmp/node.txz
+ENV PATH="/opt/node/bin:${PATH}"
+
+# Hermes Agent backend (provides the agent/, hermes_cli, run_agent modules the WebUI imports)
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes
+ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
+
+# Claude Code skills (superpowers) registered as an external skills dir
+RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpowers
+
+# Playwright + Chromium baked into the image (with system deps)
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN /opt/node/bin/npx -y playwright@latest install --with-deps chromium \
+ || /opt/node/bin/npx -y playwright@latest install chromium || true
+
+# Boot-time MCP config writer
+COPY mcp_setup.py /opt/mcp_setup.py
+
+# Patch the upstream init: (1) line-164 env-reload crash guard,
+# (2) write MCP config + launch the gateway daemon before the WebUI server.
+RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
+ && sed -i '/cd \/app; python server.py/i\/app/venv/bin/python /opt/mcp_setup.py || true ; ( while true; do /app/venv/bin/hermes gateway >>/tmp/hermes-gateway.log 2>&1; sleep 5; done \&) ; echo "== mcp config + gateway launched =="' /hermeswebui_init.bash
+
+USER root
+# CMD is inherited from the base image (/hermeswebui_init.bash), now patched.
