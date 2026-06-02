@@ -27,18 +27,16 @@ def E(*keys):
             e[k] = v
     return e
 servers = {
-    "supabase": {"command": NPX, "args": ["-y", "@supabase/mcp-server-supabase@latest"], "env": E("SUPABASE_ACCESS_TOKEN")},
-    "github": {"command": NPX, "args": ["-y", "@modelcontextprotocol/server-github"], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
-    "agentql": {"command": NPX, "args": ["-y", "agentql-mcp"], "env": E("AGENTQL_API_KEY")},
-    "railway": {"command": NPX, "args": ["-y", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
-    "vercel": {"command": NPX, "args": ["-y", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
+    "supabase": {"command": NPX, "args": ["-y", "--prefer-offline", "@supabase/mcp-server-supabase@latest"], "env": E("SUPABASE_ACCESS_TOKEN")},
+    "github": {"command": NPX, "args": ["-y", "--prefer-offline", "@modelcontextprotocol/server-github"], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
+    "agentql": {"command": NPX, "args": ["-y", "--prefer-offline", "agentql-mcp"], "env": E("AGENTQL_API_KEY")},
+    "railway": {"command": NPX, "args": ["-y", "--prefer-offline", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
+    "vercel": {"command": NPX, "args": ["-y", "--prefer-offline", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
     "zernio": {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}},
-    "peninglab": {"command": NPX, "args": ["-y", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
-    "playwright": {"command": NPX, "args": ["-y", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
+    "peninglab": {"command": NPX, "args": ["-y", "--prefer-offline", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
+    "playwright": {"command": NPX, "args": ["-y", "--prefer-offline", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
-m = cfg.get("mcp_servers") or {}
-m.update(servers)
-cfg["mcp_servers"] = m
+cfg["mcp_servers"] = servers   # authoritative: stale servers (e.g. meta_ads) are pruned
 sk = cfg.get("skills") or {}
 ed = sk.get("external_dirs") or []
 for d in ("/opt/skills/superpowers/skills", "/opt/skills-extra"):

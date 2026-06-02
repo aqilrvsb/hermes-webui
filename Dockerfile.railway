@@ -10,6 +10,9 @@ RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -
  && rm -f /tmp/node.txz
 ENV PATH="/opt/node/bin:${PATH}"
 
+# Pre-install MCP server packages so they start instantly (no boot-time npx download race)
+RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github agentql-mcp railway-mcp vercel-mcp peninglab-mcp @playwright/mcp@latest || true
+
 # Hermes Agent backend (provides the agent/, hermes_cli, run_agent modules the WebUI imports)
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
