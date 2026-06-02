@@ -26,13 +26,14 @@ def E(*keys):
         if v:
             e[k] = v
     return e
+ADS_TOOLS = ['ad_audiences_list_ad_audiences', 'ad_audiences_create_ad_audience', 'ad_audiences_get_ad_audience', 'ad_audiences_delete_ad_audience', 'ad_audiences_add_users_to_ad_audience', 'ad_campaigns_list_ad_campaigns', 'ad_campaigns_update_ad_campaign_status', 'ad_campaigns_update_ad_campaign', 'ad_campaigns_delete_ad_campaign', 'ad_campaigns_bulk_update_ad_campaign_status', 'ad_campaigns_duplicate_ad_campaign', 'ad_campaigns_update_ad_set', 'ad_campaigns_update_ad_set_status', 'ad_campaigns_get_ad_tree', 'ad_campaigns_get_ads_timeline', 'ads_list_ads', 'ads_get_ad', 'ads_update_ad', 'ads_delete_ad', 'ads_get_ad_analytics', 'ads_get_ad_comments', 'ads_list_ads_business_centers', 'ads_list_ad_accounts', 'ads_boost_post', 'ads_create_standalone_ad', 'ads_create_ctwa_ad', 'ads_list_leads', 'ads_list_lead_forms', 'ads_create_lead_form', 'ads_get_lead_form', 'ads_archive_lead_form', 'ads_list_form_leads', 'ads_create_test_lead', 'ads_search_ad_interests', 'ads_search_ad_targeting', 'ads_estimate_ad_reach', 'ads_send_conversions', 'ads_list_conversion_destinations', 'ads_create_conversion_destination', 'ads_get_conversion_destination', 'ads_update_conversion_destination', 'ads_delete_conversion_destination', 'ads_list_conversion_associations', 'ads_add_conversion_associations', 'ads_remove_conversion_associations', 'ads_get_conversion_metrics', 'connect_ads']
 servers = {
     "supabase": {"command": NPX, "args": ["-y", "--prefer-offline", "@supabase/mcp-server-supabase@latest"], "env": E("SUPABASE_ACCESS_TOKEN")},
     "github": {"command": NPX, "args": ["-y", "--prefer-offline", "@modelcontextprotocol/server-github"], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
     "agentql": {"command": NPX, "args": ["-y", "--prefer-offline", "agentql-mcp"], "env": E("AGENTQL_API_KEY")},
     "railway": {"command": NPX, "args": ["-y", "--prefer-offline", "railway-mcp"], "env": E("RAILWAY_API_TOKEN", "RAILWAY_TOKEN")},
     "vercel": {"command": NPX, "args": ["-y", "--prefer-offline", "vercel-mcp"], "env": E("VERCEL_TOKEN", "VERCEL_API_TOKEN")},
-    "zernio": {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}},
+    "zernio": {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": ADS_TOOLS}},
     "peninglab": {"command": NPX, "args": ["-y", "--prefer-offline", "peninglab-mcp"], "env": E("PENINGLAB_API_KEY")},
     "playwright": {"command": NPX, "args": ["-y", "--prefer-offline", "@playwright/mcp@latest", "--headless", "--browser", "chromium", "--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
