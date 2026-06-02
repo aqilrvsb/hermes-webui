@@ -24,6 +24,7 @@ RUN /opt/node/bin/npx -y playwright@latest install --with-deps chromium \
 
 # Extra skills (Meta Ads, etc.) baked as an external skills dir
 COPY railway-skills /opt/skills-extra
+RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman \n && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew \n && rm -rf /tmp/caveman
 
 # Boot-time MCP config writer
 COPY mcp_setup.py /opt/mcp_setup.py
