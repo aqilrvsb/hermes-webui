@@ -516,10 +516,49 @@ async function newSession(flash, options={}){
     }
     if(newModelState&&newModelState.model){
       reqBody.model=newModelState.model;
-      reqBody.model_provider=newModelState.model_provider||null;
+      // Cold-start / picker-without-provider fallback: when the dropdown option's
+      // data-provider is empty/'default' or the persisted state predates provider
+      // tracking, newModelState.model_provider is null. POST /api/session/new's
+      // fast path in _resolve_compatible_session_model_state requires both model
+      // and a truthy model_provider; without it, the request falls into
+      // get_available_models() and a 3-4s cold catalog rebuild. window._activeProvider
+      // is hydrated at boot (ui.js) and on config refresh (panels.js), so it's a
+      // safe default that matches the user's configured route. S.session.model_provider
+      // is the previous-session fallback when the dropdown is unhydrated.
+      //
+      // Guard: a slash-qualified model (e.g. "gemini/gemini-2.5") or an
+      // @provider:model string already carries a foreign provider namespace from
+      // a previous session that was served by a different backend. Attaching
+      // the current _activeProvider to such a slug would let the server's fast
+      // path pass it through without consulting the catalog, silently
+      // re-pointing the new session at the wrong backend (the very case the
+      // slow-path normalization in _resolve_compatible_session_model_state is
+      // designed to fix — see routes.py docstring around line 1891-1894). For
+      // those models we leave the wire shape with model_provider=null so the
+      // slow path's cross-provider repair still runs. Closes the open
+      // follow-up from #2518.
+      const _bareModel=!/[/]/.test(newModelState.model)&&!newModelState.model.startsWith('@');
+      // Second guard (#3410-followup): even a bare model can carry a known
+      // family prefix (gpt→openai, claude→anthropic, gemini→google). If that
+      // family maps to a DIFFERENT provider than the fallback we'd attach, the
+      // server fast path passes the pair through verbatim (no validation) and
+      // silently routes to the wrong backend — so leave model_provider=null and
+      // let the slow-path family repair run (mirrors routes.py _normalize_provider_id).
+      const _fallbackProvider=_bareModel?(window._activeProvider||(S.session&&S.session.model_provider)||''):'';
+      const _familyProvider=(m=>{const s=String(m||'').toLowerCase();
+        if(s.startsWith('gpt'))return 'openai';if(s.startsWith('claude'))return 'anthropic';
+        if(s.startsWith('gemini'))return 'google';return '';})(newModelState.model);
+      const _normProv=p=>{const s=String(p||'').toLowerCase();
+        if(s.startsWith('openai'))return 'openai';if(s.startsWith('anthropic')||s.startsWith('claude'))return 'anthropic';
+        if(s.startsWith('google')||s.startsWith('gemini'))return 'google';return s;};
+      const _familyMismatch=_familyProvider&&_fallbackProvider&&_normProv(_fallbackProvider)!==_familyProvider;
+      reqBody.model_provider=newModelState.model_provider
+        ||((_bareModel&&!_familyMismatch)?(_fallbackProvider||null):null)
+        ||null;
     }
     const data=await api('/api/session/new',{method:'POST',body:JSON.stringify(reqBody)});
     S.session=data.session;S.messages=data.session.messages||[];
+    if(_sessionSourceFilter==='cli') _sessionSourceFilter='webui';
     S.lastUsage={...(data.session.last_usage||{})};
     if(flash)S.session._flash=true;
     try{localStorage.setItem('hermes-webui-session',S.session.session_id);}catch(_){}
@@ -3732,6 +3771,41 @@ function upsertActiveSessionForLocalTurn({title='', messageCount=0, timestampMs=
   renderSessionListFromCache();
 }
 
+function _sessionRowsWithActiveEphemeralSession(rows){
+  rows=Array.isArray(rows)?rows:[];
+  if(!S.session||!S.session.session_id) return rows;
+  const sid=S.session.session_id;
+  if(rows.some(s=>s&&s.session_id===sid)) return rows;
+  const nowSec=Math.floor(Date.now()/1000);
+  const activeRow={
+    ...S.session,
+    session_id:sid,
+    title:S.session.title||'New Chat',
+    display_title:S.session.display_title||S.session.title||'New Chat',
+    message_count:0,
+    last_message_at:S.session.last_message_at||S.session.updated_at||nowSec,
+    updated_at:S.session.updated_at||S.session.last_message_at||nowSec,
+    profile:S.session.profile||S.activeProfile||'default',
+    is_streaming:false,
+  };
+  return [activeRow,...rows];
+}
+
+function _ensureActiveSessionRowPresent(rows, sourceRows){
+  rows=Array.isArray(rows)?rows:[];
+  const activeSid=_activeSessionIdForSidebar();
+  if(!activeSid||rows.some(s=>s&&s.session_id===activeSid)) return rows;
+  const activeRow=(Array.isArray(sourceRows)?sourceRows:[]).find(s=>s&&s.session_id===activeSid);
+  // Only re-inject the active FRESHLY-CREATED 0-message ephemeral chat. An active
+  // conversation that already has messages and was filtered out by the search
+  // query must stay filtered — re-adding it here would pollute unrelated search
+  // results with the current chat (#3408 review, Codex).
+  if(activeRow && Number(activeRow.message_count||0)<=0){
+    return [activeRow,...rows];
+  }
+  return rows;
+}
+
 function clearOptimisticSessionStreaming(sid){
   sid=sid||(S.session&&S.session.session_id)||'';
   if(!sid) return;
@@ -3892,14 +3966,16 @@ function renderSessionListFromCache(){
   const searchQueryRaw=($('sessionSearch').value||'').trim();
   const q=searchQueryRaw.toLowerCase();
   const activeSidForSidebar=_activeSessionIdForSidebar();
+  const sidebarRows=_sessionRowsWithActiveEphemeralSession(_allSessions);
   // Merge direct session-id/link matches, title matches, then content matches (deduped).
   // Direct matches must not disable content search: if a user pasted the same
   // session id into another conversation, that content hit should still appear.
-  const allMatched=_sessionSearchMergeMatches(_allSessions,searchQueryRaw,_contentSearchResults);
-  // Never surface ephemeral 0-message sessions in the sidebar — they only become
-  // real once the first message is sent. The server already filters them, but this
-  // guard ensures a brand-new active session doesn't flash into the list while
-  // _allSessions is stale from a prior render (#1171).
+  const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,_contentSearchResults);
+  const allMatched=_ensureActiveSessionRowPresent(searchMatches,sidebarRows);
+  // Keep inactive ephemeral 0-message sessions out of the sidebar — they only
+  // become real once the first message is sent. The server already filters them.
+  // Exception: the active freshly-created chat is injected above so it remains
+  // visible/selected until the user sends the first turn or switches away.
   const withMessages=allMatched.filter(s=>
     (s.message_count||0)>0 ||
     _sessionAttentionState(s) ||

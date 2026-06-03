@@ -5723,7 +5723,16 @@ function switchSettingsSection(name){
       });
     }
   }
-  const section=(name==='appearance'||name==='preferences'||name==='providers'||name==='plugins'||name==='system')?name:'conversation';
+  let section=(name==='appearance'||name==='preferences'||name==='providers'||name==='plugins'||name==='system')?name:'conversation';
+  // Deep-linking to the Plugins pane when the tab is hidden (no plugins
+  // installed, #3457) falls back to Conversation. Resolve this BEFORE toggling
+  // panes/sidebar/dropdown below so every downstream selection uses the
+  // corrected section — otherwise the plugins pane would still render active
+  // but empty. (#3457)
+  if(section==='plugins'){
+    const pluginsTabBtn=document.querySelector('[data-settings-section="plugins"]');
+    if(pluginsTabBtn && pluginsTabBtn.style.display==='none') section='conversation';
+  }
   _settingsSection=section;
   _currentSettingsSection=section;
   const map={conversation:'Conversation',appearance:'Appearance',preferences:'Preferences',providers:'Providers',plugins:'Plugins',system:'System'};
@@ -5849,6 +5858,7 @@ function _appearancePayloadFromUi(){
     font_size: ($('settingsFontSize')||{}).value || localStorage.getItem('hermes-font-size') || 'default',
     session_jump_buttons: !!($('settingsSessionJumpButtons')||{}).checked,
     session_endless_scroll: !!($('settingsSessionEndlessScroll')||{}).checked,
+    activity_feed_expanded_default: !!($('settingsActivityFeedExpandedDefault')||{}).checked,
     hidden_tabs: _getHiddenTabs(),
   };
 }
@@ -5902,6 +5912,9 @@ async function _autosaveAppearanceSettings(payload){
       if(typeof _applySessionNavigationPrefs==='function') _applySessionNavigationPrefs();
     }
     window._sessionEndlessScrollEnabled=!!(saved&&saved.session_endless_scroll);
+    if(saved&&Object.prototype.hasOwnProperty.call(saved,'activity_feed_expanded_default')){
+      window._activityFeedExpandedDefault=!!saved.activity_feed_expanded_default;
+    }
     _setAppearanceAutosaveStatus('saved');
   }catch(e){
     console.warn('[settings] appearance autosave failed', e);
@@ -6113,6 +6126,15 @@ async function loadSettingsPanel(){
       window._sessionEndlessScrollEnabled=endlessScrollCb.checked;
       endlessScrollCb.onchange=function(){
         window._sessionEndlessScrollEnabled=this.checked;
+        _scheduleAppearanceAutosave();
+      };
+    }
+    const activityExpandedCb=$('settingsActivityFeedExpandedDefault');
+    if(activityExpandedCb){
+      activityExpandedCb.checked=!!settings.activity_feed_expanded_default;
+      window._activityFeedExpandedDefault=activityExpandedCb.checked;
+      activityExpandedCb.onchange=function(){
+        window._activityFeedExpandedDefault=this.checked;
         _scheduleAppearanceAutosave();
       };
     }
@@ -6444,6 +6466,9 @@ async function loadPluginsPanel(){
   try{
     const data=await api('/api/plugins');
     const plugins=Array.isArray((data||{}).plugins)?data.plugins:[];
+    // Hide the Plugins tab when no plugins are installed (#3457)
+    const tabBtn=document.querySelector('[data-settings-section="plugins"]');
+    if(tabBtn) tabBtn.style.display=(data&&data.empty)?'none':'';
     list.innerHTML='';
     if(plugins.length===0){
       list.style.display='none';

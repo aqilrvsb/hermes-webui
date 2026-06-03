@@ -1303,6 +1303,49 @@ def _build_native_multimodal_message(workspace_ctx: str, msg_text: str, attachme
     return parts if image_count else workspace_ctx + msg_text
 
 
+def _split_thinking_from_content(raw_content, existing_reasoning=''):
+    """Split a single LEADING <think> block out of assistant content.
+
+    Server-side twin of the JS ``_splitThinkFromContent`` (static/messages.js).
+    Inline-thinking providers (e.g. MiniMax-M3, OpenAI-compat) leave the thinking
+    trace inside the saved ``m['content']``, bloating session files 30-50% and
+    bypassing the ``m['reasoning']`` field the thinking card reads on reload
+    (#3455). This extracts exactly ONE leading block (after lstrip) — matching the
+    live renderer's _streamDisplay/_parseStreamState semantics — so a closed
+    ``<think>...</think>`` that appears MID-BODY (e.g. a literal tag in a fenced
+    code block) stays visible content and is never moved into reasoning, and a
+    partial/unclosed block is left intact.
+
+    Returns ``(content, reasoning)``. ``reasoning`` merges ``existing_reasoning``
+    (e.g. from a separate on_reasoning stream) with the extracted block.
+    """
+    text = '' if raw_content is None else str(raw_content)
+    if not text:
+        return text, (existing_reasoning or '')
+    # Leading-only, single block — same three tag pairs as the JS helper.
+    _pairs = (
+        ('<think>', '</think>'),
+        ('<|channel>thought\n', '<channel|>'),
+        ('<|turn|>thinking\n', '<turn|>'),
+    )
+    trimmed = text.lstrip()
+    extracted = ''
+    remaining = text
+    for open_tag, close_tag in _pairs:
+        if not trimmed.startswith(open_tag):
+            continue
+        ci = trimmed.find(close_tag, len(open_tag))
+        if ci == -1:
+            break  # partial open — leave intact
+        extracted = trimmed[len(open_tag):ci]
+        remaining = trimmed[ci + len(close_tag):].lstrip()
+        break
+    if not extracted:
+        return raw_content, (existing_reasoning or '')
+    final_reasoning = (existing_reasoning + '\n\n' + extracted) if existing_reasoning else extracted
+    return remaining, final_reasoning
+
+
 def _strip_thinking_markup(text: str) -> str:
     """Remove common reasoning/thinking wrappers from model text."""
     if not text:
@@ -1576,24 +1619,109 @@ def _detect_title_language(text: str) -> str:
     return ''
 
 
+def _script_counts(text: str) -> dict:
+    """Return per-script alphabetic character counts for *text*.
+
+    Buckets: ``latin``, ``cjk`` (Han/Hiragana/Katakana/Hangul), ``cyrillic``,
+    ``arabic``, ``hebrew``, ``greek``, ``devanagari``. Non-alphabetic and
+    unclassified characters are ignored.
+    """
+    counts: dict[str, int] = {}
+    for ch in str(text or ''):
+        if not ch.isalpha():
+            continue
+        o = ord(ch)
+        if (0x0041 <= o <= 0x024F) or (0x1E00 <= o <= 0x1EFF):
+            bucket = 'latin'
+        elif (
+            (0x4E00 <= o <= 0x9FFF) or (0x3400 <= o <= 0x4DBF)   # Han
+            or (0x3040 <= o <= 0x30FF)                            # Hiragana/Katakana
+            or (0xAC00 <= o <= 0xD7A3) or (0x1100 <= o <= 0x11FF) # Hangul
+        ):
+            bucket = 'cjk'
+        elif 0x0400 <= o <= 0x04FF:
+            bucket = 'cyrillic'
+        elif (0x0600 <= o <= 0x06FF) or (0x0750 <= o <= 0x077F):
+            bucket = 'arabic'
+        elif 0x0590 <= o <= 0x05FF:
+            bucket = 'hebrew'
+        elif 0x0370 <= o <= 0x03FF:
+            bucket = 'greek'
+        elif 0x0900 <= o <= 0x097F:
+            bucket = 'devanagari'
+        else:
+            continue
+        counts[bucket] = counts.get(bucket, 0) + 1
+    return counts
+
+
+def _dominant_script(text: str) -> str:
+    """Return a coarse writing-script bucket for *text*, or '' when undecidable.
+
+    Script-level (not language-level) classification is cheap and dependency-free.
+    Returns the dominant script only when it holds a clear (≥60%) majority of the
+    alphabetic characters, so mixed/borrowed text doesn't flip the bucket. Used
+    to establish the conversation start's expected script for cross-script title
+    drift detection (#3293).
+    """
+    counts = _script_counts(text)
+    total = sum(counts.values())
+    if total < 2:
+        return ''
+    top, top_n = max(counts.items(), key=lambda kv: kv[1])
+    if top_n / total >= 0.6:
+        return top
+    return ''
+
+
 def _title_prompt_language_rule(user_text: str) -> str:
     return "Match the language of the user question.\n"
 
 
 def _title_language_mismatch(user_text: str, title: str) -> bool:
-    """Reject obvious English titles for German conversation starts."""
-    if _detect_title_language(user_text) != 'de':
-        return False
-    candidate = str(title or '').strip().lower()
+    """Reject titles whose language clearly diverges from the conversation start.
+
+    Two independent signals:
+    1. Cross-script drift (#3293): when the conversation start has a clear
+       dominant writing script (e.g. latin/English) and the generated title
+       introduces a *substantial* amount of a different script (e.g. CJK or
+       Cyrillic), reject. This is language-agnostic and catches the common
+       "English chat -> Chinese/Spanish/Russian title" drift. Because titles are
+       short and frequently embed a borrowed Latin technical term (e.g. a CJK
+       title containing the word "Python"), the title side uses a proportion
+       threshold (>=35% of the title's alphabetic characters in a non-start
+       script, min 2 chars) rather than a strict majority -- so a CJK title with
+       one English word still trips, while an English title with a single
+       foreign place-name does not.
+    2. The legacy German-start → English-title heuristic, preserved verbatim so
+       the original behavior keeps working for same-script (latin) drift that
+       the script check can't see.
+    """
+    candidate = str(title or '').strip()
     if not candidate:
         return False
-    if _detect_title_language(candidate) == 'de':
+
+    # (1) Cross-script mismatch — language-agnostic.
+    user_script = _dominant_script(user_text)
+    if user_script:
+        title_counts = _script_counts(candidate)
+        title_total = sum(title_counts.values())
+        if title_total >= 2:
+            for script, n in title_counts.items():
+                if script != user_script and n >= 2 and (n / title_total) >= 0.35:
+                    return True
+
+    # (2) Legacy same-script German→English heuristic.
+    if _detect_title_language(user_text) != 'de':
+        return False
+    candidate_lower = candidate.lower()
+    if _detect_title_language(candidate_lower) == 'de':
         return False
     english_markers = {
         'old', 'image', 'display', 'issue', 'problem', 'discussion', 'conversation',
         'session', 'title', 'fix', 'bug', 'attachment', 'attachments', 'context',
     }
-    tokens = re.findall(r'[a-z]+', candidate)
+    tokens = re.findall(r'[a-z]+', candidate_lower)
     english_hits = sum(1 for tok in tokens if tok in english_markers)
     return english_hits >= 2
 
@@ -2894,13 +3022,16 @@ def _compression_summary_from_messages(messages):
 
 def _find_current_user_turn(messages, msg_text):
     needle = " ".join(str(msg_text or '').split())
+    last_strong_match = None  # _looks_like_current_user_turn (high confidence)
+    last_weak_match = None    # needle substring match (lower confidence)
     fallback = None
     for idx, msg in enumerate(messages or []):
         if not isinstance(msg, dict) or msg.get('role') != 'user':
             continue
         fallback = idx
         if _looks_like_current_user_turn(msg, msg_text):
-            return idx
+            last_strong_match = idx
+            continue
         text = " ".join(
             _strip_workspace_prefix(
                 _message_text(msg.get('content', '')),
@@ -2908,7 +3039,24 @@ def _find_current_user_turn(messages, msg_text):
             ).split()
         )
         if needle and (needle in text or text in needle):
-            return idx
+            last_weak_match = idx
+    # Return the LAST matching user turn. After context compression the agent's
+    # result_messages contain the full conversation history; if the user asked a
+    # similar question in an earlier turn, first-match would return that old
+    # index, causing the merge to replay the entire history from that point.
+    # Last-match anchors on the current turn instead.
+    #
+    # Prefer the last STRONG match (an exact `_looks_like_current_user_turn`
+    # hit) over the last WEAK substring match. The agent loop appends synthetic
+    # `role:"user"` continuation prompts (e.g. "Continue", empty-recovery nudges
+    # — see conversation_loop.py) AFTER the real user turn; those can weak-match
+    # `msg_text` and, if weak matches were allowed to win, would anchor the merge
+    # PAST the real turn and drop the assistant/tool output in between. The real
+    # current turn is the last strong match, so it must take priority.
+    if last_strong_match is not None:
+        return last_strong_match
+    if last_weak_match is not None:
+        return last_weak_match
     return fallback
 
 
@@ -4807,9 +4955,20 @@ def _run_agent_streaming(
                 resolved_provider, resolved_api_key, resolved_base_url
             )
 
-            # Read per-profile config at call time (not module-level snapshot)
-            from api.config import get_config as _get_config
-            _cfg = _get_config()
+            # Read per-profile config at call time (not module-level snapshot).
+            # The streaming worker is a detached thread that does NOT inherit the
+            # per-request thread-local profile context, so the ambient
+            # get_config() would resolve the process-global (default) profile and
+            # leak the wrong profile's toolsets / prefill / fallback config into
+            # this run (issue #3294). Read the SESSION's own profile home
+            # explicitly so toolsets and context match the profile the session
+            # actually runs under.
+            from api.config import get_config_for_profile_home as _get_config_for_home
+            try:
+                _cfg = _get_config_for_home(_profile_home)
+            except Exception:
+                from api.config import get_config as _get_config
+                _cfg = _get_config()
             _prefill_context = _load_webui_prefill_context(_cfg)
             _prefill_messages = _prefill_messages_with_webui_context(_prefill_context, _cfg)
             put('context_status', {
@@ -5900,11 +6059,30 @@ def _run_agent_streaming(
                 # Must run BEFORE s.save() — otherwise the mutation lives only in
                 # memory until the next turn's save, and the last-turn thinking card
                 # is lost when the user reloads immediately after a response.
-                if _reasoning_text and s.messages:
+                #
+                # #3455: also split any inline leading <think> block out of the saved
+                # assistant content into m['reasoning'] (server-side twin of the JS
+                # _splitThinkFromContent). Inline-thinking providers (e.g. MiniMax-M3)
+                # otherwise leave the thinking trace in m['content'], bloating the
+                # persisted session file 30-50% and bypassing the thinking card. The
+                # split is leading-only/single-block so mid-body literal tags (e.g. in
+                # a fenced code block) stay visible content.
+                if s.messages:
                     for _rm in reversed(s.messages):
-                        if isinstance(_rm, dict) and _rm.get('role') == 'assistant':
-                            _rm['reasoning'] = _reasoning_text
-                            break
+                        if not (isinstance(_rm, dict) and _rm.get('role') == 'assistant'):
+                            continue
+                        _existing_reasoning = _reasoning_text or _rm.get('reasoning') or ''
+                        _content = _rm.get('content')
+                        if isinstance(_content, str) and _content:
+                            _new_content, _merged_reasoning = _split_thinking_from_content(
+                                _content, _existing_reasoning
+                            )
+                            _rm['content'] = _new_content
+                            if _merged_reasoning:
+                                _rm['reasoning'] = _merged_reasoning
+                        elif _existing_reasoning:
+                            _rm['reasoning'] = _existing_reasoning
+                        break
                 try:
                     _turn_duration_seconds = max(0.0, time.time() - float(_turn_started_at))
                 except Exception:
@@ -6812,7 +6990,7 @@ def _handle_chat_steer(handler, body: dict) -> bool:
 
 
 def cancel_stream(stream_id: str) -> bool:
-    """Signal an in-flight stream to cancel. Returns True if the stream existed.
+    """Signal an in-flight stream to cancel. Returns True if work was found.
 
     Eagerly releases the session lock (pops STREAMS/CANCEL_FLAGS/AGENT_INSTANCES
     and clears session.active_stream_id) so new /api/chat/start requests succeed
@@ -6841,88 +7019,161 @@ def cancel_stream(stream_id: str) -> bool:
         partial_texts = _live_config.STREAM_PARTIAL_TEXT
         streams_lock = _live_config.STREAMS_LOCK
 
+    active_run_entry = None
+    active_run_session_id = None
+    stream_present = False
+    agent = None
+    q = None
+    # Snapshots captured UNDER streams_lock so the worker's finally block (which
+    # pops STREAM_PARTIAL_TEXT/REASONING/TOOL_CALLS under STREAMS_LOCK) cannot
+    # race agent.interrupt() and clear these buffers before we read them — a
+    # cancelled turn would otherwise silently lose its already-streamed
+    # partial text / reasoning / tool-calls (Codex pre-release finding).
+    _snap_partial_text = None
+    _snap_reasoning = None
+    _snap_tool_calls = None
+    _snap_flag = None
+    _snap_agent = None
+
     with streams_lock:
-        if stream_id not in streams:
-            return False
-
-        # Set WebUI layer cancel flag
-        flag = cancel_flags.get(stream_id)
-        if flag:
-            flag.set()
-
-        # Interrupt the AIAgent instance to stop tool execution
-        agent = agent_instances.get(stream_id)
-        if agent:
-            try:
-                agent.interrupt("Cancelled by user")
-            except Exception as e:
-                # Log but don't block the cancel flow
-                import logging
-                logging.getLogger(__name__).debug(
-                    f"Failed to interrupt agent for stream {stream_id}: {e}"
-                )
+        stream_present = stream_id in streams
+        # Snapshot everything the worker's finally could pop, WHILE the lock is
+        # held and before any interrupt lets that finally run — for BOTH the
+        # STREAMS-present and the ACTIVE_RUNS-only (detached) paths. The buffers
+        # are keyed by stream_id independent of STREAMS membership, so a detached
+        # cancel must snapshot them too or it loses the already-streamed text.
+        _snap_flag = cancel_flags.get(stream_id)
+        _snap_agent = agent_instances.get(stream_id)
+        _snap_partial_text = partial_texts.get(stream_id, '')
+        if not _snap_partial_text:
+            _live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
+            if _live_partials is not partial_texts:
+                _snap_partial_text = _live_partials.get(stream_id, '')
+        _snap_reasoning = STREAM_REASONING_TEXT.get(stream_id, '')
+        if not _snap_reasoning:
+            _live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', STREAM_REASONING_TEXT)
+            if _live_reasoning is not STREAM_REASONING_TEXT:
+                _snap_reasoning = _live_reasoning.get(stream_id, '')
+        _snap_tool_calls = list(STREAM_LIVE_TOOL_CALLS.get(stream_id, []) or [])
+        if not _snap_tool_calls:
+            _live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', STREAM_LIVE_TOOL_CALLS)
+            if _live_tools is not STREAM_LIVE_TOOL_CALLS:
+                _snap_tool_calls = list(_live_tools.get(stream_id, []) or [])
+        if stream_present:
+            q = streams.get(stream_id)
         else:
-            # Agent not yet stored - cancel_event flag will be checked by agent thread
+            try:
+                with _live_config.ACTIVE_RUNS_LOCK:
+                    active_run_entry = dict((_live_config.ACTIVE_RUNS or {}).get(stream_id) or {})
+            except Exception:
+                active_run_entry = None
+            if not active_run_entry:
+                return False
+            active_run_session_id = str(active_run_entry.get("session_id") or "").strip() or None
+
+    if active_run_entry is None:
+        try:
+            with _live_config.ACTIVE_RUNS_LOCK:
+                active_run_entry = dict((_live_config.ACTIVE_RUNS or {}).get(stream_id) or {})
+        except Exception:
+            active_run_entry = None
+        if active_run_entry and not active_run_session_id:
+            active_run_session_id = str(active_run_entry.get("session_id") or "").strip() or None
+
+    # Set WebUI layer cancel flag. Prefer the snapshot captured under the lock;
+    # fall back to a fresh lookup for the ACTIVE_RUNS-only path (stream absent).
+    flag = _snap_flag if _snap_flag is not None else cancel_flags.get(stream_id)
+    if flag:
+        flag.set()
+
+    # Interrupt the AIAgent instance to stop tool execution. Use the
+    # lock-snapshot agent when the stream was present; otherwise fall back to
+    # the session agent cache via the active-run session id.
+    agent = _snap_agent if _snap_agent is not None else agent_instances.get(stream_id)
+    if agent is None and active_run_session_id:
+        try:
+            with _live_config.SESSION_AGENT_CACHE_LOCK:
+                cached = _live_config.SESSION_AGENT_CACHE.get(active_run_session_id)
+            if cached and _cached_agent_matches_session(cached[0], active_run_session_id):
+                agent = cached[0]
+        except Exception:
+            pass
+    if agent:
+        try:
+            agent.interrupt("Cancelled by user")
+        except Exception as e:
+            # Log but don't block the cancel flow
             import logging
             logging.getLogger(__name__).debug(
-                f"Cancel requested for stream {stream_id} before agent ready - "
-                f"cancel_event flag set, will be checked on agent startup"
+                f"Failed to interrupt agent for stream {stream_id}: {e}"
             )
+    elif stream_present:
+        # Agent not yet stored - cancel_event flag will be checked by agent thread
+        import logging
+        logging.getLogger(__name__).debug(
+            f"Cancel requested for stream {stream_id} before agent ready - "
+            f"cancel_event flag set, will be checked on agent startup"
+        )
 
-        # Clear any pending clarify prompt so the blocked tool call can unwind.
-        try:
-            from api.clarify import clear_pending as _clear_clarify_pending
+    # Clear any pending clarify prompt so the blocked tool call can unwind.
+    try:
+        from api.clarify import clear_pending as _clear_clarify_pending
 
-            if agent and getattr(agent, "session_id", None):
-                _clear_clarify_pending(agent.session_id)
-        except Exception:
-            logger.debug("Failed to clear clarify prompt during cancel")
+        _clarify_session_id = getattr(agent, "session_id", None) if agent else active_run_session_id
+        if _clarify_session_id:
+            _clear_clarify_pending(_clarify_session_id)
+    except Exception:
+        logger.debug("Failed to clear clarify prompt during cancel")
 
-        # Capture the queue while the stream still exists, but do not emit the
-        # terminal cancel event until the session cleanup below confirms the turn
-        # is still active. Otherwise a late Stop click can race with a successful
-        # worker save and show cancel in the client while persistence says done.
-        q = streams.get(stream_id)
-        _emit_cancel_event = True
+    # Capture the queue while the stream still exists, but do not emit the
+    # terminal cancel event until the session cleanup below confirms the turn
+    # is still active. Otherwise a late Stop click can race with a successful
+    # worker save and show cancel in the client while persistence says done.
+    _emit_cancel_event = True
 
-        # ── Eager session lock release (fixes #653) ──────────────────────────
-        # Pop stream state now so the 409 guard in routes.py sees the session
-        # as idle and allows new /api/chat/start immediately after cancel,
-        # even if the agent thread is still blocked in a C-level syscall.
-        # The worker thread's finally block uses .pop(key, None) too, so a
-        # double-pop here is safe (no-op).
+    # ── Eager session lock release (fixes #653) ──────────────────────────
+    # Pop stream state now so the 409 guard in routes.py sees the session
+    # as idle and allows new /api/chat/start immediately after cancel,
+    # even if the agent thread is still blocked in a C-level syscall.
+    # The worker thread's finally block uses .pop(key, None) too, so a
+    # double-pop here is safe (no-op).
+    if stream_present:
         streams.pop(stream_id, None)
         cancel_flags.pop(stream_id, None)
         agent_instances.pop(stream_id, None)
-        # STREAM_PARTIAL_TEXT is intentionally NOT popped here — the agent thread may
-        # still be appending tokens. We capture the snapshot two lines below; the
-        # streaming finally block handles the cleanup when the thread exits.
+    # STREAM_PARTIAL_TEXT is intentionally NOT popped here — the agent thread may
+    # still be appending tokens, and the streaming finally block handles cleanup
+    # when the thread exits. We already snapshotted the buffers under streams_lock
+    # at the top of this function (see _snap_*), so they're safe to read below
+    # even if the worker's finally has since popped the live maps.
 
-        # Capture partial text and session_id while holding STREAMS_LOCK (avoids a
-        # race where the agent thread deallocates the agent object or clears the
-        # partial text after we release).
-        # Session cleanup (get_session + save) must happen OUTSIDE the lock —
-        # get_session() acquires LOCK, and the streaming thread does LOCK first
-        # then STREAMS_LOCK, so inverting the order here would cause deadlock.
-        _cancel_session_id = getattr(agent, 'session_id', None) if agent else None
-        _cancel_partial_text = partial_texts.get(stream_id, '')
-        # Fallback: check the live config's partial text map if we used an alias
-        # and the text wasn't found in the alias (defensive, matches streams fallback above).
-        if not _cancel_partial_text:
-            live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
-            if live_partials is not partial_texts:
-                _cancel_partial_text = live_partials.get(stream_id, '')
-        # Capture reasoning trace and live tool calls (#1361 §A + §B)
-        _cancel_reasoning = STREAM_REASONING_TEXT.get(stream_id, '')
-        if not _cancel_reasoning:
-            live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', STREAM_REASONING_TEXT)
-            if live_reasoning is not STREAM_REASONING_TEXT:
-                _cancel_reasoning = live_reasoning.get(stream_id, '')
-        _cancel_tool_calls = STREAM_LIVE_TOOL_CALLS.get(stream_id, [])
-        if not _cancel_tool_calls:
-            live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', STREAM_LIVE_TOOL_CALLS)
-            if live_tools is not STREAM_LIVE_TOOL_CALLS:
-                _cancel_tool_calls = live_tools.get(stream_id, [])
+    # Resolve the cancel session id and reuse the under-lock snapshots.
+    # Session cleanup (get_session + save) must happen OUTSIDE the lock —
+    # get_session() acquires LOCK, and the streaming thread does LOCK first
+    # then STREAMS_LOCK, so inverting the order here would cause deadlock.
+    _cancel_session_id = getattr(agent, 'session_id', None) if agent else None
+    if not _cancel_session_id and active_run_session_id:
+        _cancel_session_id = active_run_session_id
+    # Use the snapshots captured under streams_lock above (the worker's finally
+    # may have popped the live buffers by now via agent.interrupt()). For the
+    # ACTIVE_RUNS-only path (stream absent) the snapshots are None → fall back to
+    # a best-effort live read.
+    _cancel_partial_text = _snap_partial_text if _snap_partial_text is not None else partial_texts.get(stream_id, '')
+    if not _cancel_partial_text:
+        live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
+        if live_partials is not partial_texts:
+            _cancel_partial_text = live_partials.get(stream_id, '')
+    # Capture reasoning trace and live tool calls (#1361 §A + §B)
+    _cancel_reasoning = _snap_reasoning if _snap_reasoning is not None else STREAM_REASONING_TEXT.get(stream_id, '')
+    if not _cancel_reasoning:
+        live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', STREAM_REASONING_TEXT)
+        if live_reasoning is not STREAM_REASONING_TEXT:
+            _cancel_reasoning = live_reasoning.get(stream_id, '')
+    _cancel_tool_calls = _snap_tool_calls if _snap_tool_calls is not None else STREAM_LIVE_TOOL_CALLS.get(stream_id, [])
+    if not _cancel_tool_calls:
+        live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', STREAM_LIVE_TOOL_CALLS)
+        if live_tools is not STREAM_LIVE_TOOL_CALLS:
+            _cancel_tool_calls = live_tools.get(stream_id, [])
 
     # Session cleanup outside STREAMS_LOCK to preserve lock ordering.
     # Acquire the per-session _agent_lock too, mirroring every other session
