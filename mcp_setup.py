@@ -57,9 +57,10 @@ servers = {
 # Dirs are category-preserving bundles built in Dockerfile.railway.
 # /opt/skills-common holds skills EVERY profile should have (e.g. whatsapp-whacenter messaging).
 COMMON = ["/opt/skills-common"]
+# GENERAL = superpowers, shared to EVERY profile. marketer also gets it now (user: "full general across profile").
 SKILLS_BY_PROFILE = {
-    "marketer":  ["/opt/skills-mkt"] + COMMON,                               # marketing + meta-ads + messaging
-    "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"] + COMMON,  # general + dev + cavecrew + messaging
+    "marketer":  ["/opt/skills/superpowers/skills", "/opt/skills-mkt"] + COMMON,   # general + marketing + meta-ads + messaging
+    "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"] + COMMON,   # general + dev + cavecrew + messaging
 }
 SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"] + COMMON  # default = everything + messaging
 def homes():
@@ -99,6 +100,11 @@ for home in homes():
     cl = cfg.get("clarify") or {}
     cl["timeout"] = 31536000
     cfg["clarify"] = cl
+    # Belt-and-suspenders: the agent block has its OWN clarify_timeout (default 600s) that some
+    # code paths use — set it huge too so clarifications never time out in the web chat.
+    ag = cfg.get("agent") or {}
+    ag["clarify_timeout"] = 31536000
+    cfg["agent"] = ag
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
@@ -154,5 +160,35 @@ def _heal_workspaces():
     print("== workspace heal: rewrote %d file(s) (/app -> /workspace) ==" % healed)
 try:
     _heal_workspaces()
+except Exception:
+    pass
+
+# ---- Heal skills: fold any agent-created local 'marketer' category into 'marketing' ----
+# The agent sometimes authors skills under <profile>/skills/marketer/* which then show as a
+# separate "MARKETER" group. The user wants one "MARKETING" group, so move them.
+import shutil as _shutil
+def _heal_skill_categories():
+    for home in homes():
+        sk_dir = os.path.join(home, "skills")
+        src = os.path.join(sk_dir, "marketer")
+        if not os.path.isdir(src):
+            continue
+        dst = os.path.join(sk_dir, "marketing")
+        os.makedirs(dst, exist_ok=True)
+        for name in os.listdir(src):
+            try:
+                target = os.path.join(dst, name)
+                if os.path.exists(target):
+                    continue
+                _shutil.move(os.path.join(src, name), target)
+            except Exception:
+                pass
+        try:
+            os.rmdir(src)  # only succeeds if now empty
+        except Exception:
+            pass
+    print("== skill heal: folded local marketer -> marketing ==")
+try:
+    _heal_skill_categories()
 except Exception:
     pass
