@@ -105,6 +105,11 @@ for home in homes():
     ag = cfg.get("agent") or {}
     ag["clarify_timeout"] = 31536000
     cfg["agent"] = ag
+    # Default task env cwd: point at the PERSISTENT volume workspace, not ephemeral /app
+    # (the "local environment for task default" was defaulting to /app -> writes lost on restart).
+    tm = cfg.get("terminal") or {}
+    tm["cwd"] = os.path.join(HOME, "workspace")
+    cfg["terminal"] = tm
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
