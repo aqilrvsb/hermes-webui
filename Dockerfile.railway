@@ -71,8 +71,12 @@ COPY seed_roles.sh /opt/seed_roles.sh
 
 # Make the "New space" form auto-create the folder (force the backend create flag on)
 RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
-# Relative workspace names resolve under /workspace (persistent), not /app (ephemeral)
-RUN sed -i '/path_str = _strip_surrounding_quotes/a\    if path_str and path_str[0] not in ("/", "~"): path_str = "/workspace/" + path_str' /apptoo/api/routes.py || true
+# Relative workspace names resolve under the PERSISTENT VOLUME (/home/hermeswebui/.hermes/workspace),
+# NOT ephemeral /app or an ephemeral /workspace. This is the durable location across restarts.
+RUN sed -i '/path_str = _strip_surrounding_quotes/a\    if path_str and path_str[0] not in ("/", "~"): path_str = "/home/hermeswebui/.hermes/workspace/" + path_str' /apptoo/api/routes.py || true
+# Also make /workspace itself a symlink to the volume (baked as root so it persists), so any
+# hardcoded /workspace/<name> path the agent uses also lands on the persistent volume.
+RUN rm -rf /workspace && ln -sfn /home/hermeswebui/.hermes/workspace /workspace
 # Skills TAB must be PER-PROFILE: read external_dirs from the ACTIVE profile's config,
 # not the process-global one (otherwise marketer shows dev/general too). #per-profile-skills
 RUN sed -i 's#dirs.extend(Path(p) for p in get_external_skills_dirs())#import yaml as _y; _cp=_active_profile_config_path(); _c=((_y.safe_load(_cp.read_text(encoding="utf-8")) or {}) if _cp.exists() else {}); dirs.extend(Path(p) for p in ((_c.get("skills") or {}).get("external_dirs") or []))#' /apptoo/api/routes.py || true

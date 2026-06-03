@@ -116,7 +116,15 @@ print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
 # ---- Heal workspace paths: /app/<x> (ephemeral, wiped on redeploy) -> /workspace/<x> (persistent) ----
 # Spaces saved with an absolute /app path fail with "Path does not exist" after a redeploy.
 import glob as _glob, json as _json
+VOL = os.path.join(HOME, "workspace")  # the persistent volume workspace root
+def _to_vol(pth):
+    """Rewrite an ephemeral /app/* or /workspace/* path onto the persistent volume."""
+    for pre in ("/app/", "/workspace/"):
+        if pth.startswith(pre) and not pth.startswith(VOL):
+            return os.path.join(VOL, os.path.basename(pth.rstrip("/")))
+    return pth
 def _heal_workspaces():
+    os.makedirs(VOL, exist_ok=True)
     wfiles = set(_glob.glob(os.path.join(HOME, "**", "workspaces.json"), recursive=True))
     sd = os.environ.get("HERMES_WEBUI_STATE_DIR")
     if sd:
@@ -134,8 +142,9 @@ def _heal_workspaces():
             if not isinstance(e, dict):
                 continue
             pth = str(e.get("path") or "")
-            if pth.startswith("/app/"):
-                e["path"] = "/workspace/" + os.path.basename(pth.rstrip("/"))
+            nv = _to_vol(pth)
+            if nv != pth:
+                e["path"] = nv
                 ch = True
             if e.get("path"):
                 try:
@@ -151,13 +160,13 @@ def _heal_workspaces():
     for lf in _glob.glob(os.path.join(HOME, "**", "last_workspace.txt"), recursive=True):
         try:
             v = open(lf, encoding="utf-8").read().strip()
-            if v.startswith("/app/"):
-                nv = "/workspace/" + os.path.basename(v.rstrip("/"))
+            nv = _to_vol(v)
+            if nv != v:
                 os.makedirs(nv, exist_ok=True)
                 open(lf, "w", encoding="utf-8").write(nv)
         except Exception:
             pass
-    print("== workspace heal: rewrote %d file(s) (/app -> /workspace) ==" % healed)
+    print("== workspace heal: rewrote %d file(s) to volume (%s) ==" % (healed, VOL))
 try:
     _heal_workspaces()
 except Exception:
