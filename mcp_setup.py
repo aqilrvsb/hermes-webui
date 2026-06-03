@@ -92,10 +92,12 @@ for home in homes():
     sk = cfg.get("skills") or {}
     sk["external_dirs"] = list(SKILLS_BY_PROFILE.get(name, SKILLS_DEFAULT))
     cfg["skills"] = sk
-    # Clarify timeout: default is 120s — far too short, the agent gave up while the
-    # user was still typing an answer ("clarification timed out"). Give 15 minutes.
+    # Clarify timeout: default 120s gave up while the user was still typing.
+    # This is an interactive web chat (a human is present), so make it effectively
+    # NEVER time out — ~1 year. (Code treats <=0 as "use default 120", so we can't
+    # set 0; a huge positive value = no timeout in practice, like Claude Code.)
     cl = cfg.get("clarify") or {}
-    cl["timeout"] = 900
+    cl["timeout"] = 31536000
     cfg["clarify"] = cl
     try:
         os.makedirs(home, exist_ok=True)
