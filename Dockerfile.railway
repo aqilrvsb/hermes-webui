@@ -36,8 +36,11 @@ RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpow
 
 # Extra skills (Meta Ads, etc.) + caveman
 COPY railway-skills /opt/skills-extra
-# Live pixel-art AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
+# Live AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
 COPY pixel.html /apptoo/static/pixel.html
+# Real Claude-Office room art + character sprites (MIT, W17ant/Claude-Office), web-light (~0.7MB).
+# Served at /static/office/* — the dashboard renders the real isometric office with these.
+COPY office /apptoo/static/office
 # Enable Ctrl+V paste of images into the chat (hooks the existing global addFiles()). drag-drop already works.
 COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true

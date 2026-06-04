@@ -64,7 +64,29 @@
   .chanhdr .toggle .knob{position:absolute;right:1px;top:1px;width:12px;height:12px;border-radius:50%;background:#fff}
   .chan .rows{flex:1;overflow:auto;max-height:460px;padding:12px 14px;display:flex;flex-direction:column;gap:13px}
   .chaninput{margin:10px 12px 12px;font-family:var(--disp);font-size:13px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px 13px;outline:none}
-  #office_c{display:block;width:100%;border-radius:12px;image-rendering:pixelated;background:linear-gradient(180deg,#0e1422,#0b1019);cursor:pointer}
+  /* real Claude-Office room (MIT art) + sprite characters */
+  #stagewrap{position:relative;width:100%;aspect-ratio:1280/956;border-radius:12px;overflow:hidden;background:#0a0e1a;
+    box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -24px #000;image-rendering:auto}
+  #stagewrap .room{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none}
+  #stagewrap .vign{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 30%,transparent 55%,rgba(4,6,14,.5))}
+  .char{position:absolute;transform:translate(-50%,-87%);cursor:pointer;display:flex;flex-direction:column;align-items:center;
+    transition:filter .2s;filter:drop-shadow(0 6px 7px rgba(0,0,0,.55))}
+  .char:hover{filter:drop-shadow(0 0 10px rgba(255,255,255,.45)) drop-shadow(0 6px 7px rgba(0,0,0,.55))}
+  .char .sprite{height:var(--csz,90px);width:auto;display:block;image-rendering:auto}
+  .char.off .sprite{filter:grayscale(1) brightness(.6)}
+  .char .bubble{position:absolute;top:-14px;left:50%;transform:translateX(-50%);display:flex;gap:3px;
+    background:rgba(10,16,30,.92);border:1px solid rgba(184,255,91,.5);border-radius:9px;padding:4px 7px;z-index:3}
+  .char .bubble i{width:4px;height:4px;border-radius:50%;background:var(--lime);animation:typ 1.1s infinite}
+  .char .bubble i:nth-child(2){animation-delay:.18s}.char .bubble i:nth-child(3){animation-delay:.36s}
+  @keyframes typ{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+  .char .tag{margin-top:-6px;display:flex;flex-direction:column;align-items:center;gap:1px;white-space:nowrap;pointer-events:none}
+  .char .tag .nm{font-weight:700;font-size:11px;color:#fff;text-shadow:0 1px 3px #000,0 0 4px #000;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+  .char .tag .rl{font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--c,var(--teal));text-shadow:0 1px 2px #000}
+  .char .ring{position:absolute;left:50%;bottom:2px;width:34px;height:13px;transform:translateX(-50%);border-radius:50%;
+    border:2px solid var(--c,var(--teal));opacity:.55;z-index:0}
+  .char.work .ring{border-color:var(--lime);animation:beat 2s ease-out infinite}
+  .char.off .ring{border-color:var(--rose)}
+  .stageempty{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);color:var(--faint);font-size:13px}
   .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
   .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
   /* activity feed */
@@ -175,7 +197,11 @@
       </div>
       <div class="office">
         <div class="stage">
-          <canvas id="office_c"></canvas>
+          <div id="stagewrap">
+            <img class="room" id="roomimg" src="/static/office/room-night.jpg" alt="office" draggable="false">
+            <div class="vign"></div>
+            <div id="chars"></div>
+          </div>
           <div class="legend">
             <span><i style="background:var(--lime)"></i>working now</span>
             <span><i style="background:var(--teal)"></i>on duty (scheduled)</span>
@@ -211,7 +237,8 @@
     <div class="pb" id="playbook"></div>
   </section>
 
-  <div class="foot">Hermes agent office · refreshes every <span style="color:var(--lime)">5s</span> · <span id="ts"></span></div>
+  <div class="foot">Hermes agent office · refreshes every <span style="color:var(--lime)">5s</span> · <span id="ts"></span><br>
+    <span style="opacity:.7">Office art: <a href="https://github.com/W17ant/Claude-Office" target="_blank" rel="noopener">Claude-Office</a> by W17ant (MIT)</span></div>
 </div>
 
 <!-- agent detail modal -->
@@ -248,7 +275,7 @@ async function j(p){const r=await fetch(p,{credentials:"include"});if(!r.ok)thro
 function positionThumb(){const b=document.querySelector('.seg button.active'),t=$('#thumb');if(b&&t){t.style.left=b.offsetLeft+'px';t.style.width=b.offsetWidth+'px';}}
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
   document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();}
-window.addEventListener('resize',()=>{positionThumb();sizeCanvas();});
+window.addEventListener('resize',()=>{positionThumb();renderStage();});
 let toastT;function copy(t){navigator.clipboard.writeText(t).then(()=>{const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1700);});}
 function ago(ts){if(!ts)return"";let s=Math.floor(Date.now()/1000-ts);if(s<0)return"in "+rel(-s);return rel(s)+" ago";}
 function rel(s){if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
@@ -304,8 +331,8 @@ async function loadFloor(){
       list.push({kind:"live",id:s.session_id,name:s.title||"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
         desc:"Live chat task — "+(s.title||"ask-Hermes session"),when:"live chat",next:null,last:s.last_activity,laststatus:"working",
         skills:[],prompt:"",status:"work"});});
-    FLOOR=list;renderAgents();renderFeed();sizeCanvas();
-  }catch(e){FLOOR=[];renderAgents();renderFeed();}
+    FLOOR=list;renderAgents();renderFeed();renderStage();
+  }catch(e){FLOOR=[];renderAgents();renderFeed();renderStage();}
 }
 function renderAgents(){const el=$("#agents");
   if(!FLOOR.length){el.innerHTML='<div class="empty">No agents for this profile. Schedule cron agents or start a chat — this floor is dynamic and per-profile.</div>';$("#floormeta").textContent="0 agents";return;}
@@ -355,74 +382,40 @@ $("#ov").addEventListener("click",e=>{if(e.target.id==="ov")closeModal();});
 function copyTask(){const a=FLOOR[MI];if(!a)return;const t=$("#m_task").value.trim();if(!t){return;}
   copy("For the "+a.name+" agent ("+a.role+"): "+t+"\n(Update its scheduled task / behaviour accordingly.)");}
 
-/* ===== isometric night office (Claude-Office style, drawn in code) ===== */
-const cv=$("#office_c"),cx=cv.getContext("2d");let DPR=Math.min(devicePixelRatio||1,2),HIT=[];
-const TW=64,TH=32;let ORX=0,ORY=100,GW=6,GH=5;
-const FONT=()=>getComputedStyle(document.body).fontFamily;
-function sizeCanvas(){const w=cv.parentElement.clientWidth-24,n=Math.max(FLOOR.length,1);
-  GW=Math.min(Math.max(4,Math.ceil(n/2)+1),7);GH=5;
-  const h=Math.round((GW+GH)*(TH/2))+190;
-  cv.style.width=w+"px";cv.style.height=h+"px";cv.width=w*DPR;cv.height=h*DPR;cx.setTransform(DPR,0,0,DPR,0,0);cx.imageSmoothingEnabled=false;ORX=w/2;ORY=100;}
-function P(x,y,w,h,c){cx.fillStyle=c;cx.fillRect(x|0,y|0,Math.ceil(w),Math.ceil(h));}
-function iso(gx,gy){return [ORX+(gx-gy)*(TW/2), ORY+(gx+gy)*(TH/2)];}
-function poly(ps,c){cx.fillStyle=c;cx.beginPath();cx.moveTo(ps[0][0],ps[0][1]);for(let i=1;i<ps.length;i++)cx.lineTo(ps[i][0],ps[i][1]);cx.closePath();cx.fill();}
-function tile(gx,gy,c){poly([iso(gx,gy),iso(gx+1,gy),iso(gx+1,gy+1),iso(gx,gy+1)],c);}
-function drawRoom(t){
-  const w=cv.width/DPR,h=cv.height/DPR;cx.clearRect(0,0,w,h);P(0,0,w,h,"#0a0e1a");
-  const WH=82;
-  function wall(p0,p1,face,pane){
-    poly([p0,p1,[p1[0],p1[1]-WH],[p0[0],p0[1]-WH]],face);
-    var steps=7;for(var s=0;s<steps;s++){var a=s/steps,b=(s+0.82)/steps;
-      var x0=p0[0]+(p1[0]-p0[0])*a,y0=p0[1]+(p1[1]-p0[1])*a,x1=p0[0]+(p1[0]-p0[0])*b,y1=p0[1]+(p1[1]-p0[1])*b;
-      poly([[x0,y0-7],[x1,y1-7],[x1,y1-WH+9],[x0,y0-WH+9]],pane);
-      for(var k=0;k<5;k++){if((s*3+k)%2){cx.fillStyle="#41618c";cx.fillRect(x0+5,y0-16-k*12,3,4);}}}
-  }
-  wall(iso(0,0),iso(GW,0),"#0d1830","#16304a");
-  wall(iso(0,GH),iso(0,0),"#0b1426","#122842");
-  for(var gx=0;gx<GW;gx++)for(var gy=0;gy<GH;gy++)tile(gx,gy,((gx+gy)&1)?"#2b2540":"#251e36");
-  var a=iso(1,0.5),b=iso(GW-1,0.5);
-  cx.fillStyle="rgba(255,238,200,.05)";cx.beginPath();cx.moveTo(a[0],38);cx.lineTo(b[0],38);cx.lineTo(b[0],90);cx.lineTo(a[0],90);cx.closePath();cx.fill();
-  P(a[0],32,b[0]-a[0],5,"#c9d2e6");
+/* ===== real Claude-Office room + sprite characters (MIT art, positioned at real desk coords) ===== */
+/* Desk "spots" read straight from Claude-Office src/rooms.ts (main-office), as % of the room. */
+const SPOTS=[
+  {x:25.8,y:71.0,face:"rear-left"}, {x:37.9,y:68.2,face:"rear-right"},
+  {x:55.2,y:66.8,face:"front-left"},{x:68.7,y:66.2,face:"front-right"},
+  {x:26.9,y:59.2,face:"front-left"},{x:38.5,y:55.2,face:"rear-left"},
+  {x:48.9,y:52.9,face:"rear-right"},{x:52.7,y:78.8,face:"rear-left"},
+  {x:65.9,y:75.8,face:"rear-right"},{x:38.8,y:43.6,face:"front-left"}
+];
+/* role → preferred sprite; remaining agents fill from POOL (no repeats until exhausted). */
+const SPRITE_BY_ROLE={"Analyst":"security-audit-1","Creator":"explore-1","Reporter":"employee-1",
+  "Research":"dev-2","Optimizer":"Frontend-dev-1","Hermes Agent":"Claude-1","Agent":"employee-2"};
+const POOL=["dev-1","employee-2","employee-3","Me-1","dev-2","explore-1","employee-1","security-audit-1","Frontend-dev-1","Claude-1"];
+const spriteSrc=(name,face)=>"/static/office/ch/"+name+"-"+face+".png";
+function assignSprites(){const used={},out=[];let pi=0;
+  FLOOR.forEach(a=>{let s=SPRITE_BY_ROLE[a.role];
+    if(!s||used[s]){s=null;for(let g=0;g<POOL.length;g++){const c=POOL[(pi+g)%POOL.length];if(!used[c]){s=c;pi=(pi+g+1)%POOL.length;break;}}}
+    if(!s)s=POOL[pi++%POOL.length];used[s]=1;out.push(s);});
+  return out;}
+function renderStage(){const wrap=$("#chars");if(!wrap)return;
+  if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · this floor is dynamic & per-profile —</div>';return;}
+  const sz=Math.max(46,Math.round(($("#stagewrap").clientHeight||360)*0.17));
+  const sprites=assignSprites();
+  wrap.innerHTML=FLOOR.map((a,i)=>{const sp=SPOTS[i%SPOTS.length],name=sprites[i],
+    z=Math.round(sp.y*10)+(a.status==="work"?200:0);
+    return `<div class="char ${a.status}" style="left:${sp.x}%;top:${sp.y}%;z-index:${z};--c:${a.color};--csz:${sz}px"
+       title="${esc(a.name)} — ${esc(a.role)}" onclick="openModal(${i})">
+      ${a.status==="work"?'<div class="bubble"><i></i><i></i><i></i></div>':""}
+      <div class="ring"></div>
+      <img class="sprite" src="${spriteSrc(name,sp.face)}" alt="" draggable="false"
+           onerror="this.onerror=null;this.src='${spriteSrc("employee-2",sp.face)}'">
+      <div class="tag"><span class="nm">${esc(a.name)}</span><span class="rl">${esc(a.status==="work"?"working":a.status==="off"?"disabled":a.role)}</span></div>
+    </div>`;}).join("");
 }
-function drawProp(gx,gy,kind){const c=iso(gx+0.5,gy+0.5),x=c[0],y=c[1];
-  if(kind==="plant"){P(x-6,y-8,12,8,"#3a2a1e");for(var i=0;i<5;i++){var a=-1+i*0.5;P(x+a*4-1,y-24+Math.abs(a)*4,3,17,"#2f9e5e");}}
-  else if(kind==="cooler"){P(x-7,y-32,14,24,"#cfe6f2");P(x-7,y-36,14,6,"#2b6cff");P(x-9,y-8,18,6,"#2a3350");}
-  else if(kind==="board"){P(x-23,y-50,46,27,"#e9eef5");P(x-23,y-50,46,3,"#9aa3c2");["#ffd76a","#7be0a0","#ff9bb0"].forEach(function(cc,i){P(x-16+i*13,y-44,9,9,cc);});}
-}
-function drawChar(gx,gy,a,t,idx){const c=iso(gx+0.5,gy+0.5),x=c[0],yb=c[1];
-  poly([iso(gx+0.12,gy+0.12),iso(gx+0.88,gy+0.12),iso(gx+0.88,gy+0.88),iso(gx+0.12,gy+0.88)],"#323c5e");
-  var working=a.status==="work",on=working?(Math.sin(t/120)>-.3):true;
-  P(x-13,yb-30,26,16,"#0f1726");P(x-11,yb-28,22,12,working?(on?"#0f3b46":"#0a2730"):"#15233a");
-  if(working)for(var k=0;k<3;k++)P(x-9,yb-27+k*4,(5+((t/170+k*4)%8)),2,"#37e7cf");
-  P(x-2,yb-14,4,3,"#222a44");
-  var bob=working?0:Math.sin(t/430+idx)*1.6,hy=yb-50+bob;
-  cx.fillStyle="rgba(0,0,0,.35)";cx.beginPath();cx.ellipse(x,yb-2,15,6,0,0,7);cx.fill();
-  P(x-9,hy+14,18,18,a.color);
-  var ty=working?(Math.sin(t/95)>0?0:2):0;P(x-12,hy+22+ty,4,8,a.color);P(x+8,hy+22+(2-ty),4,8,a.color);
-  P(x-8,hy,16,15,"#e7c9a0");P(x-9,hy-3,18,6,"#2b2233");P(x-9,hy,3,8,"#2b2233");P(x+6,hy,3,8,"#2b2233");
-  P(x-4,hy+6,2,2,"#1a1426");P(x+2,hy+6,2,2,"#1a1426");
-  if(working){cx.fillStyle="#0c1530";cx.fillRect(x+9,hy-13,20,13);cx.fillStyle="#b8ff5b";cx.font="9px "+FONT();cx.fillText("•••",x+12,hy-3);}
-  if(a.status==="off"){cx.fillStyle="#ff6485";cx.font="bold 13px sans-serif";cx.fillText("!",x+11,hy-2);}
-  cx.textAlign="center";cx.fillStyle="#e9edfb";cx.font="600 11px "+FONT();cx.fillText(a.role,x,yb+8);
-  cx.fillStyle=a.color;cx.font="9px "+FONT();cx.fillText(working?"working":a.status==="off"?"disabled":"on duty",x,yb+20);
-  cx.textAlign="left";HIT.push({x:x-22,y:hy-14,w:44,h:72,i:idx});
-}
-function agentCell(i){var perRow=Math.ceil(Math.max(FLOOR.length,1)/2);return [1+(i%perRow), ((i/perRow)|0)===0?1.4:3.4];}
-function frame(t){
-  if(cv.width){drawRoom(t);HIT=[];
-    var items=[];
-    items.push({d:GW-0.5,fn:function(){drawProp(GW-1,0,"board");}});
-    items.push({d:GW+GH-2,fn:function(){drawProp(GW-1,GH-1,"cooler");}});
-    items.push({d:GH-0.5,fn:function(){drawProp(0,GH-1,"plant");}});
-    FLOOR.forEach(function(a,i){var cl=agentCell(i);items.push({d:cl[0]+cl[1],fn:function(){drawChar(cl[0],cl[1],a,t,i);}});});
-    items.sort(function(p,q){return p.d-q.d;}).forEach(function(it){it.fn();});
-    if(!FLOOR.length){cx.fillStyle="#5c6488";cx.textAlign="center";cx.font="13px "+FONT();cx.fillText("— empty office —",cv.width/DPR/2,cv.height/DPR/2);cx.textAlign="left";}
-  }
-  requestAnimationFrame(frame);
-}
-cv.addEventListener("click",function(e){var r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-  for(var k=HIT.length-1;k>=0;k--){var z=HIT[k];if(mx>=z.x&&mx<=z.x+z.w&&my>=z.y&&my<=z.y+z.h){openModal(z.i);break;}}});
-requestAnimationFrame(frame);
 
 /* PLAYBOOK */
 const PLAYBOOK={marketer:[
