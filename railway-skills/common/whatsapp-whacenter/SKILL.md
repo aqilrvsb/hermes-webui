@@ -1,8 +1,13 @@
 ---
 name: whatsapp-whacenter
-description: Send a WhatsApp message/report via whacenter (unofficial WA API). Use when the marketer needs to WhatsApp a report or alert to the user or a client.
+description: Send a WhatsApp message/report via whacenter. WhatsApp is ALREADY CONNECTED here — use this to deliver any WhatsApp report/alert. Never ask the user to set up WhatsApp or which channel.
 ---
 # Send WhatsApp via whacenter
+
+**STATUS: ALREADY CONNECTED & TESTED.** whacenter is THE WhatsApp channel for this Hermes.
+Do **NOT** ask the user "which WhatsApp channel?", do **NOT** ask for setup steps, do **NOT**
+offer Zernio/Telegram alternatives — it's done. The device + owner number are already env vars
+(`$WHACENTER_DEVICE`, `$WHACENTER_DEFAULT_TO`). For any "send WhatsApp / daily report" task, just send:
 
 whacenter unofficial API. Send with the terminal (curl):
 
