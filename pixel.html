@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hermes · Agents Floor</title>
-<!-- No external fonts (app CSP blocks them); system stack + canvas pixel art = fully self-contained. -->
+<title>Hermes · Agent Office</title>
+<!-- Self-contained: system fonts + canvas pixel art (app CSP blocks external fonts). -->
 <style>
   :root{
     --bg:#0a0c16; --ink:#e9edfb; --dim:#9aa3c2; --faint:#5c6488;
@@ -17,53 +17,90 @@
   *{box-sizing:border-box}
   html,body{margin:0;min-height:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--disp);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-  .bg{position:fixed;inset:-20vmax;z-index:0;pointer-events:none;filter:blur(80px) saturate(1.2);opacity:.7}
+  .bg{position:fixed;inset:-20vmax;z-index:0;pointer-events:none;filter:blur(80px) saturate(1.2);opacity:.65}
   .bg span{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:drift 28s ease-in-out infinite}
   .bg .b1{width:44vmax;height:44vmax;left:56%;top:-12%;background:radial-gradient(circle,#1f6f6a,transparent 62%)}
   .bg .b2{width:38vmax;height:38vmax;left:-8%;top:40%;background:radial-gradient(circle,#3a2a7e,transparent 62%);animation-delay:-10s}
-  .bg .b3{width:30vmax;height:30vmax;left:72%;top:60%;background:radial-gradient(circle,#6a2f5e,transparent 62%);animation-delay:-18s}
   @keyframes drift{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(5%,4%) scale(1.1)}}
-  .wrap{position:relative;z-index:2;max-width:1200px;margin:0 auto;padding:24px 20px 60px}
-  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-  .brand{display:flex;align-items:center;gap:14px}
-  .mark{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:12px;background:conic-gradient(from 140deg,var(--teal),var(--violet),var(--sky),var(--teal));box-shadow:0 0 0 1px rgba(255,255,255,.16) inset}
+  .wrap{position:relative;z-index:2;max-width:1280px;margin:0 auto;padding:22px 18px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .brand{display:flex;align-items:center;gap:13px}
+  .mark{position:relative;width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:12px;background:conic-gradient(from 140deg,var(--teal),var(--violet),var(--sky),var(--teal))}
   .mark::before{content:"";position:absolute;width:38px;height:38px;border-radius:10px;background:#0a0c16}
   .mark b{position:relative;font-weight:800;font-size:20px;color:#fff}
-  h1{margin:0;font-weight:800;font-size:23px;letter-spacing:-.02em}
-  .sub{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+  h1{margin:0;font-weight:800;font-size:22px;letter-spacing:-.02em}
+  .sub{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--faint);margin-top:4px}
   .ctrls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  select{font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:9px 12px;outline:none;cursor:pointer}
+  select{font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:9px 12px;outline:none;cursor:pointer}
   .conn{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);background:var(--glass);border:1px solid var(--line);padding:9px 13px;border-radius:999px}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--rose);color:var(--rose)}
   .dot.on{background:var(--lime);color:var(--lime);animation:beat 2s ease-out infinite}
   @keyframes beat{0%{box-shadow:0 0 0 0 rgba(184,255,91,.6)}70%{box-shadow:0 0 0 8px rgba(184,255,91,0)}100%{box-shadow:0 0 0 0 rgba(184,255,91,0)}}
-  .seg{position:relative;display:inline-flex;gap:4px;padding:5px;border-radius:999px;background:var(--glass);border:1px solid var(--line);margin-bottom:18px}
+  .seg{position:relative;display:inline-flex;gap:4px;padding:5px;border-radius:999px;background:var(--glass);border:1px solid var(--line);margin-bottom:16px}
   .seg .thumb{position:absolute;top:5px;bottom:5px;left:0;width:0;border-radius:999px;background:linear-gradient(160deg,rgba(55,231,207,.22),rgba(154,134,255,.22));border:1px solid rgba(255,255,255,.14);transition:left .4s cubic-bezier(.6,.05,.1,1),width .4s}
   .seg button{position:relative;z-index:1;font-weight:600;font-size:14px;color:var(--dim);background:none;border:0;padding:11px 20px;border-radius:999px;cursor:pointer;transition:color .3s}
   .seg button.active{color:#fff}
   .view{display:none;animation:fade .4s ease both}.view.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .panel{background:var(--glass);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 24px 50px -28px rgba(0,0,0,.85)}
-  .floorwrap{padding:14px}
-  #floor{display:block;width:100%;border-radius:12px;image-rendering:pixelated;background:#0d1322}
-  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  /* office + feed split */
+  .office{display:grid;grid-template-columns:1.7fr 1fr;gap:14px}
+  @media(max-width:840px){.office{grid-template-columns:1fr}}
+  .stage{padding:12px}
+  #office_c{display:block;width:100%;border-radius:12px;image-rendering:pixelated;background:linear-gradient(180deg,#0e1422,#0b1019);cursor:pointer}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
   .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
-  .empty{font-family:var(--mono);color:var(--faint);text-align:center;padding:30px}
+  /* activity feed */
+  .feed{padding:14px;display:flex;flex-direction:column;min-height:300px}
+  .feed h3{margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:8px}
+  .feed .rows{display:flex;flex-direction:column;gap:9px;overflow:auto;max-height:430px}
+  .fr{display:flex;gap:10px;align-items:flex-start;font-size:13px}
+  .fr .av{width:26px;height:26px;flex:none;border-radius:7px;display:grid;place-items:center;font-size:14px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
+  .fr .b{min-width:0}
+  .fr .nm{font-weight:700;font-size:13px}.fr .nm b{font-weight:700}
+  .fr .ev{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+  .fr .tm{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap}
   /* agent cards */
-  .agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:14px}
-  .ag{border:1px solid var(--line2);border-radius:14px;background:var(--glass);padding:14px;position:relative;overflow:hidden}
+  .agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px}
+  .ag{border:1px solid var(--line2);border-radius:14px;background:var(--glass);padding:14px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
+  .ag:hover{transform:translateY(-2px);border-color:var(--line)}
   .ag::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c,var(--teal))}
   .ag .top{display:flex;align-items:center;gap:9px}
-  .ag .av{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:16px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
-  .ag .nm{font-weight:700;font-size:14px}
+  .ag .av{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:17px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
+  .ag .nm{font-weight:700;font-size:14px;line-height:1.15}
   .ag .rl{font-family:var(--mono);font-size:10px;color:var(--c,var(--teal));text-transform:uppercase;letter-spacing:.1em}
-  .ag .meta{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:9px;display:flex;flex-direction:column;gap:3px}
-  .ag .st{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.1em;padding:3px 8px;border-radius:999px;border:1px solid;margin-left:auto}
+  .ag .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:999px;border:1px solid}
   .st.work{color:var(--lime);background:rgba(184,255,91,.1);border-color:rgba(184,255,91,.3)}
   .st.duty{color:var(--teal);background:rgba(55,231,207,.08);border-color:rgba(55,231,207,.26)}
   .st.off{color:var(--rose);background:rgba(255,100,133,.1);border-color:rgba(255,100,133,.3)}
   .st .led{width:6px;height:6px;border-radius:50%;background:currentColor}
-  /* skills + playbook reuse */
+  .ag .desc{font-size:12.5px;color:var(--ink);margin-top:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .ag .meta{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:9px;display:grid;gap:3px}
+  .ag .meta b{color:var(--ink);font-weight:600}
+  .ag .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+  .chip{font-family:var(--mono);font-size:10px;color:var(--sky);background:rgba(98,201,255,.08);border:1px solid var(--line2);border-radius:6px;padding:2px 7px}
+  .ag .hint{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:10px}
+  .empty{font-family:var(--mono);color:var(--faint);text-align:center;padding:28px}
+  /* modal */
+  #ov{position:fixed;inset:0;z-index:50;background:rgba(4,6,12,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:18px}
+  #ov.show{display:flex}
+  .modal{width:min(620px,96vw);max-height:90vh;overflow:auto;background:#0e1322;border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 70px -20px #000}
+  .mh{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid var(--line2)}
+  .mh .av{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
+  .mh h2{margin:0;font-size:19px;font-weight:800}
+  .mh .rl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--c,var(--teal))}
+  .mh .x{margin-left:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:16px}
+  .mb{padding:18px;display:flex;flex-direction:column;gap:14px}
+  .mb .row{display:grid;gap:5px}
+  .mb .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .mb .val{font-size:13.5px;color:var(--ink)}
+  .mb .pre{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:10px;padding:11px;max-height:200px;overflow:auto}
+  .mb textarea{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px;min-height:74px;resize:vertical;outline:none}
+  .mb .btns{display:flex;flex-wrap:wrap;gap:9px}
+  .btn{font-family:var(--mono);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border-radius:10px;padding:10px 14px;cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;gap:7px}
+  .btn.primary{background:linear-gradient(160deg,rgba(55,231,207,.25),rgba(154,134,255,.25));border-color:rgba(255,255,255,.16)}
+  .btn:active{transform:scale(.97)}
+  /* skills + playbook */
   .ptitle{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
   .scoreboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:14px 0}
   .sb{border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.02);padding:14px}
@@ -82,7 +119,6 @@
   .act{border:1px solid var(--line);border-radius:14px;background:var(--glass);padding:14px;margin-bottom:10px}
   .act .t{font-weight:700;font-size:14px;margin-bottom:6px}.act .p{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--dim)}
   .act .cp{margin-top:10px;font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer}
-  .act .cp:active{transform:scale(.96)}
   .err{border:1px solid rgba(255,100,133,.4);background:rgba(255,100,133,.08);color:#ffd3dd;padding:14px;border-radius:14px;margin-bottom:16px;font-size:14px}
   .foot{margin-top:22px;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--faint)}
   a{color:var(--teal)}
@@ -91,36 +127,42 @@
 </style>
 </head>
 <body>
-<div class="bg"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
+<div class="bg"><span class="b1"></span><span class="b2"></span></div>
 <div class="wrap">
   <header>
     <div class="brand"><div class="mark"><b>H</b></div>
-      <div><h1>Hermes Agents Floor</h1><span class="sub" id="floortitle">live office</span></div>
+      <div><h1>Hermes Agent Office</h1><span class="sub" id="floortitle">live</span></div>
     </div>
     <div class="ctrls">
-      <select id="profsel" title="Profile"></select>
+      <select id="profsel" title="Show agents for profile"></select>
       <div class="conn"><span id="dot" class="dot"></span><span id="statustxt">Connecting…</span></div>
     </div>
   </header>
 
   <div class="seg" id="seg">
     <span class="thumb" id="thumb"></span>
-    <button class="active" data-view="floor" onclick="show('floor')">Floor</button>
+    <button class="active" data-view="floor" onclick="show('floor')">Office</button>
     <button data-view="skills" onclick="show('skills')">Skills</button>
     <button data-view="play" onclick="show('play')">Playbook</button>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
 
-  <!-- FLOOR -->
+  <!-- OFFICE -->
   <section id="floor" class="view active">
-    <div class="panel floorwrap">
-      <canvas id="floor_c"></canvas>
-      <div class="legend">
-        <span><i style="background:var(--lime)"></i>working (live session)</span>
-        <span><i style="background:var(--teal)"></i>on duty (scheduled)</span>
-        <span><i style="background:var(--faint)"></i>idle / no agents</span>
-        <span id="floormeta" style="margin-left:auto"></span>
+    <div class="office">
+      <div class="panel stage">
+        <canvas id="office_c"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--lime)"></i>working now</span>
+          <span><i style="background:var(--teal)"></i>on duty (scheduled)</span>
+          <span><i style="background:var(--rose)"></i>disabled</span>
+          <span id="floormeta" style="margin-left:auto"></span>
+        </div>
+      </div>
+      <div class="panel feed">
+        <h3>📋 Activity feed</h3>
+        <div class="rows" id="feed"></div>
       </div>
     </div>
     <div class="agents" id="agents"></div>
@@ -138,12 +180,38 @@
 
   <!-- PLAYBOOK -->
   <section id="play" class="view">
-    <div class="panel guide">Pick a role in the chat bar, pick the project folder, then <b style="color:var(--ink)">Copy</b> a prompt below → paste into chat → send.</div>
+    <div class="panel guide">Pick a role in the chat bar, pick the project folder, then <b style="color:var(--ink)">Copy</b> a prompt → paste into chat → send.</div>
     <div class="pb" id="playbook"></div>
   </section>
 
-  <div class="foot">Hermes agents floor · refreshes every <span style="color:var(--lime)">5s</span> · <span id="ts"></span></div>
+  <div class="foot">Hermes agent office · refreshes every <span style="color:var(--lime)">5s</span> · <span id="ts"></span></div>
 </div>
+
+<!-- agent detail modal -->
+<div id="ov"><div class="modal">
+  <div class="mh"><div class="av" id="m_av">🤖</div><div><h2 id="m_name">Agent</h2><div class="rl" id="m_role">ROLE</div></div><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="mb">
+    <div class="row"><div class="lbl">What it does</div><div class="val" id="m_desc"></div></div>
+    <div class="row"><div class="lbl">Schedule / next run</div><div class="val" id="m_when"></div></div>
+    <div class="row"><div class="lbl">Currently</div><div class="val" id="m_now"></div></div>
+    <div class="row"><div class="lbl">Skills</div><div class="chips" id="m_skills"></div></div>
+    <div class="row"><div class="lbl">Full task (prompt)</div><div class="pre" id="m_prompt"></div></div>
+    <div class="row"><div class="lbl">Add a task / instruction to this agent</div>
+      <textarea id="m_task" placeholder="e.g. Also include yesterday's top 3 ads by ROAS in the report…"></textarea>
+      <div class="btns">
+        <button class="btn primary" onclick="copyTask()">⧉ Copy as chat instruction</button>
+        <a class="btn" id="m_open" href="/" target="_blank" rel="noopener">↗ Open Hermes chat</a>
+      </div>
+    </div>
+    <div class="row"><div class="lbl">Manage in Hermes</div>
+      <div class="btns">
+        <a class="btn" href="/" target="_blank" rel="noopener">⏰ Scheduled jobs</a>
+        <a class="btn" href="/" target="_blank" rel="noopener">🧩 Skills</a>
+      </div>
+    </div>
+  </div>
+</div></div>
+
 <div id="toast"><span class="ck">✓</span> Copied — paste into chat</div>
 
 <script>
@@ -154,127 +222,170 @@ function positionThumb(){const b=document.querySelector('.seg button.active'),t=
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
   document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();}
 window.addEventListener('resize',()=>{positionThumb();sizeCanvas();});
-let toastT;function copy(t){navigator.clipboard.writeText(t).then(()=>{const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1600);});}
-function ago(ts){if(!ts)return"";let s=Math.max(0,Math.floor(Date.now()/1000-ts));if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
+let toastT;function copy(t){navigator.clipboard.writeText(t).then(()=>{const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1700);});}
+function ago(ts){if(!ts)return"";let s=Math.floor(Date.now()/1000-ts);if(s<0)return"in "+rel(-s);return rel(s)+" ago";}
+function rel(s){if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
+function toEpoch(v){if(!v)return 0;if(typeof v==='number')return v>1e12?v/1000:v;const t=Date.parse(v);return isNaN(t)?0:t/1000;}
+function fmtTime(v){const e=toEpoch(v);if(!e)return"";return new Date(e*1000).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
 
-/* ---------- role inference (DYNAMIC — any agent name) ---------- */
-function roleOf(name){
-  const n=(name||"").toLowerCase();
-  if(/expert|analy|data|audit|diagnos|bleed|fatigue/.test(n)) return {label:"Analyst",color:"#37e7cf",emoji:"📊"};
-  if(/actor|creat|build|deploy|launch|ad\b|video|image|bulk/.test(n)) return {label:"Creator",color:"#9a86ff",emoji:"🎨"};
-  if(/report|whatsapp|notif|broadcast|message|digest|summary/.test(n)) return {label:"Reporter",color:"#b8ff5b",emoji:"📨"};
-  if(/intel|research|spy|rival|competitor|trend|market/.test(n)) return {label:"Research",color:"#ffcf63",emoji:"🔎"};
-  if(/scale|rebalance|budget|bid|optim/.test(n)) return {label:"Optimizer",color:"#ff6485",emoji:"⚖️"};
-  return {label:"Agent",color:"#62c9ff",emoji:"🤖"};
-}
+/* role inference (dynamic) */
+function roleOf(name){const n=(name||"").toLowerCase();
+  if(/expert|analy|data|audit|diagnos|bleed|fatigue/.test(n))return{label:"Analyst",color:"#37e7cf",emoji:"📊"};
+  if(/actor|creat|build|deploy|launch|video|image|bulk|\bad/.test(n))return{label:"Creator",color:"#9a86ff",emoji:"🎨"};
+  if(/report|whatsapp|notif|broadcast|message|digest|summary/.test(n))return{label:"Reporter",color:"#b8ff5b",emoji:"📨"};
+  if(/intel|research|spy|rival|competitor|trend|market/.test(n))return{label:"Research",color:"#ffcf63",emoji:"🔎"};
+  if(/scale|rebalance|budget|bid|optim/.test(n))return{label:"Optimizer",color:"#ff6485",emoji:"⚖️"};
+  return{label:"Agent",color:"#62c9ff",emoji:"🤖"};}
+function cleanDesc(p){if(!p)return"";let t=String(p).replace(/[*#`>_]/g,"").replace(/\s+/g," ").trim();
+  const m=t.match(/(?:your\s+)?(?:mission|job|task|role)[^.:]*[:.]?\s*(.{20,200})/i);
+  return (m?m[1]:t).slice(0,200);}
+function skillsOf(a){let s=a.skills;if(Array.isArray(s)&&s.length)return s;if(typeof a.skill==='string'&&a.skill)return [a.skill];
+  // infer from prompt mentions of known skill tokens
+  const found=[];(String(a.prompt||"").match(/\b(meta-[a-z-]+|new-client|new-project|whatsapp-whacenter|peninglab|zernio|playwright|[a-z]+-[a-z-]+report[a-z-]*)\b/gi)||[]).forEach(x=>{if(found.indexOf(x)<0&&found.length<6)found.push(x);});
+  return found;}
 
-/* ---------- floor data (DYNAMIC per profile) ---------- */
-let FLOOR=[];                 // current agents on the floor
-let SEL="";                   // selected profile ("" = active)
+/* floor data — DYNAMIC + per-profile (cookie scopes /api/crons) */
+let FLOOR=[],SEL="";
 async function loadFloor(){
   try{
-    const prof=SEL||window._active||"";
-    const ck=prof?{}:{};
-    const crons=await j("/api/crons"+(prof?("?_p="+encodeURIComponent(prof)):""));  // cookie profile drives scope; param is cosmetic
-    // sessions across profiles, filter to selected
+    const crons=await j("/api/crons");                 // returns ALL crons, each with .profile
+    const allJobs=crons.jobs||[];
+    if(!SEL){ // default to the profile that actually HAS agents, so the floor isn't empty
+      const cnt={};allJobs.forEach(jb=>{const p=(jb.profile||"default").toLowerCase();cnt[p]=(cnt[p]||0)+1;});
+      let best=(window._active||"default").toLowerCase(),bn=cnt[best]||0;
+      for(const p in cnt){if(cnt[p]>bn){bn=cnt[p];best=p;}}
+      SEL=best;const sel=$("#profsel");if(sel)for(const o of sel.options){if(o.value.toLowerCase()===best){sel.value=o.value;break;}}
+      $("#floortitle").textContent=SEL;
+    }
+    const prof=SEL;
     const sess=await j("/api/sessions?all_profiles=1");
-    const liveFor=(sess.sessions||[]).filter(s=>!s.ended_at && (!prof || (s.profile||"default").toLowerCase()===prof.toLowerCase()));
-    const jobs=crons.jobs||[];
+    const live=(sess.sessions||[]).filter(s=>!s.ended_at && (s.profile||"default").toLowerCase()===prof.toLowerCase());
+    const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase());  // CLIENT-SIDE per-profile filter
     const list=[];
-    jobs.forEach(jb=>{const r=roleOf(jb.name);list.push({kind:"cron",name:jb.name,label:r.label,color:r.color,emoji:r.emoji,
-      schedule:jb.schedule||jb.cron||"",enabled:jb.enabled!==false,status:jb.enabled===false?"off":"duty"});});
-    liveFor.forEach(s=>{const r=roleOf(s.title||"");list.push({kind:"live",name:s.title||"live session",label:"Working now",color:"#b8ff5b",emoji:r.emoji,
-      schedule:"active · "+ago(s.last_activity||s.started_at)+" ago",enabled:true,status:"work"});});
-    FLOOR=list;
-    renderAgents();sizeCanvas();
-  }catch(e){FLOOR=[];renderAgents();}
+    jobs.forEach(jb=>{const r=roleOf(jb.name);
+      list.push({kind:"cron",id:jb.id,name:jb.name,role:r.label,color:r.color,emoji:r.emoji,
+        desc:cleanDesc(jb.prompt)||(r.label+" agent"),
+        when:jb.schedule_display||jb.expr||(jb.repeat?("every "+jb.repeat):"scheduled"),
+        next:jb.next_run_at,last:jb.last_run_at,laststatus:jb.last_status,
+        skills:skillsOf(jb),prompt:jb.prompt||"",
+        status:(jb.enabled===false||jb.paused_at)?"off":"duty"});});
+    live.forEach(s=>{const r=roleOf(s.title||"");
+      list.push({kind:"live",id:s.session_id,name:s.title||"Live session",role:"Working now",color:"#b8ff5b",emoji:"💬",
+        desc:"Active chat session",when:"live",next:null,last:s.last_activity,laststatus:"running",
+        skills:[],prompt:"",status:"work"});});
+    FLOOR=list;renderAgents();renderFeed();sizeCanvas();
+  }catch(e){FLOOR=[];renderAgents();renderFeed();}
 }
-function renderAgents(){
-  const el=$("#agents");
-  if(!FLOOR.length){el.innerHTML='<div class="empty">No agents on this floor yet — schedule cron agents or start a chat. (This floor is dynamic: it shows however many agents the profile has.)</div>';return;}
-  el.innerHTML=FLOOR.map(a=>`<div class="ag" style="--c:${a.color}">
-    <div class="top"><div class="av">${a.emoji}</div><div><div class="nm">${esc(a.name)}</div><div class="rl">${esc(a.label)}</div></div>
+function renderAgents(){const el=$("#agents");
+  if(!FLOOR.length){el.innerHTML='<div class="empty">No agents for this profile. Schedule cron agents or start a chat — this floor is dynamic and per-profile.</div>';$("#floormeta").textContent="0 agents";return;}
+  el.innerHTML=FLOOR.map((a,i)=>`<div class="ag" style="--c:${a.color}" onclick="openModal(${i})">
+    <div class="top"><div class="av">${a.emoji}</div><div><div class="nm">${esc(a.name)}</div><div class="rl">${esc(a.role)}</div></div>
       <span class="st ${a.status}"><span class="led"></span>${a.status==="work"?"working":a.status==="off"?"disabled":"on duty"}</span></div>
-    <div class="meta"><span>${a.kind==="cron"?"⏰ "+esc(a.schedule||"scheduled"):"💬 "+esc(a.schedule)}</span><span>${a.kind==="cron"?"cron agent":"live chat"}</span></div>
+    <div class="desc">${esc(a.desc)}</div>
+    <div class="meta">
+      <span>⏰ <b>${esc(a.when)}</b>${a.next?(" · next "+esc(fmtTime(a.next))):""}</span>
+      <span>${a.kind==="live"?("💬 active · "+ago(toEpoch(a.last))):("▸ "+(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+esc(a.laststatus)):"")):"not run yet"))}</span>
+    </div>
+    ${a.skills.length?`<div class="chips">${a.skills.slice(0,6).map(s=>`<span class="chip">${esc(s)}</span>`).join("")}</div>`:""}
+    <div class="hint">click for full task + add instruction →</div>
   </div>`).join("");
-  $("#floormeta").textContent=FLOOR.length+" agent"+(FLOOR.length!==1?"s":"")+" on floor";
+  $("#floormeta").textContent=FLOOR.length+" agent"+(FLOOR.length!==1?"s":"")+" · "+esc(SEL||window._active||"");
+}
+function renderFeed(){const el=$("#feed");
+  const ev=[];
+  FLOOR.forEach(a=>{
+    if(a.kind==="live"){ev.push({t:toEpoch(a.last),c:a.color,e:a.emoji,nm:a.name,tx:"working now",cls:"now"});}
+    else{
+      if(a.last)ev.push({t:toEpoch(a.last),c:a.color,e:a.emoji,nm:a.role,tx:"ran · "+(a.laststatus||"done")});
+      if(a.next)ev.push({t:toEpoch(a.next),c:a.color,e:a.emoji,nm:a.role,tx:"next run"});
+    }
+  });
+  ev.sort((x,y)=>y.t-x.t);
+  el.innerHTML=ev.length?ev.slice(0,30).map(r=>`<div class="fr"><div class="av">${r.e}</div>
+    <div class="b"><div class="nm" style="color:${r.c}">${esc(r.nm)}</div><div class="ev">${esc(r.tx)}</div></div>
+    <div class="tm">${r.t?(r.t*1000>Date.now()?("in "+rel((r.t-Date.now()/1000)|0)):ago(r.t)):""}</div></div>`).join(""):'<div class="empty">no activity yet</div>';
 }
 
-/* ---------- canvas pixel office (DYNAMIC layout) ---------- */
-const cv=$("#floor_c"),cx=cv.getContext("2d");let DPR=Math.min(devicePixelRatio||1,2);
-let COLS=3,CELLW=0,CELLH=150,PADT=14;
-function sizeCanvas(){
-  const w=cv.parentElement.clientWidth-28;
-  COLS=w<420?2:w<760?3:4;
-  const n=Math.max(FLOOR.length,1),rows=Math.ceil(n/COLS);
-  CELLW=w/COLS;
-  const h=PADT*2+rows*CELLH;
-  cv.style.width=w+"px";cv.style.height=h+"px";
-  cv.width=w*DPR;cv.height=h*DPR;cx.setTransform(DPR,0,0,DPR,0,0);cx.imageSmoothingEnabled=false;
-}
+/* modal */
+let MI=-1;
+function openModal(i){MI=i;const a=FLOOR[i];if(!a)return;
+  $("#m_av").textContent=a.emoji;$("#m_name").textContent=a.name;$("#m_role").textContent=a.role;$("#m_role").style.color=a.color;
+  $("#m_desc").textContent=a.desc||"—";
+  $("#m_when").textContent=(a.when||"—")+(a.next?(" · next "+fmtTime(a.next)):"");
+  $("#m_now").textContent=a.kind==="live"?("working now · active "+ago(toEpoch(a.last))):(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+a.laststatus):"")):"idle — not run yet");
+  $("#m_skills").innerHTML=a.skills.length?a.skills.map(s=>`<span class="chip">${esc(s)}</span>`).join(""):'<span class="chip" style="color:var(--faint)">none listed</span>';
+  $("#m_prompt").textContent=a.prompt||"(no stored prompt)";
+  $("#m_task").value="";
+  $("#ov").classList.add("show");}
+function closeModal(){$("#ov").classList.remove("show");}
+$("#ov").addEventListener("click",e=>{if(e.target.id==="ov")closeModal();});
+function copyTask(){const a=FLOOR[MI];if(!a)return;const t=$("#m_task").value.trim();if(!t){return;}
+  copy("For the "+a.name+" agent ("+a.role+"): "+t+"\n(Update its scheduled task / behaviour accordingly.)");}
+
+/* canvas isometric office */
+const cv=$("#office_c"),cx=cv.getContext("2d");let DPR=Math.min(devicePixelRatio||1,2);
+let HIT=[]; // clickable character regions {x,y,w,h,i}
+function sizeCanvas(){const w=cv.parentElement.clientWidth-24;const n=Math.max(FLOOR.length,1);
+  const perRow=Math.min(Math.max(2,Math.ceil(Math.sqrt(n))),4);const rows=Math.ceil(n/perRow);
+  const h=Math.max(300,140+rows*120);
+  cv.style.width=w+"px";cv.style.height=h+"px";cv.width=w*DPR;cv.height=h*DPR;cx.setTransform(DPR,0,0,DPR,0,0);cx.imageSmoothingEnabled=false;cv._perRow=perRow;cv._rows=rows;}
 function P(x,y,w,h,c){cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
-function drawFloorTiles(w,h){
-  for(let y=0;y<h;y+=24)for(let x=0;x<w;x+=24){const a=((x/24+y/24)%2)===0;P(x,y,24,24,a?"#111a30":"#0e1528");}
+function diamond(cxp,cyp,w,h,c){cx.fillStyle=c;cx.beginPath();cx.moveTo(cxp,cyp-h/2);cx.lineTo(cxp+w/2,cyp);cx.lineTo(cxp,cyp+h/2);cx.lineTo(cxp-w/2,cyp);cx.closePath();cx.fill();}
+function drawRoom(w,h){
+  // floor
+  P(0,0,w,h,"#0c1220");
+  // back walls (simple) + window strip
+  P(0,0,w,46,"#121a2e");for(let x=10;x<w-10;x+=42){P(x,10,30,26,"#16314a");P(x,10,30,3,"#1d4a6e");}
+  P(0,46,w,3,"#0a1322");
+  // iso carpet tiles
+  const tw=58,th=30,oy=70;
+  for(let r=-1;r<8;r++)for(let c=-1;c<Math.ceil(w/tw)+1;c++){const x=c*tw+((r&1)?tw/2:0),y=oy+r*th*0.6;diamond(x,y,tw,th,((r+c)&1)?"#0f1729":"#101a30");}
 }
-function drawAgent(cxp,cyp,a,t){
-  const cw=CELLW,ch=CELLH,bx=cxp+cw/2;
-  // rug
-  cx.globalAlpha=.18;P(cxp+cw*0.18,cyp+ch*0.46,cw*0.64,ch*0.42,a.color);cx.globalAlpha=1;
-  // desk
-  const dw=cw*0.5,dx=bx-dw/2,dy=cyp+ch*0.58;
-  P(dx,dy,dw,10,"#2a3350");P(dx,dy+10,dw,6,"#1b2238");
+function drawChar(x,y,a,t,idx){
+  const working=a.status==="work";const bob=working?0:Math.sin(t/430+idx)*1.6;const hy=y-40+bob;
+  // shadow
+  cx.fillStyle="rgba(0,0,0,.35)";cx.beginPath();cx.ellipse(x,y+6,16,6,0,0,7);cx.fill();
+  // desk (iso-ish)
+  diamond(x,y,46,22,"#2a3350");diamond(x,y-3,46,22,"#323c5e");
   // monitor
-  const working=a.status==="work";
-  const screenOn=working?(Math.sin(t/120)>-0.4):true;
-  P(bx-16,dy-22,32,20,"#101a2e");
-  P(bx-14,dy-20,28,16, working?(screenOn?"#0f3b46":"#0a2a30"):"#142036");
-  if(working){ // scrolling code lines
-    for(let i=0;i<3;i++){const ly=dy-18+i*5+((t/200+i*7)%5|0)*0;P(bx-12,dy-18+i*5,(8+((t/180+i*3)%10)),2,"#37e7cf");}
-  }
-  P(bx-3,dy-2,6,4,"#2a3350");
-  // character (bob when idle, lean when working)
-  const bob=working?0:Math.sin(t/420+cxp)*1.5;
-  const hy=dy-44+bob;
-  // chair back
-  P(bx-12,hy+18,24,16,"#222a44");
+  const on=working?(Math.sin(t/120)>-.3):true;
+  P(x-14,y-26,28,16,"#101a2e");P(x-12,y-24,24,12,working?(on?"#0f3b46":"#0a2730"):"#152138");
+  if(working)for(let k=0;k<3;k++)P(x-10,y-23+k*4,(6+((t/170+k*4)%9)),2,"#37e7cf");
   // body
-  P(bx-10,hy+14,20,18,a.color);
-  // arms typing
-  const ty=working?(Math.sin(t/90)>0?0:2):0;
-  P(bx-13,hy+22+ty,5,8,a.color);P(bx+8,hy+22+(2-ty),5,8,a.color);
-  // head
-  P(bx-8,hy,16,16,"#e7c9a0");
-  // hair
-  P(bx-9,hy-3,18,6,"#2b2233");P(bx-9,hy,3,8,"#2b2233");P(bx+6,hy,3,8,"#2b2233");
-  // eyes
-  P(bx-4,hy+6,2,2,"#1a1426");P(bx+2,hy+6,2,2,"#1a1426");
+  P(x-9,hy+14,18,17,a.color);
+  const ty=working?(Math.sin(t/95)>0?0:2):0;P(x-12,hy+22+ty,4,8,a.color);P(x+8,hy+22+(2-ty),4,8,a.color);
+  // head + hair + eyes
+  P(x-8,hy,16,15,"#e7c9a0");P(x-9,hy-3,18,6,"#2b2233");P(x-9,hy,3,8,"#2b2233");P(x+6,hy,3,8,"#2b2233");
+  P(x-4,hy+6,2,2,"#1a1426");P(x+2,hy+6,2,2,"#1a1426");
   // status bubble
-  if(working){P(bx+10,hy-10,22,14,"#0c1530");cx.fillStyle="#b8ff5b";cx.font="9px "+getComputedStyle(document.body).fontFamily;cx.fillText("•••",bx+13,hy);}
-  // nameplate
-  cx.fillStyle="#e9edfb";cx.font="600 12px "+getComputedStyle(document.body).fontFamily;cx.textAlign="center";
-  cx.fillText(a.label, bx, cyp+ch-26);
-  cx.fillStyle=a.color;cx.font="10px "+getComputedStyle(document.body).fontFamily;
-  cx.fillText(a.status==="work"?"working":a.status==="off"?"disabled":"on duty", bx, cyp+ch-12);
+  if(working){cx.fillStyle="#0c1530";cx.fillRect(x+9,hy-12,20,13);cx.fillStyle="#b8ff5b";cx.font="9px "+(getComputedStyle(document.body).fontFamily);cx.fillText("•••",x+12,hy-2);}
+  if(a.status==="off"){cx.fillStyle="#ff6485";cx.font="bold 12px sans-serif";cx.fillText("!",x+12,hy-1);}
+  // label
+  cx.textAlign="center";cx.fillStyle="#e9edfb";cx.font="600 11px "+(getComputedStyle(document.body).fontFamily);cx.fillText(a.role,x,y+24);
+  cx.fillStyle=a.color;cx.font="9px "+(getComputedStyle(document.body).fontFamily);cx.fillText(a.status==="work"?"working":a.status==="off"?"disabled":"on duty",x,y+36);
   cx.textAlign="left";
+  HIT.push({x:x-24,y:hy-14,w:48,h:64,i:idx});
 }
 function frame(t){
-  if(cv.width){
-    const w=cv.width/DPR,h=cv.height/DPR;cx.clearRect(0,0,w,h);drawFloorTiles(w,h);
-    if(!FLOOR.length){cx.fillStyle="#5c6488";cx.font="13px "+getComputedStyle(document.body).fontFamily;cx.textAlign="center";cx.fillText("— empty floor —",w/2,h/2);cx.textAlign="left";}
-    FLOOR.forEach((a,i)=>{const col=i%COLS,row=(i/COLS)|0;drawAgent(col*CELLW,PADT+row*CELLH,a,t);});
+  if(cv.width){const w=cv.width/DPR,h=cv.height/DPR;cx.clearRect(0,0,w,h);drawRoom(w,h);HIT=[];
+    if(!FLOOR.length){cx.fillStyle="#5c6488";cx.textAlign="center";cx.font="13px "+(getComputedStyle(document.body).fontFamily);cx.fillText("— empty office —",w/2,h/2);cx.textAlign="left";}
+    const pr=cv._perRow||3,cw=w/pr;
+    FLOOR.forEach((a,i)=>{const col=i%pr,row=(i/pr)|0;const x=cw*(col+0.5),y=120+row*120;drawChar(x,y,a,t,i);});
   }
   requestAnimationFrame(frame);
 }
+cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(const z of HIT){if(mx>=z.x&&mx<=z.x+z.w&&my>=z.y&&my<=z.y+z.h){openModal(z.i);break;}}});
 requestAnimationFrame(frame);
 
-/* ---------- PLAYBOOK ---------- */
+/* PLAYBOOK */
 const PLAYBOOK={marketer:[
  ["Onboard a client","Use the new-client skill to onboard \"BrandX\": ask for ad account, page, WhatsApp number, budget, target ROAS, then set it up."],
  ["Weekly report → WhatsApp","Pull this week's ad performance for BrandX, summarize, and WhatsApp me via the whatsapp-whacenter skill."],
  ["Spy competitors","Use meta-spy: find live Meta/TikTok ads of <competitor>, list hooks/offers, suggest 3 angles to test."],
- ["Generate creatives","Use peninglab to generate 3 image + ad creatives for <product> (fire in parallel). Show the URLs."],
- ["Kill losing ads","Run meta-bleed-check for BrandX: find ad sets with no conversions / CPA above target; list to PAUSE, ask before pausing."],
- ["Launch a campaign","Use meta-deploy-ads to build a PAUSED OUTCOME_SALES campaign for BrandX: resolve the live MYR account, page bisnesowner2021, pixel, show the plan first."],
+ ["Generate creatives","Use peninglab to generate 3 image creatives for <product> (fire in parallel). Show the URLs."],
+ ["Kill losing ads","Run meta-bleed-check for BrandX: find ad sets with no conversions / CPA above target; list to PAUSE, ask first."],
+ ["Launch a campaign","Use meta-deploy-ads: PAUSED OUTCOME_SALES campaign — resolve the live MYR account, page bisnesowner2021, pixel; show the plan first."],
 ],developer:[
  ["Start a project","Use new-project for \"myapp\": new GitHub repo + Supabase + Vercel. Ask what you need, then scaffold."],
  ["Build a feature","In myapp: build <feature>. Use writing-plans then test-driven-development. Confirm before deploying."],
@@ -288,9 +399,9 @@ function renderPlaybook(){const col=(r,cls,b)=>`<div class="col ${cls}"><h2>${b}
   $("#playbook").innerHTML=col('marketer','mkt','📈')+col('developer','dev','💻');}
 renderPlaybook();
 
-/* ---------- SKILLS ---------- */
+/* SKILLS */
 async function loadSkills(){try{const d=await j("/api/skills");const sk=d.skills||[];window._skills=sk;
-  $("#skillprofile").textContent=(window._active?window._active+" · ":"")+sk.length+" skills";renderSkills(sk,$("#skillsearch").value||"");}
+  $("#skillprofile").textContent=(SEL||window._active||"")+" · "+sk.length+" skills";renderSkills(sk,$("#skillsearch").value||"");}
   catch(e){$("#skillgrid").innerHTML="<div class='empty'>Can't load skills — open <a href='/'>Hermes</a> and log in.</div>";}}
 function renderSkills(sk,q){q=(q||"").toLowerCase().trim();const all={};sk.forEach(s=>{const c=s.category||"general";all[c]=(all[c]||0)+1;});
   const cats=Object.keys(all).sort((a,b)=>all[b]-all[a]);
@@ -299,25 +410,19 @@ function renderSkills(sk,q){q=(q||"").toLowerCase().trim();const all={};sk.forEa
   const gc=Object.keys(g).sort((a,b)=>g[b].length-g[a].length);
   $("#skillgrid").innerHTML=gc.length?gc.map(c=>`<div class="skgroup"><h3>${esc(c)} (${g[c].length})</h3><div class="skcards">${g[c].map(s=>`<div class="skcard"><div class="nm"><span class="d"></span>${esc(s.name)}</div><div class="ds">${esc(s.description||"")}</div></div>`).join("")}</div></div>`).join(""):"<div class='empty'>no matches</div>";}
 
-/* ---------- profiles + heartbeat ---------- */
+/* profiles + heartbeat */
 async function loadProfiles(){try{const p=await j("/api/profiles");const ps=(p.profiles||[]).map(x=>x.name);
-  const sel=$("#profsel");sel.innerHTML=ps.map(n=>`<option value="${esc(n)}">${esc(n)} floor</option>`).join("");
+  const sel=$("#profsel");sel.innerHTML=ps.map(n=>`<option value="${esc(n)}">👤 ${esc(n)}</option>`).join("");
   if(window._active&&ps.includes(window._active))sel.value=window._active;
-  sel.onchange=()=>{SEL=sel.value;$("#floortitle").textContent=SEL+" · live office";loadFloor();};}catch(e){}}
-async function tick(){
-  try{
-    const [health,sess]=await Promise.all([j("/api/health/agent"),j("/api/sessions")]);
-    $("#err").style.display="none";
-    const gw=health?.details?.gateway_state==="running";
-    $("#dot").className="dot"+(gw?" on":"");$("#statustxt").textContent=gw?"Gateway Live":"Gateway Down";
-    window._active=sess.active_profile;
-    if(!SEL){$("#floortitle").textContent=(window._active||"")+" · live office";}
-    if(!$("#profsel").options.length)await loadProfiles();
-    await loadFloor();
-    $("#ts").textContent=new Date().toLocaleTimeString();
-  }catch(e){$("#dot").className="dot";$("#statustxt").textContent="Disconnected";
-    $("#err").style.display="block";$("#err").innerHTML="⚠ Can't read live data ("+esc(e.message)+"). Open <a href='/'>Hermes</a>, log in, reload.";}
-}
+  sel.onchange=()=>{SEL=sel.value;$("#floortitle").textContent=SEL;loadFloor();};}catch(e){}}
+async function tick(){try{
+  const sess=await j("/api/sessions");const health=await j("/api/health/agent");
+  $("#err").style.display="none";const gw=health?.details?.gateway_state==="running";
+  $("#dot").className="dot"+(gw?" on":"");$("#statustxt").textContent=gw?"Gateway Live":"Gateway Down";
+  window._active=sess.active_profile;if(!SEL)$("#floortitle").textContent=window._active||"";
+  if(!$("#profsel").options.length)await loadProfiles();
+  await loadFloor();$("#ts").textContent=new Date().toLocaleTimeString();
+}catch(e){$("#dot").className="dot";$("#statustxt").textContent="Disconnected";$("#err").style.display="block";$("#err").innerHTML="⚠ Can't read live data ("+esc(e.message)+"). Open <a href='/'>Hermes</a>, log in, reload.";}}
 tick();setInterval(tick,5000);positionThumb();setTimeout(positionThumb,120);
 </script>
 </body>
