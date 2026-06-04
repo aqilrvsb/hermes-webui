@@ -31,6 +31,57 @@ let _pendingCarryForwardSnapshot = null;
 // Debounced save — prevents hammering the server on every keystroke.
 let _draftSaveTimer = null;
 const _DRAFT_SAVE_DELAY_MS = 400;
+const NEW_CHAT_DRAFT_SESSION_KEY = 'hermes-new-chat-draft-session';
+
+function _isRestorableNewChatDraftSession(session, requireDraft=false) {
+  if (!session || !session.session_id) return false;
+  const messageCount = Number(session.message_count || 0);
+  if (messageCount !== 0) return false;
+  if (session.active_stream_id || session.pending_user_message || session.worktree_path) return false;
+  const title = session.title || 'Untitled';
+  if (title !== 'Untitled' && title !== 'New Chat') return false;
+  const activeProfile = S.activeProfile || 'default';
+  const sessionProfile = session.profile || 'default';
+  if (sessionProfile !== activeProfile) return false;
+  if (!requireDraft) return true;
+  const draft = session.composer_draft || {};
+  const text = (typeof draft.text === 'string') ? draft.text : '';
+  const files = Array.isArray(draft.files) ? draft.files : [];
+  return !!(text || files.length);
+}
+
+function _rememberNewChatDraftSession(session) {
+  if (!_isRestorableNewChatDraftSession(session)) return;
+  try { localStorage.setItem(NEW_CHAT_DRAFT_SESSION_KEY, session.session_id); } catch (_) {}
+}
+
+function _clearRememberedNewChatDraftSession(sid) {
+  if (!sid) return;
+  try {
+    if (localStorage.getItem(NEW_CHAT_DRAFT_SESSION_KEY) === sid) {
+      localStorage.removeItem(NEW_CHAT_DRAFT_SESSION_KEY);
+    }
+  } catch (_) {}
+}
+
+async function _restoreRememberedNewChatDraftSession() {
+  let sid = '';
+  try { sid = localStorage.getItem(NEW_CHAT_DRAFT_SESSION_KEY) || ''; } catch (_) { sid = ''; }
+  if (!sid || (S.session && S.session.session_id === sid)) return false;
+  try {
+    const data = await api(`/api/session?session_id=${encodeURIComponent(sid)}&messages=0&resolve_model=0`);
+    const session = data && data.session;
+    if (!_isRestorableNewChatDraftSession(session, true)) {
+      _clearRememberedNewChatDraftSession(sid);
+      return false;
+    }
+    await loadSession(sid, {skipLineageResolve:true});
+    return !!(S.session && S.session.session_id === sid);
+  } catch (_) {
+    _clearRememberedNewChatDraftSession(sid);
+    return false;
+  }
+}
 
 function _saveComposerDraft(sid, text, files) {
   if (!sid) return;
@@ -43,11 +94,11 @@ function _saveComposerDraft(sid, text, files) {
   }, _DRAFT_SAVE_DELAY_MS);
 }
 
-// Fire-and-forget immediate save (used before session switches).
+// Immediate save used before session switches.
 function _saveComposerDraftNow(sid, text, files) {
   if (!sid) return;
   clearTimeout(_draftSaveTimer);
-  api('/api/session/draft', {
+  return api('/api/session/draft', {
     method: 'POST',
     body: JSON.stringify({ session_id: sid, text: text || '', files: files || [] }),
   }).catch(() => {});
@@ -97,6 +148,7 @@ function _restoreComposerDraft(draft, targetSid, opts={}) {
 function _clearComposerDraft(sid) {
   if (!sid) return;
   clearTimeout(_draftSaveTimer);
+  _clearRememberedNewChatDraftSession(sid);
   api('/api/session/draft', {
     method: 'POST',
     body: JSON.stringify({ session_id: sid, text: '' }),
@@ -560,6 +612,7 @@ async function newSession(flash, options={}){
     S.session=data.session;S.messages=data.session.messages||[];
     if(_sessionSourceFilter==='cli') _sessionSourceFilter='webui';
     S.lastUsage={...(data.session.last_usage||{})};
+    if(!(options&&options.worktree)) _rememberNewChatDraftSession(S.session);
     if(flash)S.session._flash=true;
     try{localStorage.setItem('hermes-webui-session',S.session.session_id);}catch(_){}
     _setActiveSessionUrl(S.session.session_id);
@@ -656,7 +709,15 @@ async function loadSession(sid){
   // restored when the user switches back (#1060). Save to server now so the
   // draft survives page refresh and syncs across clients.
   if (currentSid && currentSid !== sid) {
-    _saveComposerDraftNow(currentSid, ($('msg') || {}).value || '', S.pendingFiles ? [...S.pendingFiles] : []);
+    await _saveComposerDraftNow(currentSid, ($('msg') || {}).value || '', S.pendingFiles ? [...S.pendingFiles] : []);
+    // The awaited draft save above yields the event loop. If another
+    // loadSession() started for a different session while we were waiting
+    // (rapid switch B→C), _loadingSessionId now points at that newer load —
+    // bail out before the destructive state-clearing block below so this stale
+    // continuation can't wipe S.messages / write the loading placeholder /
+    // close streams for the session the user actually landed on (#1060 guard,
+    // extended to cover the new pre-switch await).
+    if (_loadingSessionId !== sid) return;
   }
   if (currentSid !== sid || forceReload) {
     // #3306: When force-reloading the currently-active session (e.g. external
@@ -703,14 +764,24 @@ async function loadSession(sid){
     if(_msgInner){
       if(e.status===404){
         _msgInner.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Session not available in web UI.</div>';
-        // Option A (#2798): for boot-time stale URL/localStorage session IDs,
-        // always clear persisted session, strip /session/{id} from URL, and
-        // rethrow so boot can deterministically fall through to empty-state.
-        if(!currentSid){
+        // Self-heal (clear saved id + strip /session/<id> URL) only when the
+        // 404'd id is the one we are activating: a boot-time restore
+        // (!currentSid, #2798) or a mid-session reload of the *current* session
+        // whose sidecar was deleted server-side (#2782). A click into a
+        // *different* dead session (currentSid && currentSid!==sid) must not run
+        // it: localStorage and the URL still point at the live session (both are
+        // only updated on a successful load), so wiping them would log the user
+        // out of a healthy session. The URL strip is needed in the self-heal
+        // case because _sessionIdFromLocation() re-injects the id on reload.
+        // Only the rethrow stays gated on !currentSid: boot rethrows to fall
+        // through to empty-state; mid-session there is no boot path to reach.
+        if(!currentSid || currentSid===sid){
           try{ localStorage.removeItem('hermes-webui-session'); }catch(_){ }
           try{ history.replaceState(null,'',_appRootPath()); }catch(_){ }
           if (_loadingSessionId === sid) _loadingSessionId = null;
-          throw e;
+          if(!currentSid){
+            throw e;
+          }
         }
       } else {
         _msgInner.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Failed to load session. Try switching sessions or refreshing.</div>';
@@ -1441,8 +1512,12 @@ function _syncToolCallsForLoadedMessages(messages, sessionToolCalls){
   const hasMessageToolMetadata=msgs.some(m=>{
     if(!m) return false;
     const hasTc=Array.isArray(m.tool_calls)&&m.tool_calls.length>0;
+    // `_partial_tool_calls` are emitted by interrupted/partial turns and must also
+    // anchor rendering to the owning assistant message, so we can reconstruct
+    // settled tool cards from the message history when available.
+    const hasPartialTc=Array.isArray(m._partial_tool_calls)&&m._partial_tool_calls.length>0;
     const hasTu=Array.isArray(m.content)&&m.content.some(p=>p&&p.type==='tool_use');
-    return hasTc||hasTu;
+    return hasTc||hasPartialTc||hasTu;
   });
   if(!hasMessageToolMetadata&&Array.isArray(sessionToolCalls)&&sessionToolCalls.length){
     S.toolCalls=sessionToolCalls.map(tc=>({...tc,done:true}));
@@ -4327,7 +4402,7 @@ function renderSessionListFromCache(){
     if(animateRefresh&&(enterAllAnimatedRows||!(flipBefore&&flipBefore.has(s.session_id)))){
       el.classList.add('session-list-flip-enter');
     }
-    if(s.is_cli_session){
+    if(s.is_cli_session||_isMessagingSession(s)){
       el.classList.add('cli-session');
       el.dataset.source=_getChannelLabel(s)||'CLI';
       el.dataset.sourceKey=_sourceKeyForSession(s)||'cli';
@@ -4464,6 +4539,14 @@ function renderSessionListFromCache(){
       };
       titleRow.appendChild(childCountEl);
     }
+    if(s.is_cli_session||_isMessagingSession(s)){
+      const chipLabel=_getChannelLabel(s)||'CLI';
+      const chip=document.createElement('span');
+      chip.className='session-source-chip';
+      chip.textContent=chipLabel;
+      chip.dataset.sourceKey=_sourceKeyForSession(s)||'cli';
+      titleRow.appendChild(chip);
+    }
     titleRow.appendChild(ts);
     sessionText.appendChild(titleRow);
     if(density==='detailed'){
@@ -4477,7 +4560,7 @@ function renderSessionListFromCache(){
       const modelMeta=_formatSessionModelWithGateway(s);
       if(modelMeta) metaBits.push(modelMeta);
       const sourceLabel=_getChannelLabel(s);
-      if(s.is_cli_session&&sourceLabel) metaBits.push(sourceLabel);
+      if(sourceLabel&&(s.is_cli_session||_isMessagingSession(s))) metaBits.push(sourceLabel);
       if(readOnly) metaBits.push('read-only');
       if(_showAllProfiles&&s.profile) metaBits.push(s.profile);
       const meta=document.createElement('div');
