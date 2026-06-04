@@ -344,11 +344,16 @@ async function loadFloor(){
     }
     const prof=SEL;
     const sess=await j("/api/sessions?all_profiles=1");
-    // "working now" = gateway has an active agent AND this session was active in the last ~3 min.
-    // (An open-but-finished chat like "Meta Ads Setup" is NOT working — don't show it as a worker.)
     const nowS=Date.now()/1000;
-    const live=(sess.sessions||[]).filter(s=>!s.ended_at && (s.profile||"default").toLowerCase()===prof.toLowerCase()
-      && (window._activeAgents>0) && (nowS - toEpoch(s.last_activity) < 180));
+    // The Hermes Agent mirrors your LATEST open chat for this profile. A chat's turn finishes
+    // between messages (active_agents drops to 0), so we key off recency of last_activity, NOT
+    // active_agents — otherwise an obviously-live conversation reads as "standby".
+    const sessAll=(sess.sessions||[]).filter(s=>!s.ended_at && (s.profile||"default").toLowerCase()===prof.toLowerCase())
+      .sort((a,b)=>toEpoch(b.last_activity)-toEpoch(a.last_activity));
+    const chat=sessAll[0];
+    const chatAge=chat?(nowS-toEpoch(chat.last_activity)):1e12;
+    const chatBusy=!!chat && (window._activeAgents>0 || chatAge<180);   // typing right now
+    const chatRecent=!!chat && chatAge<1800;                            // in the chat (last 30 min)
     const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase());  // CLIENT-SIDE per-profile filter
     const list=[];
     jobs.forEach(jb=>{const r=roleOf(jb.name);
@@ -359,14 +364,18 @@ async function loadFloor(){
         when:jb.schedule_display||jb.expr||(jb.repeat?("every "+jb.repeat):"scheduled"),
         next:jb.next_run_at,last:jb.last_run_at,laststatus:jb.last_status,
         skills:skillsOf(jb),prompt:jb.prompt||"",
+        busy:!!recent,
         status:off?"off":(recent?"work":"duty"),
         mode:off?"sleep":(recent?"work":"sleep")});});   // scheduled-but-waiting agents NAP until their shift
-    // ONE persistent "Hermes Agent" = the live-chat worker (5th character, always standing by)
-    const chat=live[0];
+    // ONE persistent "Hermes Agent" = your live-chat worker (5th character). Reflects the LATEST chat.
     list.push({kind:"hermes",id:"__hermes__",name:"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
-      desc:chat?("Active chat — "+(chat.title||"session")):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
-      when:"chat",next:null,last:chat?chat.last_activity:null,laststatus:chat?"working":"standby",
-      skills:[],prompt:"",status:chat?"work":"duty",mode:chat?"work":"standby"});
+      desc:chat?("Chat: "+(chat.title||"session")):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
+      when:"chat",next:null,last:chat?chat.last_activity:null,
+      laststatus:chatBusy?"working":(chatRecent?"in chat":"standby"),
+      chatTitle:chat?(chat.title||"chat task"):null,chatBusy:chatBusy,chatRecent:chatRecent,
+      skills:[],prompt:"",busy:chatBusy,
+      status:(chatBusy||chatRecent)?"work":"duty",
+      mode:(chatBusy||chatRecent)?"work":"standby"});
     FLOOR=list;renderAgents();renderFeed();renderStage();
   }catch(e){FLOOR=[];renderAgents();renderFeed();renderStage();}
 }
@@ -378,7 +387,7 @@ function renderAgents(){const el=$("#agents");
     <div class="desc">${esc(a.desc)}</div>
     <div class="meta">
       <span>⏰ <b>${esc(a.when)}</b>${a.next?(" · next "+esc(fmtTime(a.next))):""}</span>
-      <span>${a.kind==="hermes"?(a.mode==="work"?("💬 active · "+ago(toEpoch(a.last))):"💬 standby · waiting for chat"):a.mode==="work"?"🖥️ working now · at the computer":("💤 napping · "+(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+esc(a.laststatus)):"")):"not run yet"))}</span>
+      <span>${a.kind==="hermes"?(a.chatBusy?("💬 working now · "+esc(a.chatTitle||"chat")):a.chatRecent?("💬 in chat · "+esc(a.chatTitle||"")+" · "+ago(toEpoch(a.last))):"💬 standby · waiting for chat"):a.mode==="work"?"🖥️ working now · at the computer":("💤 napping · "+(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+esc(a.laststatus)):"")):"not run yet"))}</span>
     </div>
     ${a.skills.length?`<div class="chips">${a.skills.slice(0,6).map(s=>`<span class="chip">${esc(s)}</span>`).join("")}</div>`:""}
     <div class="hint">click for full task + add instruction →</div>
@@ -387,7 +396,10 @@ function renderAgents(){const el=$("#agents");
 }
 function hhmm(ts){if(!ts)return"";return new Date(ts*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
 function statusLine(a){
-  if(a.kind==="hermes")return a.mode==="work"?("working now — "+(a.desc||"on a chat task")):"standby · waiting for your next chat";
+  if(a.kind==="hermes"){
+    if(a.chatBusy)return "working now — "+(a.chatTitle||"chat task");
+    if(a.chatRecent)return "in chat — "+(a.chatTitle||"session")+" · "+(a.last?ago(toEpoch(a.last)):"");
+    return "standby · waiting for your next chat";}
   if(a.status==="off")return "disabled";
   if(a.mode==="work")return "working now — at the computer";
   return "💤 napping · next run "+(a.next?fmtTime(a.next):(a.when||"scheduled"));
@@ -411,7 +423,7 @@ function openModal(i){MI=i;const a=FLOOR[i];if(!a)return;
   $("#m_av").textContent=a.emoji;$("#m_name").textContent=a.name;$("#m_role").textContent=a.role;$("#m_role").style.color=a.color;
   $("#m_desc").textContent=a.desc||"—";
   $("#m_when").textContent=(a.when||"—")+(a.next?(" · next "+fmtTime(a.next)):"");
-  $("#m_now").textContent=a.kind==="hermes"?(a.mode==="work"?("working now · active "+ago(toEpoch(a.last))):"standby — waiting for your next chat"):a.mode==="work"?"working now · at the computer":(a.last?("napping · last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+a.laststatus):"")):"napping · not run yet");
+  $("#m_now").textContent=a.kind==="hermes"?(a.chatBusy?("working now · "+(a.chatTitle||"chat")+" · active "+ago(toEpoch(a.last))):a.chatRecent?("in chat · "+(a.chatTitle||"")+" · "+ago(toEpoch(a.last))):"standby — waiting for your next chat"):a.mode==="work"?"working now · at the computer":(a.last?("napping · last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+a.laststatus):"")):"napping · not run yet");
   $("#m_skills").innerHTML=a.skills.length?a.skills.map(s=>`<span class="chip">${esc(s)}</span>`).join(""):'<span class="chip" style="color:var(--faint)">none listed</span>';
   const editable=a.kind==="cron";
   const pb=$("#m_prompt");pb.value=a.prompt||"";pb.readOnly=!editable;
@@ -496,14 +508,14 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   wrap.querySelectorAll(".char").forEach(el=>{const id=el.dataset.id,a=FLOOR[+el.dataset.i];
     el.style.setProperty("--c",a.color);
     let r=AG[id];if(!r){r={x:DOOR.x,y:DOOR.y,face:a._home.face,bob:0,phase:Math.random()*6,wTarget:null,nextWander:performance.now()+3000+Math.random()*6000};AG[id]=r;}
-    r.el=el;r.sprite=el.querySelector(".sprite");r.home=a._home;r.mode=a.mode;r.color=a.color;r.spriteName=a._sprite;r.curFace="";});
+    r.el=el;r.sprite=el.querySelector(".sprite");r.home=a._home;r.mode=a.mode;r.color=a.color;r.spriteName=a._sprite;r.busy=!!a.busy;r.curFace="";});
   // prune stale runtimes
   Object.keys(AG).forEach(id=>{if(!FLOOR.some(a=>a.id===id))delete AG[id];});
 }
 function renderStage(){const wrap=$("#chars");if(!wrap)return;
   const sz=Math.max(40,Math.round(($("#stagewrap").clientHeight||340)*0.155));
   wrap.style.setProperty("--csz",sz+"px");
-  const key=FLOOR.map(a=>a.id+":"+a.mode+":"+a.name+":"+a.color).join("|")||"empty";
+  const key=FLOOR.map(a=>a.id+":"+a.mode+":"+a.name+":"+a.color+":"+(a.busy?1:0)).join("|")||"empty";
   if(key!==_stageKey){_stageKey=key;buildStage();}
 }
 function setFace(r,face){if(r.curFace===face||!r.sprite)return;r.curFace=face;r.sprite.src=spriteSrc(r.spriteName||"employee-2",face);}
@@ -530,8 +542,7 @@ function engine(t){const dt=Math.min(0.05,((t-_lastT)||16)/1000);_lastT=t;
     const el=r.el,atDesk=!r.walking&&home.desk&&r.mode==="work";
     el.classList.toggle("sleeping",sleeping&&!r.walking);
     el.classList.toggle("work",r.mode==="work");
-    const working=r.mode==="work"&&!r.walking;
-    const bub=el.querySelector(".bubble");if(bub)bub.style.display=working?"flex":"none";
+    const bub=el.querySelector(".bubble");if(bub)bub.style.display=(r.busy&&!r.walking)?"flex":"none";
     const anchor=(sleeping&&!r.walking)?-52:-87;
     el.style.left=r.x+"%";el.style.top=r.y+"%";
     el.style.transform="translate(-50%,"+anchor+"%) translateY("+r.bob+"px)";
