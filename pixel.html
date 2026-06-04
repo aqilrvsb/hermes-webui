@@ -86,6 +86,20 @@
     border:2px solid var(--c,var(--teal));opacity:.55;z-index:0}
   .char.work .ring{border-color:var(--lime);animation:beat 2s ease-out infinite}
   .char.off .ring{border-color:var(--rose)}
+  /* furniture (monitor desks) + beds */
+  #stagewrap .furn{position:absolute;transform:translate(-50%,-100%);pointer-events:none;
+    image-rendering:auto;filter:drop-shadow(0 5px 7px rgba(0,0,0,.5))}
+  .bed{position:absolute;transform:translate(-50%,-46%);width:var(--bw,86px);height:calc(var(--bw,86px)*.46);pointer-events:none}
+  .bed .frame{position:absolute;inset:0;border-radius:8px;background:linear-gradient(#5a3a26,#3a2416);box-shadow:0 7px 11px -5px rgba(0,0,0,.65)}
+  .bed .sheet{position:absolute;left:7%;right:6%;top:13%;bottom:9%;border-radius:6px;background:linear-gradient(#e2e9f6,#bcc7df)}
+  .bed .blanket{position:absolute;left:7%;right:6%;bottom:9%;height:52%;border-radius:6px;background:linear-gradient(#5d79cc,#3c54a0)}
+  .bed .pillow{position:absolute;left:11%;top:20%;width:27%;height:36%;border-radius:6px;background:#f5f8ff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .char.sleeping .sprite{transform:rotate(-66deg) scale(.78);transform-origin:50% 72%}
+  .char.sleeping .tag,.char.sleeping .ring,.char.sleeping .bubble{display:none}
+  .char .zzz{position:absolute;top:-22px;left:60%;width:24px;height:auto;display:none;image-rendering:auto}
+  .char.sleeping .zzz{display:block;animation:zfloat 3s ease-in-out infinite}
+  @keyframes zfloat{0%,100%{transform:translateY(0);opacity:.85}50%{transform:translateY(-5px);opacity:1}}
+  .char .pencil{position:absolute;top:-2px;right:-14px;font-size:10px;opacity:0;transition:.15s;color:var(--dim)}
   .stageempty{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);color:var(--faint);font-size:13px}
   .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
   .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
@@ -99,6 +113,12 @@
   .fr .nm{font-weight:700;font-size:13px}.fr .nm b{font-weight:700}
   .fr .ev{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
   .fr .tm{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap}
+  .fr .nm .fname{cursor:text;border-bottom:1px dashed transparent;padding:0 1px;border-radius:3px}
+  .fr .nm .fname:hover{border-bottom-color:var(--line);color:#fff}
+  .fr .frole{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-left:7px;font-weight:400}
+  .fr .ftm{margin-left:8px;font-family:var(--mono);font-size:9px;color:var(--faint);font-weight:400}
+  .editing{outline:1.5px solid var(--teal);background:rgba(55,231,207,.12);border-radius:4px;cursor:text;color:#fff!important;padding:1px 4px}
+  .char .tag .nm[onclick]{cursor:text}.char .tag .nm[onclick]:hover{text-decoration:underline dotted}
   /* agent cards */
   .agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px}
   .ag{border:1px solid var(--line2);border-radius:14px;background:var(--glass);padding:14px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
@@ -135,6 +155,9 @@
   .mb .val{font-size:13.5px;color:var(--ink)}
   .mb .pre{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid var(--line2);border-radius:10px;padding:11px;max-height:200px;overflow:auto}
   .mb textarea{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px;min-height:74px;resize:vertical;outline:none}
+  .mb textarea.promptbox{min-height:170px;font-size:12px;line-height:1.55;color:var(--dim)}
+  .mb textarea.promptbox:focus{color:var(--ink);border-color:rgba(55,231,207,.4)}
+  .mb textarea[readonly]{opacity:.7;cursor:default}
   .mb .btns{display:flex;flex-wrap:wrap;gap:9px}
   .btn{font-family:var(--mono);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border-radius:10px;padding:10px 14px;cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;gap:7px}
   .btn.primary{background:linear-gradient(160deg,rgba(55,231,207,.25),rgba(154,134,255,.25));border-color:rgba(255,255,255,.16)}
@@ -249,11 +272,17 @@
     <div class="row"><div class="lbl">Schedule / next run</div><div class="val" id="m_when"></div></div>
     <div class="row"><div class="lbl">Currently</div><div class="val" id="m_now"></div></div>
     <div class="row"><div class="lbl">Skills</div><div class="chips" id="m_skills"></div></div>
-    <div class="row"><div class="lbl">Full task (prompt)</div><div class="pre" id="m_prompt"></div></div>
-    <div class="row"><div class="lbl">Add a task / instruction to this agent</div>
+    <div class="row"><div class="lbl">Full task (prompt) — <span id="m_prompthint" style="color:var(--teal)">editable, saves to the agent</span></div>
+      <textarea id="m_prompt" class="promptbox" placeholder="(no stored prompt)"></textarea>
+      <div class="btns">
+        <button class="btn primary" id="m_savebtn" onclick="saveTask()">💾 Save task to agent</button>
+        <span id="m_savestate" style="font-family:var(--mono);font-size:11px;color:var(--faint);align-self:center"></span>
+      </div>
+    </div>
+    <div class="row"><div class="lbl">…or send a quick instruction via chat</div>
       <textarea id="m_task" placeholder="e.g. Also include yesterday's top 3 ads by ROAS in the report…"></textarea>
       <div class="btns">
-        <button class="btn primary" onclick="copyTask()">⧉ Copy as chat instruction</button>
+        <button class="btn" onclick="copyTask()">⧉ Copy as chat instruction</button>
         <a class="btn" id="m_open" href="/" target="_blank" rel="noopener">↗ Open Hermes chat</a>
       </div>
     </div>
@@ -266,7 +295,7 @@
   </div>
 </div></div>
 
-<div id="toast"><span class="ck">✓</span> Copied — paste into chat</div>
+<div id="toast"><span class="ck">✓</span> <span class="tx">Copied — paste into chat</span></div>
 
 <script>
 const $=s=>document.querySelector(s);
@@ -276,7 +305,9 @@ function positionThumb(){const b=document.querySelector('.seg button.active'),t=
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
   document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();}
 window.addEventListener('resize',()=>{positionThumb();renderStage();});
-let toastT;function copy(t){navigator.clipboard.writeText(t).then(()=>{const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1700);});}
+let toastT;function showToast(){const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1900);}
+function copy(t){navigator.clipboard.writeText(t).then(()=>{$('#toast .tx').textContent="Copied — paste into chat";showToast();});}
+function toastMsg(t){$('#toast .tx').textContent=t;showToast();}
 function ago(ts){if(!ts)return"";let s=Math.floor(Date.now()/1000-ts);if(s<0)return"in "+rel(-s);return rel(s)+" ago";}
 function rel(s){if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
 function toEpoch(v){if(!v)return 0;if(typeof v==='number')return v>1e12?v/1000:v;const t=Date.parse(v);return isNaN(t)?0:t/1000;}
@@ -321,16 +352,21 @@ async function loadFloor(){
     const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase());  // CLIENT-SIDE per-profile filter
     const list=[];
     jobs.forEach(jb=>{const r=roleOf(jb.name);
+      const off=(jb.enabled===false||!!jb.paused_at);
+      const recent=jb.last_run_at && (nowS-toEpoch(jb.last_run_at)<180);  // ran in last 3 min => "at the computer"
       list.push({kind:"cron",id:jb.id,name:jb.name,role:r.label,color:r.color,emoji:r.emoji,
         desc:cleanDesc(jb.prompt)||(r.label+" agent"),
         when:jb.schedule_display||jb.expr||(jb.repeat?("every "+jb.repeat):"scheduled"),
         next:jb.next_run_at,last:jb.last_run_at,laststatus:jb.last_status,
         skills:skillsOf(jb),prompt:jb.prompt||"",
-        status:(jb.enabled===false||jb.paused_at)?"off":"duty"});});
-    live.forEach(s=>{
-      list.push({kind:"live",id:s.session_id,name:s.title||"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
-        desc:"Live chat task — "+(s.title||"ask-Hermes session"),when:"live chat",next:null,last:s.last_activity,laststatus:"working",
-        skills:[],prompt:"",status:"work"});});
+        status:off?"off":(recent?"work":"duty"),
+        mode:off?"sleep":(recent?"work":"sleep")});});   // scheduled-but-waiting agents NAP until their shift
+    // ONE persistent "Hermes Agent" = the live-chat worker (5th character, always standing by)
+    const chat=live[0];
+    list.push({kind:"hermes",id:"__hermes__",name:"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
+      desc:chat?("Active chat — "+(chat.title||"session")):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
+      when:"chat",next:null,last:chat?chat.last_activity:null,laststatus:chat?"working":"standby",
+      skills:[],prompt:"",status:chat?"work":"duty",mode:chat?"work":"standby"});
     FLOOR=list;renderAgents();renderFeed();renderStage();
   }catch(e){FLOOR=[];renderAgents();renderFeed();renderStage();}
 }
@@ -338,11 +374,11 @@ function renderAgents(){const el=$("#agents");
   if(!FLOOR.length){el.innerHTML='<div class="empty">No agents for this profile. Schedule cron agents or start a chat — this floor is dynamic and per-profile.</div>';$("#floormeta").textContent="0 agents";return;}
   el.innerHTML=FLOOR.map((a,i)=>`<div class="ag" style="--c:${a.color}" onclick="openModal(${i})">
     <div class="top"><div class="av">${a.emoji}</div><div><div class="nm">${esc(a.name)}</div><div class="rl">${esc(a.role)}</div></div>
-      <span class="st ${a.status}"><span class="led"></span>${a.status==="work"?"working":a.status==="off"?"disabled":"on duty"}</span></div>
+      <span class="st ${a.status}"><span class="led"></span>${a.status==="work"?"working":a.status==="off"?"disabled":a.kind==="hermes"?"standby":"on duty"}</span></div>
     <div class="desc">${esc(a.desc)}</div>
     <div class="meta">
       <span>⏰ <b>${esc(a.when)}</b>${a.next?(" · next "+esc(fmtTime(a.next))):""}</span>
-      <span>${a.kind==="live"?("💬 active · "+ago(toEpoch(a.last))):("▸ "+(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+esc(a.laststatus)):"")):"not run yet"))}</span>
+      <span>${a.kind==="hermes"?(a.mode==="work"?("💬 active · "+ago(toEpoch(a.last))):"💬 standby · waiting for chat"):a.mode==="work"?"🖥️ working now · at the computer":("💤 napping · "+(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+esc(a.laststatus)):"")):"not run yet"))}</span>
     </div>
     ${a.skills.length?`<div class="chips">${a.skills.slice(0,6).map(s=>`<span class="chip">${esc(s)}</span>`).join("")}</div>`:""}
     <div class="hint">click for full task + add instruction →</div>
@@ -350,18 +386,21 @@ function renderAgents(){const el=$("#agents");
   $("#floormeta").textContent=FLOOR.length+" agent"+(FLOOR.length!==1?"s":"")+" · "+esc(SEL||window._active||"");
 }
 function hhmm(ts){if(!ts)return"";return new Date(ts*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
+function statusLine(a){
+  if(a.kind==="hermes")return a.mode==="work"?("working now — "+(a.desc||"on a chat task")):"standby · waiting for your next chat";
+  if(a.status==="off")return "disabled";
+  if(a.mode==="work")return "working now — at the computer";
+  return "💤 napping · next run "+(a.next?fmtTime(a.next):(a.when||"scheduled"));
+}
 function renderFeed(){const el=$("#feed");const ac=$("#agcount");if(ac)ac.textContent=FLOOR.length;
-  const ev=[];
-  FLOOR.forEach(a=>{
-    if(a.kind==="live"){ev.push({t:toEpoch(a.last)||Date.now()/1000,c:a.color,e:a.emoji,nm:a.role,tx:"working now: "+(a.name||"task")});}
-    else{
-      if(a.last)ev.push({t:toEpoch(a.last),c:a.color,e:a.emoji,nm:a.role,tx:"done: "+(a.laststatus||"done")});
-      if(a.next)ev.push({t:toEpoch(a.next),c:a.color,e:a.emoji,nm:a.role,tx:"next run · "+(a.when||"scheduled")});
-    }
-  });
-  ev.sort((x,y)=>y.t-x.t);
-  el.innerHTML=ev.length?ev.slice(0,40).map(r=>`<div class="fr"><div class="av">${r.e}</div>
-    <div class="b"><div class="nm" style="color:${r.c}">${esc(r.nm)} <span style="color:var(--faint);font-weight:400;font-family:var(--mono);font-size:10px">${r.t?hhmm(r.t):""}</span></div><div class="ev">${esc(r.tx)}</div></div></div>`).join(""):'<div class="empty">no activity yet</div>';
+  if(!FLOOR.length){el.innerHTML='<div class="empty">no agents yet</div>';return;}
+  const order=FLOOR.slice().sort((x,y)=>(toEpoch(y.last)||0)-(toEpoch(x.last)||0));  // one row PER AGENT, newest first
+  el.innerHTML=order.map(a=>{const t=toEpoch(a.last);
+    return `<div class="fr"><div class="av">${a.emoji}</div>
+     <div class="b"><div class="nm" style="color:${a.color}">
+       <span class="fname" ${a.kind==="cron"?`onclick="startRename('${esc(a.id)}',this)" title="click to rename this agent"`:""}>${esc(a.name)}</span>
+       <span class="frole">${esc(a.role)}</span><span class="ftm">${t?hhmm(t):""}</span></div>
+     <div class="ev">${esc(statusLine(a))}</div></div></div>`;}).join("");
 }
 function feedSend(e){if(e.key!=="Enter")return;const v=e.target.value.trim();if(!v)return;
   copy(v);e.target.value="";window.open("/","_blank","noopener");}
@@ -372,50 +411,135 @@ function openModal(i){MI=i;const a=FLOOR[i];if(!a)return;
   $("#m_av").textContent=a.emoji;$("#m_name").textContent=a.name;$("#m_role").textContent=a.role;$("#m_role").style.color=a.color;
   $("#m_desc").textContent=a.desc||"—";
   $("#m_when").textContent=(a.when||"—")+(a.next?(" · next "+fmtTime(a.next)):"");
-  $("#m_now").textContent=a.kind==="live"?("working now · active "+ago(toEpoch(a.last))):(a.last?("last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+a.laststatus):"")):"idle — not run yet");
+  $("#m_now").textContent=a.kind==="hermes"?(a.mode==="work"?("working now · active "+ago(toEpoch(a.last))):"standby — waiting for your next chat"):a.mode==="work"?"working now · at the computer":(a.last?("napping · last run "+ago(toEpoch(a.last))+(a.laststatus?(" · "+a.laststatus):"")):"napping · not run yet");
   $("#m_skills").innerHTML=a.skills.length?a.skills.map(s=>`<span class="chip">${esc(s)}</span>`).join(""):'<span class="chip" style="color:var(--faint)">none listed</span>';
-  $("#m_prompt").textContent=a.prompt||"(no stored prompt)";
+  const editable=a.kind==="cron";
+  const pb=$("#m_prompt");pb.value=a.prompt||"";pb.readOnly=!editable;
+  $("#m_savebtn").style.display=editable?"":"none";$("#m_savestate").textContent="";
+  $("#m_prompthint").textContent=editable?"editable, saves to the agent":"chat task — not a scheduled agent";
   $("#m_task").value="";
   $("#ov").classList.add("show");}
+async function saveTask(){const a=FLOOR[MI];if(!a||a.kind!=="cron")return;
+  const v=$("#m_prompt").value.trim();const st=$("#m_savestate");st.textContent="saving…";
+  try{await updateAgent(a.id,{prompt:v},"Task saved to "+a.name);st.textContent="✓ saved";a.prompt=v;loadFloor();}
+  catch(e){st.textContent="⚠ failed — open Hermes › Scheduled Jobs";}}
 function closeModal(){$("#ov").classList.remove("show");}
 $("#ov").addEventListener("click",e=>{if(e.target.id==="ov")closeModal();});
 function copyTask(){const a=FLOOR[MI];if(!a)return;const t=$("#m_task").value.trim();if(!t){return;}
   copy("For the "+a.name+" agent ("+a.role+"): "+t+"\n(Update its scheduled task / behaviour accordingly.)");}
 
-/* ===== real Claude-Office room + sprite characters (MIT art, positioned at real desk coords) ===== */
-/* Desk "spots" read straight from Claude-Office src/rooms.ts (main-office), as % of the room. */
-const SPOTS=[
-  {x:25.8,y:71.0,face:"rear-left"}, {x:37.9,y:68.2,face:"rear-right"},
-  {x:55.2,y:66.8,face:"front-left"},{x:68.7,y:66.2,face:"front-right"},
-  {x:26.9,y:59.2,face:"front-left"},{x:38.5,y:55.2,face:"rear-left"},
-  {x:48.9,y:52.9,face:"rear-right"},{x:52.7,y:78.8,face:"rear-left"},
-  {x:65.9,y:75.8,face:"rear-right"},{x:38.8,y:43.6,face:"front-left"}
-];
-/* role → preferred sprite; remaining agents fill from POOL (no repeats until exhausted). */
+/* ===== real Claude-Office room + LIVE motion engine (MIT art) ===== */
+/* Avatars WALK around. working -> monitor desk; off-duty/disabled -> sleeping on a bed;
+   Hermes Agent -> awake, patrols (chat standby). Positions are % of the room (responsive). */
 const SPRITE_BY_ROLE={"Analyst":"security-audit-1","Creator":"explore-1","Reporter":"employee-1",
   "Research":"dev-2","Optimizer":"Frontend-dev-1","Hermes Agent":"Claude-1","Agent":"employee-2"};
-const POOL=["dev-1","employee-2","employee-3","Me-1","dev-2","explore-1","employee-1","security-audit-1","Frontend-dev-1","Claude-1"];
-const spriteSrc=(name,face)=>"/static/office/ch/"+name+"-"+face+".png";
-function assignSprites(){const used={},out=[];let pi=0;
-  FLOOR.forEach(a=>{let s=SPRITE_BY_ROLE[a.role];
+const POOL=["dev-1","employee-2","employee-3","Me-1","dev-2","explore-1","employee-1","security-audit-1","Frontend-dev-1"];
+const FXB="/static/office/";
+const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
+/* monitor desks = fixed furniture (always shown, like the real office). char stands behind, facing the screen. */
+const DESKS=[
+  {x:46,y:50,spr:"desk-lr",cf:"rear-left"},  {x:57,y:53,spr:"desk-rr",cf:"rear-right"},
+  {x:43,y:60,spr:"desk-lr",cf:"rear-left"},  {x:60,y:63,spr:"desk-rr",cf:"rear-right"},
+  {x:51,y:46,spr:"desk-lr",cf:"rear-left"},  {x:65,y:58,spr:"desk-rf",cf:"rear-right"}
+];
+const BEDS=[{x:24,y:80},{x:34,y:87},{x:16,y:71},{x:45,y:90},{x:27,y:69},{x:13,y:62}];
+const POIS=[{x:80,y:49},{x:55,y:43},{x:30,y:55},{x:70,y:46}]; // coffee / water / wander spots
+const DOOR={x:80,y:36};
+function assignSprites(){const used={},out={};let pi=0;
+  FLOOR.forEach(a=>{if(a.kind==="hermes"){out[a.id]="Claude-1";used["Claude-1"]=1;}});
+  FLOOR.forEach(a=>{if(out[a.id])return;let s=SPRITE_BY_ROLE[a.role];
     if(!s||used[s]){s=null;for(let g=0;g<POOL.length;g++){const c=POOL[(pi+g)%POOL.length];if(!used[c]){s=c;pi=(pi+g+1)%POOL.length;break;}}}
-    if(!s)s=POOL[pi++%POOL.length];used[s]=1;out.push(s);});
+    if(!s)s=POOL[pi++%POOL.length];used[s]=1;out[a.id]=s;});
   return out;}
-function renderStage(){const wrap=$("#chars");if(!wrap)return;
-  if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · this floor is dynamic & per-profile —</div>';return;}
-  const sz=Math.max(46,Math.round(($("#stagewrap").clientHeight||360)*0.17));
+function faceFromVel(dx,dy){return (dy<0?"rear":"front")+"-"+(dx>0?"right":"left");}
+/* runtime per-agent state, persists across refreshes so motion is continuous */
+const AG={};let _stageKey="",_desksBuilt=false,_lastT=0;
+function startRename(id,el){if(!id||id==="__hermes__")return;el.classList.add("editing");
+  const old=el.textContent;el.contentEditable="true";el.focus();
+  const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);
+  function done(save){el.contentEditable="false";el.classList.remove("editing");el.removeEventListener("keydown",kd);el.removeEventListener("blur",bl);
+    const nv=el.textContent.trim();if(save&&nv&&nv!==old)renameAgent(id,nv);else el.textContent=old;}
+  function kd(e){if(e.key==="Enter"){e.preventDefault();done(true);}else if(e.key==="Escape"){e.preventDefault();done(false);}}
+  function bl(){done(true);}
+  el.addEventListener("keydown",kd);el.addEventListener("blur",bl);}
+async function updateAgent(id,fields,okMsg){
+  const r=await fetch("/api/crons/update",{method:"POST",credentials:"include",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({job_id:id},fields))});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  if(okMsg)toastMsg(okMsg);return r.json();}
+async function renameAgent(id,name){
+  try{await updateAgent(id,{name:name},"Renamed → "+name);loadFloor();}
+  catch(e){toastMsg("⚠ rename failed — open Hermes › Scheduled Jobs");loadFloor();}}
+function buildStage(){const wrap=$("#chars");if(!wrap)return;
+  if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
-  wrap.innerHTML=FLOOR.map((a,i)=>{const sp=SPOTS[i%SPOTS.length],name=sprites[i],
-    z=Math.round(sp.y*10)+(a.status==="work"?200:0);
-    return `<div class="char ${a.status}" style="left:${sp.x}%;top:${sp.y}%;z-index:${z};--c:${a.color};--csz:${sz}px"
-       title="${esc(a.name)} — ${esc(a.role)}" onclick="openModal(${i})">
-      ${a.status==="work"?'<div class="bubble"><i></i><i></i><i></i></div>':""}
+  // assign homes: workers -> desks, sleepers -> beds, hermes -> standby
+  let di=0,bi=0;
+  FLOOR.forEach(a=>{a._sprite=sprites[a.id];
+    if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.5,face:d.cf,desk:d};}
+    else if(a.mode==="standby"){a._home={x:72,y:40,face:"front-left",standby:true};}
+    else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};}});
+  // desks furniture (build once)
+  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:13%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
+  const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:7%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
+  const charHTML=FLOOR.map((a,i)=>`<div class="char ${a.status}" data-i="${i}" data-id="${esc(a.id)}"
+       title="${esc(a.name)} — ${esc(a.role)}" onclick="if(!event.target.classList.contains('nm'))openModal(${i})">
+      <div class="bubble"><i></i><i></i><i></i></div>
+      <img class="zzz" src="${FXB}fx/sleeping.png" alt="">
       <div class="ring"></div>
-      <img class="sprite" src="${spriteSrc(name,sp.face)}" alt="" draggable="false"
-           onerror="this.onerror=null;this.src='${spriteSrc("employee-2",sp.face)}'">
-      <div class="tag"><span class="nm">${esc(a.name)}</span><span class="rl">${esc(a.status==="work"?"working":a.status==="off"?"disabled":a.role)}</span></div>
-    </div>`;}).join("");
+      <img class="sprite" src="${spriteSrc(a._sprite,a._home.face)}" alt="" draggable="false"
+           onerror="this.onerror=null;this.src='${spriteSrc("employee-2",a._home.face)}'">
+      <div class="tag"><span class="nm" ${a.kind==="cron"?`onclick="event.stopPropagation();startRename('${esc(a.id)}',this)" title="click to rename"`:""}>${esc(a.name)}</span><span class="rl">${esc(a.kind==="hermes"?"standby":a.role)}</span></div>
+    </div>`).join("");
+  wrap.innerHTML=deskHTML+bedHTML+charHTML;
+  // wire runtime + element refs
+  wrap.querySelectorAll(".char").forEach(el=>{const id=el.dataset.id,a=FLOOR[+el.dataset.i];
+    el.style.setProperty("--c",a.color);
+    let r=AG[id];if(!r){r={x:DOOR.x,y:DOOR.y,face:a._home.face,bob:0,phase:Math.random()*6,wTarget:null,nextWander:performance.now()+3000+Math.random()*6000};AG[id]=r;}
+    r.el=el;r.sprite=el.querySelector(".sprite");r.home=a._home;r.mode=a.mode;r.color=a.color;r.spriteName=a._sprite;r.curFace="";});
+  // prune stale runtimes
+  Object.keys(AG).forEach(id=>{if(!FLOOR.some(a=>a.id===id))delete AG[id];});
 }
+function renderStage(){const wrap=$("#chars");if(!wrap)return;
+  const sz=Math.max(40,Math.round(($("#stagewrap").clientHeight||340)*0.155));
+  wrap.style.setProperty("--csz",sz+"px");
+  const key=FLOOR.map(a=>a.id+":"+a.mode+":"+a.name+":"+a.color).join("|")||"empty";
+  if(key!==_stageKey){_stageKey=key;buildStage();}
+}
+function setFace(r,face){if(r.curFace===face||!r.sprite)return;r.curFace=face;r.sprite.src=spriteSrc(r.spriteName||"employee-2",face);}
+function engine(t){const dt=Math.min(0.05,((t-_lastT)||16)/1000);_lastT=t;
+  const csz=parseFloat(getComputedStyle($("#chars")).getPropertyValue("--csz"))||50;
+  for(const id in AG){const r=AG[id];if(!r.el)continue;const home=r.home||{x:50,y:60,face:"front-left"};
+    // pick target: wandering POI (awake only) else home
+    let tgt=home,wandering=false;
+    if(r.mode!=="sleep"){
+      if(r.wTarget){tgt=r.wTarget;wandering=true;}
+      else if(t>r.nextWander){r.wTarget=POIS[(Math.random()*POIS.length)|0];tgt=r.wTarget;wandering=true;}
+    }
+    const dx=tgt.x-r.x,dy=tgt.y-r.y,dist=Math.hypot(dx,dy);
+    const sleeping=r.mode==="sleep";
+    if(dist>1.2){const sp=(sleeping?9:15)*dt;const ux=dx/dist,uy=dy/dist;
+      r.x+=ux*Math.min(sp,dist);r.y+=uy*Math.min(sp,dist);
+      setFace(r,faceFromVel(dx,dy));r.phase+=dt*9;r.bob=Math.abs(Math.sin(r.phase))*-3.0;r.walking=true;
+    }else{ // arrived
+      r.x=tgt.x;r.y=tgt.y;r.walking=false;r.bob=0;
+      if(wandering){r.wTarget=null;r.nextWander=t+6000+Math.random()*9000;tgt=home;} // head back next frame
+      else{setFace(r,home.face);r.phase+=dt*1.4;r.bob=sleeping?0:Math.sin(r.phase)*0.8;}
+    }
+    // dom write
+    const el=r.el,atDesk=!r.walking&&home.desk&&r.mode==="work";
+    el.classList.toggle("sleeping",sleeping&&!r.walking);
+    el.classList.toggle("work",r.mode==="work");
+    const working=r.mode==="work"&&!r.walking;
+    const bub=el.querySelector(".bubble");if(bub)bub.style.display=working?"flex":"none";
+    const anchor=(sleeping&&!r.walking)?-52:-87;
+    el.style.left=r.x+"%";el.style.top=r.y+"%";
+    el.style.transform="translate(-50%,"+anchor+"%) translateY("+r.bob+"px)";
+    el.style.zIndex=Math.round(r.y*10)+(atDesk?-1:60); // behind its desk when seated, above floor when walking
+  }
+  requestAnimationFrame(engine);
+}
+requestAnimationFrame(engine);
 
 /* PLAYBOOK */
 const PLAYBOOK={marketer:[
