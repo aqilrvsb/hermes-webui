@@ -4,6 +4,16 @@ FROM ghcr.io/nesquena/hermes-webui:latest
 
 USER root
 
+# Document-reading toolchain (NO MCP / NO vision model needed):
+#   poppler-utils -> pdftotext (text PDFs) + pdftoppm (rasterize scanned PDFs)
+#   tesseract-ocr -> OCR for scanned PDFs / images / screenshots (English + Malay)
+# Pure CLI so it doesn't depend on the runtime venv. Kept ABOVE the cache-bust so it stays cached.
+RUN (apt-get update && apt-get install -y --no-install-recommends \
+       tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa poppler-utils file ghostscript \
+     && rm -rf /var/lib/apt/lists/*) \
+ || (apk add --no-cache tesseract-ocr tesseract-ocr-data-eng poppler-utils file) \
+ || true
+
 # Node (required by the npx-based MCP servers)
 RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -o /tmp/node.txz \
  && mkdir -p /opt/node && tar -xJf /tmp/node.txz -C /opt/node --strip-components=1 \
