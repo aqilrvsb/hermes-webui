@@ -312,6 +312,15 @@ function ago(ts){if(!ts)return"";let s=Math.floor(Date.now()/1000-ts);if(s<0)ret
 function rel(s){if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
 function toEpoch(v){if(!v)return 0;if(typeof v==='number')return v>1e12?v/1000:v;const t=Date.parse(v);return isNaN(t)?0:t/1000;}
 function fmtTime(v){const e=toEpoch(v);if(!e)return"";return new Date(e*1000).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+/* /api/sessions field names vary — probe all the likely ones so a live chat isn't dropped/mislabelled */
+const _pick=(o,ks)=>{for(const k of ks)if(o&&o[k]!=null&&o[k]!=="")return o[k];};
+function sessTs(s){let m=0;["last_activity","last_active","last_message_at","last_turn_at","updated_at","updatedAt","modified_at","last_used_at","created_at","createdAt","created"].forEach(k=>{const e=toEpoch(s[k]);if(e>m)m=e;});return m;}
+function sessEnded(s){if(_pick(s,["ended_at","ended","closed_at","archived_at","deleted_at"]))return true;
+  return /ended|closed|done|complete|archiv|cancel/.test(String(_pick(s,["status","state"])||"").toLowerCase());}
+function sessRunning(s){if(_pick(s,["running","is_running","active","is_active","streaming","is_streaming","in_progress","busy","generating","processing","awaiting_response","is_busy"]))return true;
+  return /run|stream|active|generat|process|in[_ ]?progress|busy|think|working|pending|await/.test(String(_pick(s,["status","state","phase"])||"").toLowerCase());}
+function sessProfile(s){return String(_pick(s,["profile","profile_name","profileName","profile_id","profileId","role"])||"").toLowerCase();}
+function sessTitle(s){return _pick(s,["title","name","summary","topic","subject","last_message"])||"chat task";}
 
 /* role inference (dynamic) */
 function roleOf(name){const n=(name||"").toLowerCase();
@@ -345,15 +354,18 @@ async function loadFloor(){
     const prof=SEL;
     const sess=await j("/api/sessions?all_profiles=1");
     const nowS=Date.now()/1000;
-    // The Hermes Agent mirrors your LATEST open chat for this profile. A chat's turn finishes
-    // between messages (active_agents drops to 0), so we key off recency of last_activity, NOT
-    // active_agents — otherwise an obviously-live conversation reads as "standby".
-    const sessAll=(sess.sessions||[]).filter(s=>!s.ended_at && (s.profile||"default").toLowerCase()===prof.toLowerCase())
-      .sort((a,b)=>toEpoch(b.last_activity)-toEpoch(a.last_activity));
-    const chat=sessAll[0];
-    const chatAge=chat?(nowS-toEpoch(chat.last_activity)):1e12;
-    const chatBusy=!!chat && (window._activeAgents>0 || chatAge<180);   // typing right now
-    const chatRecent=!!chat && chatAge<1800;                            // in the chat (last 30 min)
+    // The Hermes Agent mirrors your LATEST open chat. Field names vary, so use the robust probes.
+    // Prefer this profile's chats; if none are tagged to a profile, fall back to untagged opens
+    // (don't silently drop a live conversation just because its profile field is named oddly).
+    const open=(sess.sessions||[]).filter(s=>!sessEnded(s));
+    const mine=open.filter(s=>sessProfile(s)===prof.toLowerCase());
+    const untagged=open.filter(s=>!sessProfile(s));
+    const cands=(mine.length?mine:untagged).slice().sort((a,b)=>sessTs(b)-sessTs(a));
+    const chat=cands[0];
+    const cts=chat?sessTs(chat):0;
+    const cAge=cts?(nowS-cts):1e12;
+    const chatBusy=!!chat && (sessRunning(chat) || window._activeAgents>0 || cAge<180);  // processing now
+    const chatRecent=!!chat && (cts===0 || cAge<7200);                                   // in chat (≤2h or unknown ts)
     const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase());  // CLIENT-SIDE per-profile filter
     const list=[];
     jobs.forEach(jb=>{const r=roleOf(jb.name);
@@ -368,11 +380,12 @@ async function loadFloor(){
         status:off?"off":(recent?"work":"duty"),
         mode:off?"sleep":(recent?"work":"sleep")});});   // scheduled-but-waiting agents NAP until their shift
     // ONE persistent "Hermes Agent" = your live-chat worker (5th character). Reflects the LATEST chat.
+    const cTitle=chat?sessTitle(chat):null;
     list.push({kind:"hermes",id:"__hermes__",name:"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
-      desc:chat?("Chat: "+(chat.title||"session")):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
-      when:"chat",next:null,last:chat?chat.last_activity:null,
+      desc:chat?("Chat: "+cTitle):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
+      when:"chat",next:null,last:cts||null,
       laststatus:chatBusy?"working":(chatRecent?"in chat":"standby"),
-      chatTitle:chat?(chat.title||"chat task"):null,chatBusy:chatBusy,chatRecent:chatRecent,
+      chatTitle:cTitle,chatBusy:chatBusy,chatRecent:chatRecent,
       skills:[],prompt:"",busy:chatBusy,
       status:(chatBusy||chatRecent)?"work":"duty",
       mode:(chatBusy||chatRecent)?"work":"standby"});
@@ -398,7 +411,8 @@ function hhmm(ts){if(!ts)return"";return new Date(ts*1000).toLocaleTimeString([]
 function statusLine(a){
   if(a.kind==="hermes"){
     if(a.chatBusy)return "working now — "+(a.chatTitle||"chat task");
-    if(a.chatRecent)return "in chat — "+(a.chatTitle||"session")+" · "+(a.last?ago(toEpoch(a.last)):"");
+    if(a.chatRecent)return "in chat — "+(a.chatTitle||"session")+(a.last?(" · "+ago(toEpoch(a.last))):"");
+    if(a.chatTitle)return "last chat — "+a.chatTitle+(a.last?(" · "+ago(toEpoch(a.last))):"");
     return "standby · waiting for your next chat";}
   if(a.status==="off")return "disabled";
   if(a.mode==="work")return "working now — at the computer";
