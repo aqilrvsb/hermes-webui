@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes · Model Routing</title>
+<style>
+  :root{--bg:#0a0c16;--ink:#e9edfb;--dim:#9aa3c2;--faint:#5c6488;--line:rgba(255,255,255,.10);
+    --line2:rgba(255,255,255,.05);--teal:#37e7cf;--violet:#9a86ff;--lime:#b8ff5b;--amber:#ffcf63;--rose:#ff6485;--sky:#62c9ff;
+    --glass:linear-gradient(168deg,rgba(255,255,255,.05),rgba(255,255,255,.014));
+    --mono:ui-monospace,'Cascadia Code','Segoe UI Mono',Consolas,monospace;--disp:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;}
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--disp);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 70px}
+  header{display:flex;align-items:center;gap:13px;margin-bottom:18px;flex-wrap:wrap}
+  .mark{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:12px;background:conic-gradient(from 140deg,var(--teal),var(--violet),var(--sky),var(--teal));position:relative}
+  .mark::before{content:"";position:absolute;width:38px;height:38px;border-radius:10px;background:#0a0c16}
+  .mark b{position:relative;font-weight:800;color:#fff}
+  h1{margin:0;font-weight:800;font-size:21px;letter-spacing:-.02em}
+  .sub{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--faint);margin-top:3px}
+  .conn{margin-left:auto;display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;text-transform:uppercase;color:var(--dim);background:var(--glass);border:1px solid var(--line);padding:8px 13px;border-radius:999px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--rose)}.dot.on{background:var(--lime)}
+  select{font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:9px;padding:8px 11px;outline:none;cursor:pointer}
+  .card{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:16px;font-weight:800}
+  .card .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin:0 0 14px}
+  .defs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .def{border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.02);padding:13px}
+  .def .l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  .def .v{font-family:var(--mono);font-weight:700;font-size:14px;margin-top:6px;color:var(--teal)}
+  .def .v small{color:var(--dim);font-weight:400}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .it{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.02);padding:12px 14px;flex-wrap:wrap}
+  .it .nm{font-weight:700;font-size:14px;min-width:160px;flex:1}
+  .it .nm .role{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;display:block;margin-top:2px}
+  .it .cur{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .it .pill{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:6px;border:1px solid var(--line2);color:var(--dim)}
+  .it .save{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;border-radius:8px;padding:8px 13px;cursor:pointer;border:1px solid rgba(255,255,255,.16);background:linear-gradient(160deg,rgba(55,231,207,.22),rgba(154,134,255,.22));color:#fff}
+  .it .save:disabled{opacity:.4;cursor:default}
+  .prov{display:flex;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.02);padding:12px 14px;margin-bottom:8px;flex-wrap:wrap}
+  .prov .nm{font-weight:700;font-size:13px;min-width:120px}
+  .prov .models{font-family:var(--mono);font-size:10.5px;color:var(--dim);flex:1}
+  .ok{color:var(--lime)}.bad{color:var(--rose)}
+  .err{border:1px solid rgba(255,100,133,.4);background:rgba(255,100,133,.08);color:#ffd3dd;padding:13px;border-radius:12px;margin-bottom:16px;font-size:13px;display:none}
+  .note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px;line-height:1.6}
+  a{color:var(--teal)}
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(60px);z-index:9;font-family:var(--mono);font-size:13px;font-weight:600;background:rgba(20,24,38,.95);color:var(--ink);border:1px solid var(--line);padding:11px 18px;border-radius:13px;opacity:0;transition:.3s}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .empty{font-family:var(--mono);color:var(--faint);font-size:12px;padding:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark"><b>⚙</b></div>
+    <div><h1>Model Routing</h1><span class="sub">providers · models · per-agent</span></div>
+    <select id="profsel" title="Filter agents by profile" style="margin-left:auto"></select>
+    <div class="conn"><span id="dot" class="dot"></span><span id="status">…</span></div>
+  </header>
+
+  <div id="err" class="err"></div>
+
+  <!-- DEFAULTS -->
+  <div class="card">
+    <h2>🎯 Global defaults</h2>
+    <p class="hint">Managed in config (ask to change). Chat & image/PDF are switchable live in the chat model dropdown.</p>
+    <div class="defs">
+      <div class="def"><div class="l">Chat (main)</div><div class="v" id="d_chat">gpt-5.5 <small>· GRSAI</small></div></div>
+      <div class="def"><div class="l">Image / PDF</div><div class="v" id="d_vision">gemini-3.1-flash-lite <small>· GRSAI</small></div></div>
+      <div class="def"><div class="l">Fallback (on error)</div><div class="v" id="d_fallback">openrouter/auto <small>· OpenRouter</small></div></div>
+    </div>
+  </div>
+
+  <!-- PROVIDERS -->
+  <div class="card">
+    <h2>🔌 Providers</h2>
+    <p class="hint">Configured model providers (live from Hermes). Keys are set as Railway env vars.</p>
+    <div id="providers"><div class="empty">loading…</div></div>
+  </div>
+
+  <!-- AGENTS -->
+  <div class="card">
+    <h2>🤖 Per-agent model <span id="agcount" style="color:var(--faint);font-family:var(--mono);font-size:12px;font-weight:400"></span></h2>
+    <p class="hint">Pick a model per scheduled agent and click Save — applies live (writes the cron via /api/crons/update). This is your "model per agent".</p>
+    <div class="list" id="agents"><div class="empty">loading…</div></div>
+    <p class="note">Tip: cheap daily runs → <b>gemini-3-flash</b> / <b>gpt-5.4</b>; heavier reasoning → <b>gpt-5.5</b> / <b>gemini-3.1-pro</b>; image/PDF agents → a <b>gemini-*</b> model.</p>
+  </div>
+
+  <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--faint)">
+    Hermes model routing · per-chat model = the chat dropdown · global defaults via config · <span id="ts"></span>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+let toastT;function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("show"),2200);}
+async function j(p,opts){const r=await fetch(p,Object.assign({credentials:"include",headers:{"Content-Type":"application/json"}},opts||{}));
+  let b=null;try{b=await r.json();}catch(e){}
+  if(!r.ok)throw new Error((b&&(b.error&&(b.error.message||b.error)||b.message))||("HTTP "+r.status));return b;}
+let MODELS=[],CRONS=[],SEL="";
+function modelIds(d){let a=(d&&(d.models||d.data||d))||[];if(!Array.isArray(a))a=[];
+  return a.map(m=>typeof m==="string"?m:(m.id||m.name||m.model||"")).filter(Boolean);}
+function roleOf(n){n=(n||"").toLowerCase();
+  if(/expert|analy|audit|bleed|fatigue/.test(n))return"Analyst";
+  if(/actor|creat|build|deploy|launch|video|image|\bad/.test(n))return"Creator";
+  if(/report|whatsapp|digest|summary/.test(n))return"Reporter";
+  if(/intel|research|spy|competitor|trend|market/.test(n))return"Research";
+  if(/strateg/.test(n))return"Strategist";return"Agent";}
+
+async function loadAll(){
+  try{
+    const [cr,md]=await Promise.all([j("/api/crons"),j("/api/models").catch(()=>({models:[]}))]);
+    CRONS=cr.jobs||[];MODELS=modelIds(md);
+    if(!MODELS.length)MODELS=["gpt-5.5","gpt-5.4","gemini-3.1-pro","gemini-3.1-flash-lite","gemini-3.5-flash","gemini-3-pro","gemini-3-flash","gemini-2.5-pro","gemini-2.5-flash","openrouter/auto"];
+    $("#dot").className="dot on";$("#status").textContent="live";$("#err").style.display="none";
+    buildProfiles();renderProviders();renderAgents();
+  }catch(e){
+    $("#dot").className="dot";$("#status").textContent="error";
+    $("#err").style.display="block";$("#err").innerHTML="⚠ Can't read Hermes data ("+esc(e.message)+"). Open <a href='/'>Hermes</a>, log in, reload.";
+  }
+  $("#ts").textContent=new Date().toLocaleTimeString();
+}
+function buildProfiles(){const sel=$("#profsel");const set={};CRONS.forEach(c=>{const p=(c.profile||"default");set[p]=1;});
+  const ps=Object.keys(set);if(!ps.length){sel.innerHTML="<option>default</option>";return;}
+  if(!SEL){const cnt={};CRONS.forEach(c=>{const p=(c.profile||"default");cnt[p]=(cnt[p]||0)+1;});SEL=ps.sort((a,b)=>cnt[b]-cnt[a])[0];}
+  sel.innerHTML=ps.map(p=>`<option ${p===SEL?"selected":""}>👤 ${esc(p)}</option>`).join("");
+  sel.onchange=()=>{SEL=sel.value.replace(/^👤 /,"");renderAgents();};}
+async function loadProviders(){try{const d=await j("/api/providers");return (d&&(d.providers||d.connections||d))||[];}catch(e){return null;}}
+async function renderProviders(){const el=$("#providers");
+  // Show the providers we know are configured + their models (from custom_providers via /api/models grouping is messy; show known set).
+  const known=[
+    {name:"grsai",label:"GRSAI",models:"gpt-5.5, gpt-5.4, gemini-3.1-pro, gemini-3.1-flash-lite, gemini-3.5/3/2.5-flash, gemini-3/2.5-pro",env:"GRSAI_API_KEY"},
+    {name:"openrouter",label:"OpenRouter (fallback)",models:"openrouter/auto + 300+",env:"OPENROUTER_API_KEY"},
+  ];
+  const live=await loadProviders();
+  el.innerHTML=known.map(p=>{
+    let has=null;if(Array.isArray(live)){const m=live.find(x=>String(x.id||x.provider||x.name||"").toLowerCase()===p.name);if(m)has=(m.has_key||m.configured||m.key||m.api_key)?true:(m.has_key===false?false:null);}
+    return `<div class="prov"><div class="nm">${esc(p.label)}</div>
+      <div class="models">${esc(p.models)}</div>
+      <span class="pill ${has===true?'ok':has===false?'bad':''}">${has===true?'key set':has===false?'no key':'env: '+esc(p.env)}</span></div>`;
+  }).join("");
+}
+function renderAgents(){const el=$("#agents");
+  const list=CRONS.filter(c=>(c.profile||"default")===SEL);
+  $("#agcount").textContent="· "+list.length+" in "+SEL;
+  if(!list.length){el.innerHTML='<div class="empty">no scheduled agents in this profile</div>';return;}
+  el.innerHTML=list.map((c,i)=>{const cur=c.model||"(default)";
+    const opts=['<option value="">(use global default)</option>'].concat(MODELS.map(m=>`<option value="${esc(m)}" ${m===c.model?"selected":""}>${esc(m)}</option>`)).join("");
+    return `<div class="it" data-id="${esc(c.id)}">
+      <div class="nm">${esc(c.name||"agent")}<span class="role">${esc(roleOf(c.name))} · now: ${esc(cur)}</span></div>
+      <select class="msel">${opts}</select>
+      <button class="save" onclick="saveAgent('${esc(c.id)}',this)">Save</button></div>`;}).join("");
+}
+async function saveAgent(id,btn){const row=btn.closest(".it");const model=row.querySelector(".msel").value;
+  btn.disabled=true;btn.textContent="…";
+  try{await j("/api/crons/update",{method:"POST",body:JSON.stringify({job_id:id,model:model})});
+    toast("✓ saved — "+(model||"global default"));
+    const c=CRONS.find(x=>String(x.id)===String(id));if(c)c.model=model;renderAgents();}
+  catch(e){toast("⚠ "+e.message);btn.disabled=false;btn.textContent="Save";}}
+loadAll();setInterval(loadAll,15000);
+</script>
+</body>
+</html>
