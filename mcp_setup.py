@@ -116,8 +116,11 @@ for home in homes():
     # (just remove the env var). The token is referenced via ${APIPOD_API_KEY}, never written to git.
     if os.environ.get("APIPOD_API_KEY", "").strip():
         APIPOD_BASE = "https://code.apipod.ai/v1"
-        APIPOD_MODELS = ["claude-sonnet-4-5", "claude-opus-4-6", "claude-haiku-4-5"]
-        APIPOD_DEFAULT = os.environ.get("APIPOD_DEFAULT_MODEL", "claude-sonnet-4-5").strip()
+        # Full APIPod catalog (from /v1/models) so EVERY model shows in Hermes' picker -> switch
+        # the model dynamically per-chat/per-agent, no redeploy. Change the default via env too.
+        APIPOD_MODELS = ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
+                         "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"]
+        APIPOD_DEFAULT = os.environ.get("APIPOD_DEFAULT_MODEL", "claude-opus-4-6").strip()
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower() != "apipod"]
         cps.append({"name": "apipod", "base_url": APIPOD_BASE,
