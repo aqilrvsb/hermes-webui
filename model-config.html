@@ -117,7 +117,11 @@ function roleOf(n){n=(n||"").toLowerCase();
   if(/intel|research|spy|competitor|trend|market/.test(n))return"Research";
   if(/strateg/.test(n))return"Strategist";return"Agent";}
 
-const GRSAI_SET=["gpt-5.5","gpt-5.4","gemini-3.1-pro","gemini-3.1-flash-lite","gemini-3.5-flash","gemini-3-pro","gemini-3-flash","gemini-2.5-pro","gemini-2.5-flash"];
+// Selectable per-agent models: OpenRouter (main) specific models + GRSAI (vision) — pick explicitly, not just "auto".
+const CHOICES=[
+  "minimax/minimax-m3","minimax/minimax-m2.7","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","openrouter/auto", // OpenRouter
+  "gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gpt-5.5"  // GRSAI (image/PDF + extra)
+];
 async function loadAll(){
   if(!CSRF)getCsrf();   // prefetch CSRF for Save
   try{
