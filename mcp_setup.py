@@ -110,29 +110,47 @@ for home in homes():
     tm = cfg.get("terminal") or {}
     tm["cwd"] = os.path.join(HOME, "workspace")
     cfg["terminal"] = tm
-    # ── APIPod as the MAIN model (cheap Claude via code.apipod.ai, OpenAI-compatible, vision-capable).
-    # Gated on the APIPOD_API_KEY env var: if it's set, APIPod becomes the default provider for chat
-    # + agents; if it's absent, NOTHING changes (minimax stays) — so this is a safe, instant rollback
-    # (just remove the env var). The token is referenced via ${APIPOD_API_KEY}, never written to git.
+    # ── 3 model providers + MAIN + CASCADE FALLBACK, all NATIVE to Hermes & stored in THIS
+    # config.yaml on the volume (editable in Hermes, survives restarts; the model is also switchable
+    # live from the chat dropdown — no Railway env for the model choice). Keys are env-refs so secrets
+    # never hit git. Gated on APIPOD_API_KEY existing (so the main always has a working key -> safe;
+    # remove that env var to instantly fall back to minimax). SEED-ONCE: we add only what's MISSING
+    # and never overwrite your edits.
+    #   Provider 1: apipod      -> APIPod Claude  (key ${APIPOD_API_KEY})
+    #   Provider 2: apipod-gpt  -> APIPod GPT/Codex (key ${APIPOD_GPT_API_KEY}; create a Codex-group key)
+    #   Provider 3: openrouter  -> OpenRouter     (key ${OPENROUTER_API_KEY})
+    # MAIN = apipod/claude-opus-4-6 ; CASCADE = main fails -> apipod-gpt/gpt-5.5 -> openrouter.
     if os.environ.get("APIPOD_API_KEY", "").strip():
         APIPOD_BASE = "https://code.apipod.ai/v1"
-        # Full APIPod catalog (from /v1/models) so EVERY model shows in Hermes' picker -> switch
-        # the model dynamically per-chat/per-agent, no redeploy. Change the default via env too.
-        APIPOD_MODELS = ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
+        OR_BASE = "https://openrouter.ai/api/v1"
+        CLAUDE_MODELS = ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
                          "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"]
-        APIPOD_DEFAULT = os.environ.get("APIPOD_DEFAULT_MODEL", "claude-opus-4-6").strip()
-        cps = [c for c in (cfg.get("custom_providers") or [])
-               if isinstance(c, dict) and str(c.get("name") or "").lower() != "apipod"]
-        cps.append({"name": "apipod", "base_url": APIPOD_BASE,
-                    "api_key": "${APIPOD_API_KEY}", "models": APIPOD_MODELS})
-        # OpenRouter stays available as a FALLBACK (key from env), only if provided.
-        if os.environ.get("OPENROUTER_API_KEY", "").strip():
-            cps = [c for c in cps if str(c.get("name") or "").lower() != "openrouter"]
-            cps.append({"name": "openrouter", "base_url": "https://openrouter.ai/api/v1",
-                        "api_key": "${OPENROUTER_API_KEY}"})
+        GPT_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
+        cps = cfg.get("custom_providers") or []
+        if not isinstance(cps, list):
+            cps = []
+        have = {str(c.get("name") or "").lower() for c in cps if isinstance(c, dict)}
+        if "apipod" not in have:
+            cps.append({"name": "apipod", "base_url": APIPOD_BASE,
+                        "api_key": "${APIPOD_API_KEY}", "models": CLAUDE_MODELS})
+        if "apipod-gpt" not in have:
+            cps.append({"name": "apipod-gpt", "base_url": APIPOD_BASE,
+                        "api_key": "${APIPOD_GPT_API_KEY}", "models": GPT_MODELS})
+        if "openrouter" not in have:
+            cps.append({"name": "openrouter", "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
         cfg["custom_providers"] = cps
-        cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
-                        "api_key": "${APIPOD_API_KEY}", "default": APIPOD_DEFAULT}
+        # MAIN model — seed once (your dropdown / config edits then persist across restarts).
+        if not (isinstance(cfg.get("model"), dict) and cfg["model"].get("default")):
+            cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
+                            "api_key": "${APIPOD_API_KEY}", "default": "claude-opus-4-6"}
+        # CASCADE FALLBACK — seed once. Tried in order when the main provider errors.
+        if not cfg.get("fallback_providers"):
+            cfg["fallback_providers"] = [
+                {"provider": "apipod-gpt", "model": "gpt-5.5", "base_url": APIPOD_BASE,
+                 "api_key": "${APIPOD_GPT_API_KEY}"},
+                {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.5", "base_url": OR_BASE,
+                 "api_key": "${OPENROUTER_API_KEY}"},
+            ]
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
