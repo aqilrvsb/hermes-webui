@@ -110,35 +110,38 @@ for home in homes():
     tm = cfg.get("terminal") or {}
     tm["cwd"] = os.path.join(HOME, "workspace")
     cfg["terminal"] = tm
-    # ── GRSAI as the model provider (OpenAI-compatible; GPT-5.5/5.4 + Gemini 3.x/2.5, cheap),
-    # with OpenRouter as the cascade fallback. Stored in THIS config.yaml on the volume (editable
-    # in Hermes, model switchable live from the chat dropdown). Keys are env-refs (never hit git).
-    # Gated on GRSAI_API_KEY existing -> safe rollback (remove the env var to fall back to minimax).
-    #   grsai      -> https://grsaiapi.com/v1  (key ${GRSAI_API_KEY})  [GPT + Gemini; Gemini = vision]
-    #   openrouter -> fallback on error        (key ${OPENROUTER_API_KEY})
-    # MAIN (chat + agents) = grsai/gpt-5.5 ; image/PDF -> a gemini-* model (cheap, multimodal).
-    if os.environ.get("GRSAI_API_KEY", "").strip():
-        GRSAI_BASE = "https://grsaiapi.com/v1"
+    # ── MAIN provider = OpenRouter (chat + agents on minimax/minimax-m3); GRSAI = image/PDF vision
+    # + fallback. All in THIS config.yaml on the volume (editable; model switchable in the dropdown).
+    # Keys are env-refs (never hit git). Gated on OPENROUTER_API_KEY existing -> safe rollback.
+    #   openrouter -> https://openrouter.ai/api/v1 (key ${OPENROUTER_API_KEY})  [MAIN: minimax-m3]
+    #   grsai      -> https://grsaiapi.com/v1      (key ${GRSAI_API_KEY})       [image/PDF gemini + fallback]
+    if os.environ.get("OPENROUTER_API_KEY", "").strip():
         OR_BASE = "https://openrouter.ai/api/v1"
-        GRSAI_MODELS = ["gpt-5.5", "gpt-5.4",
-                        "gemini-3.1-pro", "gemini-3.1-flash-lite", "gemini-3.5-flash",
-                        "gemini-3-pro", "gemini-3-flash", "gemini-2.5-pro", "gemini-2.5-flash"]
+        GRSAI_BASE = "https://grsaiapi.com/v1"
+        OR_MODELS = ["minimax/minimax-m3", "minimax/minimax-m2.7", "openrouter/auto",
+                     "anthropic/claude-sonnet-4.5", "google/gemini-2.5-flash", "openai/gpt-5.4"]
+        GRSAI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-2.5-flash",
+                        "gemini-2.5-pro", "gpt-image-2", "gpt-5.5"]
+        has_grsai = bool(os.environ.get("GRSAI_API_KEY", "").strip())
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
         have = {str(c.get("name") or "").lower() for c in cps if isinstance(c, dict)}
-        if "grsai" not in have:
+        if "openrouter" not in have:
+            cps.append({"name": "openrouter", "base_url": OR_BASE,
+                        "api_key": "${OPENROUTER_API_KEY}", "models": OR_MODELS})
+        if has_grsai and "grsai" not in have:
             cps.append({"name": "grsai", "base_url": GRSAI_BASE,
                         "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
-        if "openrouter" not in have:
-            cps.append({"name": "openrouter", "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
         cfg["custom_providers"] = cps
-        # MAIN (chat default) = GRSAI gpt-5.5. Switch live per-chat in the dropdown —
-        # e.g. pick gemini-2.5-flash / gemini-3.1-pro for image/PDF reading (cheap vision).
-        cfg["model"] = {"provider": "grsai", "base_url": GRSAI_BASE,
-                        "api_key": "${GRSAI_API_KEY}", "default": "gpt-5.5"}
-        # FALLBACK on any provider error -> OpenRouter (applies to chat AND agents).
-        cfg["fallback_providers"] = [
+        # MAIN (chat + agents default) = OpenRouter minimax/minimax-m3.
+        # For image/PDF, switch the chat model to a GRSAI gemini-* (read-documents skill).
+        cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
+                        "api_key": "${OPENROUTER_API_KEY}", "default": "minimax/minimax-m3"}
+        # FALLBACK on error -> GRSAI gemini (if configured) then OpenRouter auto.
+        cfg["fallback_providers"] = ([
+            {"provider": "grsai", "model": "gemini-3.1-flash-lite", "base_url": GRSAI_BASE,
+             "api_key": "${GRSAI_API_KEY}"}] if has_grsai else []) + [
             {"provider": "openrouter", "model": "openrouter/auto", "base_url": OR_BASE,
              "api_key": "${OPENROUTER_API_KEY}"},
         ]
@@ -150,15 +153,15 @@ for home in homes():
         pass
 print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
 
-# ── ALL AGENTS -> GPT-5.5 (GRSAI). One-time migration: rewrite any cron still on the OLD minimax
-# default to the agent model. Only touches minimax/* models, so a model you later pick per-agent in
-# the Scheduled Jobs UI is preserved. Gated on GRSAI_API_KEY (so we only switch when the provider works).
-if os.environ.get("GRSAI_API_KEY", "").strip():
+# NOTE: agent (cron) models are NOT auto-forced here anymore. Set each agent's model in the
+# Model Routing tab (/static/model-config.html) or Scheduled Jobs — that's the source of truth.
+# Optional one-shot ONLY: if MIGRATE_AGENT_MODEL is set, rewrite crons pointing at a now-removed
+# provider (apipod*) to it, so no agent is left on a dead provider. Never touches your chosen models.
+_mig = os.environ.get("MIGRATE_AGENT_MODEL", "").strip()
+if _mig:
     import glob as _cg, json as _cj
-    AGENT_MODEL = os.environ.get("AGENT_MODEL", "gpt-5.5").strip()
     _seen_jf = set()
-    for _pat in (os.path.join(HOME, "cron", "jobs.json"),
-                 os.path.join(HOME, "**", "cron", "jobs.json")):
+    for _pat in (os.path.join(HOME, "cron", "jobs.json"), os.path.join(HOME, "**", "cron", "jobs.json")):
         for jf in _cg.glob(_pat, recursive=True):
             if jf in _seen_jf:
                 continue
@@ -168,12 +171,13 @@ if os.environ.get("GRSAI_API_KEY", "").strip():
                 _jobs = _d.get("jobs") if isinstance(_d, dict) else _d
                 _ch = False
                 for _jb in (_jobs or []):
-                    if isinstance(_jb, dict) and str(_jb.get("model") or "").lower().startswith("minimax"):
-                        _jb["model"] = AGENT_MODEL
+                    _m = str(_jb.get("model") or "").lower() if isinstance(_jb, dict) else ""
+                    if _m.startswith("apipod") or _m.startswith("claude-"):  # dead APIPod providers only
+                        _jb["model"] = _mig
                         _ch = True
                 if _ch:
                     _cj.dump(_d, open(jf, "w", encoding="utf-8"), indent=2)
-                    print("== agents -> %s in %s ==" % (AGENT_MODEL, jf))
+                    print("== migrated dead-provider agents -> %s in %s ==" % (_mig, jf))
             except Exception:
                 pass
 
