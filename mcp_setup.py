@@ -300,12 +300,25 @@ def _skill_name(skill_md):
     return ""
 def _prune_old_skills():
     removed = []
-    for home in homes():
-        sk_root = os.path.join(home, "skills")
-        if not os.path.isdir(sk_root):
+    # Agent-created skills aren't always under <home>/skills — they may live in the webui
+    # state dir (~/.hermes/webui/**) or elsewhere on the volume. Scan the whole ~/.hermes tree
+    # (+ the state dir) recursively for any SKILL.md whose folder/name is on the denylist.
+    roots = {HOME}
+    sd = os.environ.get("HERMES_WEBUI_STATE_DIR")
+    if sd:
+        roots.add(sd)
+    seen = set()
+    for root in roots:
+        if not os.path.isdir(root):
             continue
-        # a skill dir is any dir containing SKILL.md, at <skills>/<name>/ or <skills>/<category>/<name>/
-        for md in _glob.glob(os.path.join(sk_root, "**", "SKILL.md"), recursive=True):
+        for md in _glob.glob(os.path.join(root, "**", "SKILL.md"), recursive=True):
+            if md in seen:
+                continue
+            seen.add(md)
+            low = md.replace("\\", "/").lower()
+            # don't traverse user project files / dep trees
+            if "/workspace/" in low or "/node_modules/" in low or "/.git/" in low:
+                continue
             d = os.path.dirname(md)
             base = os.path.basename(d).lower()
             nm = _skill_name(md)
