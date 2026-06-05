@@ -206,6 +206,7 @@
     <button class="active" data-view="floor" onclick="show('floor')">Office</button>
     <button data-view="skills" onclick="show('skills')">Skills</button>
     <button data-view="play" onclick="show('play')">Playbook</button>
+    <button data-view="gallery" onclick="show('gallery')">Creatives</button>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
@@ -252,6 +253,14 @@
       <input id="skillsearch" class="skillsearch" placeholder="Search skills…" oninput="renderSkills(window._skills||[], this.value)">
     </div>
     <div id="skillgrid"></div>
+  </section>
+
+  <!-- CREATIVES / GALLERY -->
+  <section id="gallery" class="view">
+    <div class="panel" style="padding:14px">
+      <div class="ptitle">🎬 Creative Gallery <small style="margin-left:auto;color:var(--dim)">Image &amp; Video Producers — proof they're generating</small></div>
+    </div>
+    <div id="gallerybody" style="padding:4px 14px 24px"><div class="empty">Open to load…</div></div>
   </section>
 
   <!-- PLAYBOOK -->
@@ -303,7 +312,7 @@ const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;","
 async function j(p){const r=await fetch(p,{credentials:"include"});if(!r.ok)throw new Error(p+" "+r.status);return r.json();}
 function positionThumb(){const b=document.querySelector('.seg button.active'),t=$('#thumb');if(b&&t){t.style.left=b.offsetLeft+'px';t.style.width=b.offsetWidth+'px';}}
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
-  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();}
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();if(v==='gallery')loadGallery();}
 window.addEventListener('resize',()=>{positionThumb();renderStage();});
 let toastT;function showToast(){const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1900);}
 function copy(t){navigator.clipboard.writeText(t).then(()=>{$('#toast .tx').textContent="Copied — paste into chat";showToast();});}
@@ -594,6 +603,46 @@ function renderPlaybook(){const col=(r,cls,b)=>`<div class="col ${cls}"><h2>${b}
 renderPlaybook();
 
 /* SKILLS */
+/* ---- CREATIVE GALLERY: prove the Image/Video producers are generating ---- */
+async function galFetchText(path){
+  const enc=encodeURIComponent(path);
+  const cands=["/api/files/read?path="+enc,"/api/files?path="+enc,"/api/file?path="+enc,
+    "/api/workspace/file?path="+enc,"/api/workspace/read?path="+enc,"/api/workspace/cat?path="+enc,
+    "/api/fs/read?path="+enc,"/api/space/file?path="+enc,"/files/"+path,"/workspace/"+path];
+  for(const u of cands){try{const r=await fetch(u,{credentials:"include"});
+    if(r.ok){const t=await r.text();if(t&&!/^\s*<(?:!doctype|html)/i.test(t))return t;}}catch(e){}}
+  return null;}
+function galMediaUrls(s){if(!s)return[];const set=new Set();
+  (s.match(/https?:\/\/[^\s"'<>)\]]+\.(?:png|jpe?g|webp|gif|mp4|mov|webm)(?:\?[^\s"'<>)\]]*)?/gi)||[]).forEach(u=>set.add(u));
+  (s.match(/https?:\/\/[^\s"'<>)\]]*(?:peninglab|runninghub|grsai|oaiusercontent|blob\.core|amazonaws|googleusercontent|cloudfront)[^\s"'<>)\]]+/gi)||[]).forEach(u=>set.add(u));
+  return [...set];}
+const galIsVid=u=>/\.(?:mp4|mov|webm)(?:\?|$)/i.test(u);
+async function loadGallery(){
+  const wrap=$("#gallerybody");if(!wrap)return;
+  wrap.innerHTML='<div class="empty">Loading…</div>';
+  const prof=(SEL||window._active||"marketer").toLowerCase();
+  let jobs=[];try{const c=await j("/api/crons");jobs=(c.jobs||[]).filter(jb=>(jb.profile||"default").toLowerCase()===prof);}catch(e){}
+  const prod=jobs.filter(jb=>/producer|image|video|creative/i.test(jb.name||""));
+  const card=jb=>{const last=jb.last_run_at?("last run "+ago(toEpoch(jb.last_run_at))):"not run yet";
+    const st=String(jb.last_status||"—");const ok=/success|ok|done|complete/i.test(st);const bad=/fail|error/i.test(st);
+    return `<div style="background:#0e1322;border:1px solid #20283f;border-radius:10px;padding:10px 12px;min-width:200px">
+      <div style="font-weight:700;color:#cfe0ff">${esc(jb.name)}</div>
+      <div style="margin:4px 0"><span style="font-size:11px;padding:2px 8px;border-radius:99px;background:${ok?'#143b2a':bad?'#3b1414':'#23283a'};color:${ok?'#5be39a':bad?'#ff8a8a':'#9fb0d0'}">${esc(st)}</span></div>
+      <div style="font-size:12px;color:#8a98b8">${esc(last)} · next ${jb.next_run_at?esc(fmtTime(jb.next_run_at)):"—"}</div></div>`;};
+  const statusHTML=prod.length?prod.map(card).join(""):'<div class="empty">No Image/Video producer agents found for this profile.</div>';
+  let media=[];
+  for(const brand of ["peningbot","peninglab"]){
+    const txt=await galFetchText("_shared/creatives_"+brand+".json");
+    if(txt)galMediaUrls(txt).forEach(u=>media.push({brand,u}));}
+  const item=m=>`<figure style="margin:0;position:relative;border:1px solid #20283f;border-radius:10px;overflow:hidden;background:#0a0e18">
+      <span style="position:absolute;top:6px;left:6px;z-index:2;font-size:10px;padding:2px 7px;border-radius:99px;background:#000a;color:#cfe0ff">${m.brand}</span>
+      ${galIsVid(m.u)?`<video src="${m.u}" controls muted loop playsinline style="width:100%;display:block;aspect-ratio:1/1;object-fit:cover"></video>`:`<img src="${m.u}" loading="lazy" style="width:100%;display:block;aspect-ratio:1/1;object-fit:cover" onerror="this.closest('figure').style.display='none'">`}</figure>`;
+  const grid=media.length
+    ?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">${media.map(item).join("")}</div>`
+    :'<div class="empty">No generated media found yet. The producers save assets to <code>_shared/creatives_peningbot.json</code> / <code>_shared/creatives_peninglab.json</code>. Once they run with OpenRouter + peninglab credits, the creatives appear here. (If the files exist but stay empty here, the workspace file API path differs on this build — tell me and I\'ll point it at the right endpoint.)</div>';
+  wrap.innerHTML=`<div style="margin-bottom:16px"><div class="ptitle" style="padding:8px 0">🎬 Producer status</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${statusHTML}</div></div>
+    <div><div class="ptitle" style="padding:8px 0">🖼️ Generated creatives ${media.length?("· "+media.length):""}</div>${grid}</div>`;}
 async function loadSkills(){try{const d=await j("/api/skills");const sk=d.skills||[];window._skills=sk;
   $("#skillprofile").textContent=(SEL||window._active||"")+" · "+sk.length+" skills";renderSkills(sk,$("#skillsearch").value||"");}
   catch(e){$("#skillgrid").innerHTML="<div class='empty'>Can't load skills — open <a href='/'>Hermes</a> and log in.</div>";}}
