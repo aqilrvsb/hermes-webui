@@ -128,7 +128,7 @@ async function loadAll(){
     const [cr,md]=await Promise.all([j("/api/crons"),j("/api/models").catch(()=>({models:[]}))]);
     CRONS=cr.jobs||[];MODELS=modelIds(md);
     // always offer the GRSAI set + the OpenRouter fallback in the dropdown (deduped)
-    GRSAI_SET.concat(["openrouter/auto"]).forEach(m=>{if(MODELS.indexOf(m)<0)MODELS.push(m);});
+    CHOICES.forEach(m=>{if(MODELS.indexOf(m)<0)MODELS.push(m);});
     $("#dot").className="dot on";$("#status").textContent="live";$("#err").style.display="none";
     await buildProfiles();renderProviders();renderAgents();
   }catch(e){
