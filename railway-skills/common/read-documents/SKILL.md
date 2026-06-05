@@ -7,9 +7,9 @@ description: Read PDFs (including scanned/image-only PDFs), images/screenshots, 
 
 **You can run on a multimodal model (Gemini via GRSAI) — you can SEE images, like Claude Code.**
 So your FIRST choice for anything visual is to *look at the image itself*, not OCR it.
-For image/PDF reading the recommended model is **gemini-2.5-flash** (cheap, strong vision) or
-**gemini-3.1-pro** (higher quality) — GPT-5.5 is text-first, so switch the chat model to a
-**gemini-*** model in the picker before reading images/PDFs.
+For image/PDF reading the default model is **gemini-3.1-flash-lite** (cheap, multimodal); use
+**gemini-3.1-pro** if you need higher quality. GPT-5.5 is text-first, so switch the chat model
+to **gemini-3.1-flash-lite** in the picker before reading images/PDFs.
 PDFs aren't a native image type, so render their pages to images first, then view them.
 
 Terminal tools available (no MCP, no extra model needed):

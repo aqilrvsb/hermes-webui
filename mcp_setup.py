@@ -121,8 +121,8 @@ for home in homes():
         GRSAI_BASE = "https://grsaiapi.com/v1"
         OR_BASE = "https://openrouter.ai/api/v1"
         GRSAI_MODELS = ["gpt-5.5", "gpt-5.4",
-                        "gemini-3.1-pro", "gemini-3.5-flash", "gemini-3-pro", "gemini-3-flash",
-                        "gemini-2.5-pro", "gemini-2.5-flash"]
+                        "gemini-3.1-pro", "gemini-3.1-flash-lite", "gemini-3.5-flash",
+                        "gemini-3-pro", "gemini-3-flash", "gemini-2.5-pro", "gemini-2.5-flash"]
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers

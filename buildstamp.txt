@@ -1,1 +1,1 @@
-swap-apipod-to-grsai-provider-gpt55-main+gemini-vision+openrouter-fallback-2026-06-05T09:20Z
+grsai-vision-default-gemini-3.1-flash-lite-2026-06-05T09:45Z
