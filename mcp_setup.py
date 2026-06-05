@@ -59,7 +59,9 @@ servers = {
 COMMON = ["/opt/skills-common"]
 # GENERAL = superpowers, shared to EVERY profile. marketer also gets it now (user: "full general across profile").
 SKILLS_BY_PROFILE = {
-    "marketer":  ["/opt/skills/superpowers/skills", "/opt/skills-mkt"] + COMMON,   # general + marketing + meta-ads + messaging
+    # marketer: ONLY the 2 marketing skills (meta-ads-playbook-2026 + agency-8-agents). No general/
+    # superpowers/common — it works directly via the zernio MCP; whacenter usage is in the SOUL.
+    "marketer":  ["/opt/skills-mkt"],
     "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"] + COMMON,   # general + dev + cavecrew + messaging
 }
 SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"] + COMMON  # default = everything + messaging
