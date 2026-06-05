@@ -110,6 +110,26 @@ for home in homes():
     tm = cfg.get("terminal") or {}
     tm["cwd"] = os.path.join(HOME, "workspace")
     cfg["terminal"] = tm
+    # ── APIPod as the MAIN model (cheap Claude via code.apipod.ai, OpenAI-compatible, vision-capable).
+    # Gated on the APIPOD_API_KEY env var: if it's set, APIPod becomes the default provider for chat
+    # + agents; if it's absent, NOTHING changes (minimax stays) — so this is a safe, instant rollback
+    # (just remove the env var). The token is referenced via ${APIPOD_API_KEY}, never written to git.
+    if os.environ.get("APIPOD_API_KEY", "").strip():
+        APIPOD_BASE = "https://code.apipod.ai/v1"
+        APIPOD_MODELS = ["claude-sonnet-4-5", "claude-opus-4-6", "claude-haiku-4-5"]
+        APIPOD_DEFAULT = os.environ.get("APIPOD_DEFAULT_MODEL", "claude-sonnet-4-5").strip()
+        cps = [c for c in (cfg.get("custom_providers") or [])
+               if isinstance(c, dict) and str(c.get("name") or "").lower() != "apipod"]
+        cps.append({"name": "apipod", "base_url": APIPOD_BASE,
+                    "api_key": "${APIPOD_API_KEY}", "models": APIPOD_MODELS})
+        # OpenRouter stays available as a FALLBACK (key from env), only if provided.
+        if os.environ.get("OPENROUTER_API_KEY", "").strip():
+            cps = [c for c in cps if str(c.get("name") or "").lower() != "openrouter"]
+            cps.append({"name": "openrouter", "base_url": "https://openrouter.ai/api/v1",
+                        "api_key": "${OPENROUTER_API_KEY}"})
+        cfg["custom_providers"] = cps
+        cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
+                        "api_key": "${APIPOD_API_KEY}", "default": APIPOD_DEFAULT}
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
