@@ -22,6 +22,7 @@ import threading
 import time
 import uuid
 import re
+from collections import defaultdict
 from pathlib import Path
 from contextlib import closing
 from urllib.parse import parse_qs, urlsplit
@@ -39,6 +40,21 @@ from api.session_events import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _publish_session_list_changed(reason: str, *, profile: str | None = None) -> None:
+    """Publish profile-scoped session changes while tolerating legacy test doubles."""
+    if not profile:
+        publish_session_list_changed(reason)
+        return
+    try:
+        publish_session_list_changed(reason, profile=profile)
+    except TypeError:
+        # Some focused tests monkeypatch the route-level publisher with the
+        # historical one-argument shape. Preserve the old signal instead of
+        # turning unrelated session mutations into 500s.
+        publish_session_list_changed(reason)
+
 
 # ── Cron run tracking ────────────────────────────────────────────────────────
 # Track job IDs currently being executed so the frontend can poll status.
@@ -772,6 +788,16 @@ def _profile_home_for_cron_job(job: dict):
     return get_hermes_home_for_profile(raw)
 
 
+def _event_profile_for_cron_job(job: dict) -> str | None:
+    """Return the profile identity browsers should refresh for a manual cron run."""
+    raw = str((job or {}).get("profile") or "").strip()
+    if not raw:
+        return None
+    if raw not in _available_cron_profile_names():
+        return None
+    return raw
+
+
 def _cron_job_subprocess_main(job, execution_profile_home, result_queue):
     """Run one cron job inside a child process pinned to a profile home."""
     try:
@@ -880,7 +906,12 @@ def _run_cron_job_in_profile_subprocess(job, execution_profile_home):
     raise RuntimeError(message)
 
 
-def _run_cron_tracked(job, profile_home=None, execution_profile_home=None):
+def _run_cron_tracked(
+    job,
+    profile_home=None,
+    execution_profile_home=None,
+    event_profile=None,
+):
     """Wrapper that tracks running state around cron.scheduler.run_job.
 
     ``profile_home`` is the cron store that owns the job row/output metadata.
@@ -961,7 +992,7 @@ def _run_cron_tracked(job, profile_home=None, execution_profile_home=None):
             logger.debug("Failed to mark manual cron run failure for %s", job_id)
     finally:
         _mark_cron_done(job_id)
-        publish_session_list_changed("cron_complete")
+        _publish_session_list_changed("cron_complete", profile=event_profile)
 
 _PROVIDER_ALIASES = {
     "claude": "anthropic",
@@ -1480,18 +1511,23 @@ def _check_csrf(handler) -> bool:
     if origin_value in _allowed_public_origins():
         origin_allowed = True
     if not origin_allowed:
-        # Allow same-origin: check Host, X-Forwarded-Host (reverse proxy), and
-        # X-Real-Host against the origin. Reverse proxies (Caddy, nginx) set
-        # X-Forwarded-Host to the client's original Host header.
+        # Allow same-origin Host by default. Forwarded host headers are only
+        # trustworthy behind a proxy that strips untrusted inbound copies.
         allowed_hosts = [
             h.strip()
-            for h in [
-                host,
-                handler.headers.get("X-Forwarded-Host", ""),
-                handler.headers.get("X-Real-Host", ""),
-            ]
+            for h in [host]
             if h.strip()
         ]
+        trust_forwarded_host = os.getenv("HERMES_WEBUI_TRUST_FORWARDED_HOST", "").strip().lower()
+        if trust_forwarded_host in ("1", "true", "yes", "on"):
+            allowed_hosts.extend(
+                h.strip()
+                for h in [
+                    handler.headers.get("X-Forwarded-Host", ""),
+                    handler.headers.get("X-Real-Host", ""),
+                ]
+                if h.strip()
+            )
         for allowed in allowed_hosts:
             allowed_name, allowed_port = _normalize_host_port(allowed)
             if origin_name == allowed_name and _ports_match(origin_scheme, origin_port, allowed_port):
@@ -2865,7 +2901,7 @@ from api.models import (
     _is_empty_partial_activity_message,
     _hide_from_default_sidebar,
     prune_session_from_index,
-    agent_session_row_exists,
+    agent_session_rows_existing,
     ensure_cron_project,
     is_cron_session,
     is_safe_session_id,
@@ -2883,6 +2919,12 @@ from api.workspace import (
     safe_resolve_ws,
     resolve_trusted_workspace,
     open_anchored_fd,
+    open_anchored_create_fd,
+    open_anchored_write_fd,
+    unlink_anchored,
+    rmtree_anchored,
+    rename_anchored,
+    make_anchored_dir,
     validate_workspace_to_add,
     _is_blocked_system_path,
     _strip_surrounding_quotes,
@@ -2916,131 +2958,29 @@ from api.oauth import (
     start_onboarding_oauth_flow,
 )
 
-# Approval system (optional -- graceful fallback if agent not available)
-try:
-    from tools.approval import (
-        submit_pending as _submit_pending_raw,
-        approve_session,
-        approve_permanent,
-        save_permanent_allowlist,
-        is_approved,
-        _pending,
-        _lock,
-        _permanent_approved,
-        _gateway_queues,
-        resolve_gateway_approval,
-        enable_session_yolo,
-        disable_session_yolo,
-        is_session_yolo_enabled,
-    )
-except ImportError:
-    _submit_pending_raw = lambda *a, **k: None
-    approve_session = lambda *a, **k: None
-    approve_permanent = lambda *a, **k: None
-    save_permanent_allowlist = lambda *a, **k: None
-    is_approved = lambda *a, **k: True
-    resolve_gateway_approval = lambda *a, **k: 0
-    enable_session_yolo = lambda *a, **k: None
-    disable_session_yolo = lambda *a, **k: None
-    is_session_yolo_enabled = lambda *a, **k: False
-    _pending = {}
-    _lock = threading.Lock()
-    _permanent_approved = set()
-    _gateway_queues = {}
-
-
-# ── Approval SSE subscribers (long-connection push) ──────────────────────────
-_approval_sse_subscribers: dict[str, list[queue.Queue]] = {}
-
-
-def _approval_sse_subscribe(session_id: str) -> queue.Queue:
-    """Register an SSE subscriber for approval events on a given session."""
-    q = queue.Queue(maxsize=16)
-    with _lock:
-        _approval_sse_subscribers.setdefault(session_id, []).append(q)
-    return q
-
-
-def _approval_sse_unsubscribe(session_id: str, q: queue.Queue) -> None:
-    """Remove an SSE subscriber."""
-    with _lock:
-        subs = _approval_sse_subscribers.get(session_id)
-        if subs and q in subs:
-            subs.remove(q)
-            if not subs:
-                _approval_sse_subscribers.pop(session_id, None)
-
-
-def _approval_sse_notify_locked(session_id: str, head: dict | None, total: int) -> None:
-    """Push an approval event to all SSE subscribers for a session.
-
-    CALLER MUST HOLD `_lock`. Snapshots the subscriber list under the held
-    lock and then calls `q.put_nowait()` on each (which is itself thread-safe).
-
-    `head` is the approval entry currently at the head of the queue (the one
-    the UI should display) — NOT the just-appended entry. With multiple
-    parallel approvals (#527), the just-appended entry is at the TAIL, but
-    `/api/approval/pending` always returns the HEAD, so SSE must match.
-
-    `total` is the total number of pending approvals.
-
-    Pass `head=None` and `total=0` when the queue has just been emptied (e.g.
-    `_handle_approval_respond` popped the last entry) so the client knows to
-    hide its approval card.
-    """
-    payload = {"pending": dict(head) if head else None, "pending_count": total}
-    subs = _approval_sse_subscribers.get(session_id, ())
-    for q in subs:
-        try:
-            q.put_nowait(payload)
-        except queue.Full:
-            pass  # drop if subscriber is slow (bounded queue prevents memory leak)
-
-
-def _approval_sse_notify(session_id: str, head: dict | None, total: int) -> None:
-    """Convenience wrapper that takes `_lock` itself.
-
-    Use only from contexts that don't already hold `_lock`. Production call
-    sites (submit_pending, _handle_approval_respond) MUST hold the lock and
-    call `_approval_sse_notify_locked` directly to avoid a notify-ordering
-    race where a later append's notify can fire before an earlier append's
-    notify (resulting in stale `pending_count`).
-    """
-    with _lock:
-        _approval_sse_notify_locked(session_id, head, total)
-
-
-def submit_pending(session_key: str, approval: dict) -> None:
-    """Append a pending approval to the per-session queue.
-
-    Wraps the agent's submit_pending to:
-    - Add a stable approval_id (uuid4 hex) so the respond endpoint can target
-      a specific entry even when multiple approvals are queued simultaneously.
-    - Change the storage from a single overwriting dict value to a list, so
-      parallel tool calls each get their own approval slot (fixes #527).
-    - Notify any connected SSE subscribers immediately.
-    """
-    entry = dict(approval)
-    entry.setdefault("approval_id", uuid.uuid4().hex)
-    with _lock:
-        queue_list = _pending.setdefault(session_key, [])
-        # Replace a legacy non-list value if the agent version uses the old pattern.
-        if not isinstance(queue_list, list):
-            _pending[session_key] = [queue_list]
-            queue_list = _pending[session_key]
-        queue_list.append(entry)
-        total = len(queue_list)
-        head = queue_list[0]  # /api/approval/pending always returns head
-        # Push to SSE subscribers from inside _lock so two parallel
-        # submit_pending calls can't deliver out-of-order (T2's later
-        # notify arriving before T1's earlier notify with a stale count).
-        _approval_sse_notify_locked(session_key, head, total)
-    publish_session_list_changed("attention_pending")
-    # NOTE: We do NOT call _submit_pending_raw here — that function overwrites
-    # _pending[session_key] with a single dict, which would undo the list we just
-    # built. The gateway blocking path uses _gateway_queues (a separate mechanism
-    # managed by check_all_command_guards / register_gateway_notify), which is
-    # unaffected by _pending. The _pending dict is only used for UI polling.
+# Approval system -- state and helpers live in api.route_approvals; imported
+# here for backward compatibility so existing call sites continue to resolve.
+from api.route_approvals import (  # noqa: F401 — re-exports for backward compat
+    _submit_pending_raw,
+    approve_session,
+    approve_permanent,
+    save_permanent_allowlist,
+    is_approved,
+    _pending,
+    _lock,
+    _permanent_approved,
+    _gateway_queues,
+    resolve_gateway_approval,
+    enable_session_yolo,
+    disable_session_yolo,
+    is_session_yolo_enabled,
+    _approval_sse_subscribers,
+    _approval_sse_subscribe,
+    _approval_sse_unsubscribe,
+    _approval_sse_notify_locked,
+    _approval_sse_notify,
+    submit_pending,
+)
 
 # Clarify prompts (optional -- graceful fallback if agent not available)
 try:
@@ -5387,12 +5327,13 @@ def handle_get(handler, parsed) -> bool:
                 # the sidecar is never pruned and the stale row lingers in the
                 # sidebar forever (there is no WebUI delete affordance for it).
                 # Drop rows whose backing agent row is genuinely gone. We probe
-                # state.db directly (agent_session_row_exists) rather than trust
+                # state.db directly (agent_session_rows_existing) rather than trust
                 # cli_by_id absence, because get_cli_sessions() caps at
                 # CLI_VISIBLE_SESSION_LIMIT (20) — an existing session can fall
                 # out of that window and look deleted. Native WebUI sessions
                 # (source == "webui") that merely have a CLI ancestor are never
                 # pruned.
+                _orphan_probe_rows = []
                 _kept_after_orphan_prune = []
                 for s in webui_sessions:
                     _sid = s.get("session_id")
@@ -5401,15 +5342,43 @@ def handle_get(handler, parsed) -> bool:
                         and is_cli_session_row(s)
                         and not _session_source_is_webui(s)
                         and _sid not in cli_by_id
-                        and not agent_session_row_exists(_sid, profile=s.get("profile"))
                     ):
-                        try:
-                            prune_session_from_index(_sid)
-                        except Exception:
-                            logger.debug("Failed to prune orphaned CLI sidecar %s", _sid, exc_info=True)
-                        diag.stage("prune_orphaned_cli_sidecar")
-                        continue
-                    _kept_after_orphan_prune.append(s)
+                        _orphan_probe_rows.append(s)
+                    else:
+                        _kept_after_orphan_prune.append(s)
+                if _orphan_probe_rows:
+                    rows_by_profile: dict[object, list[dict]] = defaultdict(list)
+                    for row in _orphan_probe_rows:
+                        rows_by_profile[row.get("profile")].append(row)
+                    missing_orphan_ids: set[str] = set()
+                    for profile_key, rows in rows_by_profile.items():
+                        probe_ids = [
+                            str(row.get("session_id")).strip()
+                            for row in rows
+                            if str(row.get("session_id") or "").strip()
+                        ]
+                        existing = agent_session_rows_existing(
+                            probe_ids,
+                            profile=profile_key if isinstance(profile_key, str) and profile_key else None,
+                        )
+                        for row in rows:
+                            sid = str(row.get("session_id") or "").strip()
+                            if sid and sid not in existing:
+                                missing_orphan_ids.add(sid)
+                    for s in _orphan_probe_rows:
+                        _sid = str(s.get("session_id") or "").strip()
+                        if _sid in missing_orphan_ids:
+                            try:
+                                prune_session_from_index(_sid)
+                            except Exception:
+                                logger.debug(
+                                    "Failed to prune orphaned CLI sidecar %s",
+                                    _sid,
+                                    exc_info=True,
+                                )
+                            diag.stage("prune_orphaned_cli_sidecar")
+                            continue
+                        _kept_after_orphan_prune.append(s)
                 webui_sessions = _kept_after_orphan_prune
                 for s in webui_sessions:
                     meta = cli_by_id.get(s.get("session_id"))
@@ -5872,11 +5841,20 @@ def handle_get(handler, parsed) -> bool:
         )
 
     if parsed.path == "/api/profile/active":
-        from api.profiles import get_active_profile_name, get_active_hermes_home
+        from api.profiles import (
+            _is_root_profile,
+            get_active_hermes_home,
+            get_active_profile_name,
+        )
 
+        active_profile_name = get_active_profile_name()
         return j(
             handler,
-            {"name": get_active_profile_name(), "path": str(get_active_hermes_home())},
+            {
+                "name": active_profile_name,
+                "path": str(get_active_hermes_home()),
+                "is_default": _is_root_profile(active_profile_name),
+            },
         )
 
     # ── Gateway Status (GET) ──
@@ -5902,6 +5880,10 @@ def handle_get(handler, parsed) -> bool:
         #           setup is probably not configured with a gateway
         health = build_agent_health_payload()
         alive = health.get("alive")
+        details = health.get("details") if isinstance(health.get("details"), dict) else {}
+        health_reason = details.get("reason")
+        health_state = details.get("state")
+        health_gateway_state = details.get("gateway_state")
         if alive is True:
             running = True
             configured = True
@@ -5924,10 +5906,9 @@ def handle_get(handler, parsed) -> bool:
             # configured" rather than nagging (#1944). So stale-stopped falls
             # through to the identity_map signal like the genuinely-unconfigured
             # case.
-            details = health.get("details") or {}
             gateway_running_metadata = (
-                details.get("reason") == "gateway_stale_running_state"
-                or details.get("gateway_state") == "running"
+                health_reason == "gateway_stale_running_state"
+                or health_gateway_state == "running"
             )
             configured = True if gateway_running_metadata else bool(identity_map)
             running = bool(identity_map)
@@ -5963,6 +5944,11 @@ def handle_get(handler, parsed) -> bool:
             "platforms": platforms,
             "last_active": last_active,
             "session_count": len(identity_map),
+            "health": {
+                "state": health_state,
+                "reason": health_reason,
+                "gateway_state": health_gateway_state,
+            },
         })
 
     # ── MCP Servers (GET) ──
@@ -6274,7 +6260,7 @@ def handle_post(handler, parsed) -> bool:
             worktree_info=worktree_info,
         )
         if worktree_info:
-            publish_session_list_changed("session_new")
+            publish_session_list_changed("session_new", profile=getattr(s, "profile", None))
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
     if parsed.path == "/api/session/duplicate":
@@ -6335,6 +6321,7 @@ def handle_post(handler, parsed) -> bool:
                 gateway_routing_history=copy.deepcopy(getattr(session, "gateway_routing_history", None) or []),
                 # Preserve LLM-generated title flag so we don't regenerate title on duplicate.
                 llm_title_generated=getattr(session, "llm_title_generated", False),
+                manual_title=getattr(session, "manual_title", False),
                 # Composer draft — preserve per-session draft state.
                 composer_draft=copy.deepcopy(getattr(session, "composer_draft", None) or {}),
                 # Context engine state — preserve so the duplicate's context engine
@@ -6355,7 +6342,7 @@ def handle_post(handler, parsed) -> bool:
             # Without this explicit save, the duplicate is in-memory only — if the user
             # refreshes before sending a turn, the duplicate vanishes.
             copied_session.save()
-            publish_session_list_changed("session_duplicate")
+            publish_session_list_changed("session_duplicate", profile=getattr(copied_session, "profile", None))
 
             return j(handler, {"session": copied_session.compact() | {"messages": copied_session.messages}})
         except Exception as e:
@@ -6495,10 +6482,11 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             return bad(handler, "Session not found", 404)
         with _get_session_agent_lock(body["session_id"]):
-            s.title = str(body["title"]).strip()[:80] or "Untitled"
+            from api.session_ops import apply_session_title_rename
+            apply_session_title_rename(s, body["title"])
             s.save()
         _sync_session_title_to_insights(s)
-        publish_session_list_changed("session_rename")
+        publish_session_list_changed("session_rename", profile=getattr(s, "profile", None))
         return j(handler, {"session": s.compact()})
 
 
@@ -6521,10 +6509,12 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, f"Could not generate a better title ({reason or 'empty'})", 422)
         with _get_session_agent_lock(sid):
             s.title = str(next_title).strip()[:80] or "Untitled"
-            s.llm_title_generated = True
+            from api.session_ops import mark_session_title_generated
+            # mark_session_title_generated sets s.llm_title_generated = True and clears manual_title.
+            mark_session_title_generated(s)
             s.save(touch_updated_at=False)
         _sync_session_title_to_insights(s)
-        publish_session_list_changed("session_title_regenerate")
+        publish_session_list_changed("session_title_regenerate", profile=getattr(s, "profile", None))
         return j(handler, {
             "session": s.compact(),
             "title": s.title,
@@ -6754,6 +6744,13 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Read-only imported sessions cannot be deleted from WebUI", 400)
         is_messaging_session = _is_messaging_session_id(sid)
         worktree_retained = _worktree_retained_payload_for_session_id(sid)
+        try:
+            event_profile = getattr(get_session(sid, metadata_only=True), "profile", None)
+        except KeyError:
+            event_profile = None
+        except Exception:
+            logger.debug("Failed to resolve profile for deleted session %s", sid, exc_info=True)
+            event_profile = None
         # Delete from WebUI session store
         with LOCK:
             SESSIONS.pop(sid, None)
@@ -6798,7 +6795,7 @@ def handle_post(handler, parsed) -> bool:
                 delete_cli_session(sid)
             except Exception:
                 logger.debug("Failed to delete CLI session %s", sid)
-        publish_session_list_changed("session_delete")
+        _publish_session_list_changed("session_delete", profile=event_profile)
         return j(handler, {"ok": True, **worktree_retained})
 
     if parsed.path == "/api/session/clear":
@@ -6814,7 +6811,12 @@ def handle_post(handler, parsed) -> bool:
         with _get_session_agent_lock(sid):
             s.messages = []
             s.tool_calls = []
-            s.title = "Untitled"
+            # Reset the title via the rename helper so clearing a manually-named
+            # session also clears manual_title/llm_title_generated — otherwise the
+            # reused session keeps its manual-title protection and never auto-names
+            # again (#3542 lifecycle gap).
+            from api.session_ops import apply_session_title_rename
+            apply_session_title_rename(s, "Untitled")
             s.save()
         # Evict cached agent outside the per-session lock.  Eviction may run a
         # boundary memory commit for batch-extraction providers, and provider
@@ -6969,7 +6971,7 @@ def handle_post(handler, parsed) -> bool:
         # Persist only if there are messages (matches new_session pattern)
         if forked_messages:
             branch.save()
-            publish_session_list_changed("session_branch")
+            publish_session_list_changed("session_branch", profile=getattr(branch, "profile", None))
 
         return j(handler, {
             "session_id": branch.session_id,
@@ -7205,11 +7207,21 @@ def handle_post(handler, parsed) -> bool:
 
     # ── Commands (POST) ──
     if parsed.path == "/api/commands/exec":
-        from api.commands import execute_plugin_command
+        from api.commands import execute_agent_command, execute_plugin_command
 
         command = str(body.get("command", "") or "").strip()
         if not command:
             return bad(handler, "command is required")
+
+        try:
+            return j(handler, {"output": execute_agent_command(command)})
+        except KeyError:
+            pass
+        except ValueError as e:
+            return bad(handler, str(e), 400)
+        except RuntimeError as e:
+            return bad(handler, _sanitize_error(e), 500)
+
         try:
             return j(handler, {"output": execute_plugin_command(command)})
         except ValueError as e:
@@ -7550,7 +7562,7 @@ def handle_post(handler, parsed) -> bool:
             with _get_session_agent_lock(body["session_id"]):
                 s.pinned = pin_requested
                 s.save()
-        publish_session_list_changed("session_pin")
+        publish_session_list_changed("session_pin", profile=getattr(s, "profile", None))
         return j(handler, {"ok": True, "session": s.compact()})
 
     # ── Session archive (POST) ──
@@ -7627,7 +7639,7 @@ def handle_post(handler, parsed) -> bool:
         with _get_session_agent_lock(sid):
             s.archived = bool(body.get("archived", True))
             s.save(touch_updated_at=False)
-        publish_session_list_changed("session_archive")
+        publish_session_list_changed("session_archive", profile=getattr(s, "profile", None))
         return j(handler, {"ok": True, "session": s.compact(), **_worktree_retained_payload(s)})
 
     # ── Session move to project (POST) ──
@@ -7662,7 +7674,7 @@ def handle_post(handler, parsed) -> bool:
         with _get_session_agent_lock(body["session_id"]):
             s.project_id = target_pid
             s.save()
-        publish_session_list_changed("session_move")
+        publish_session_list_changed("session_move", profile=getattr(s, "profile", None))
         return j(handler, {"ok": True, "session": s.compact()})
 
     # ── Project CRUD (POST) ──
@@ -7925,7 +7937,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/options":
         from api.auth import _passkey_feature_flag_enabled, is_auth_enabled
-        from api.passkeys import PasskeyError, authentication_options
+        from api.passkeys import PasskeyError, PasskeyRateLimitError, authentication_options
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled. Set HERMES_WEBUI_PASSKEY=1 or webui_passkey_enabled: true to enable."}, status=404)
@@ -7933,6 +7945,8 @@ def handle_post(handler, parsed) -> bool:
             return j(handler, {"error": "Auth not enabled"}, status=400)
         try:
             return j(handler, {"ok": True, "publicKey": authentication_options(handler)})
+        except PasskeyRateLimitError as e:
+            return bad(handler, str(e), status=429)
         except PasskeyError as e:
             return bad(handler, str(e), status=400)
 
@@ -7965,11 +7979,16 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/register/options":
         from api.auth import _passkey_feature_flag_enabled
-        from api.passkeys import registration_options
+        from api.passkeys import PasskeyError, PasskeyRateLimitError, registration_options
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled."}, status=404)
-        return j(handler, {"ok": True, "publicKey": registration_options(handler)})
+        try:
+            return j(handler, {"ok": True, "publicKey": registration_options(handler)})
+        except PasskeyRateLimitError as e:
+            return bad(handler, str(e), status=429)
+        except PasskeyError as e:
+            return bad(handler, str(e), status=400)
 
     if parsed.path == "/api/auth/passkey/register":
         from api.auth import _passkey_feature_flag_enabled
@@ -8271,6 +8290,15 @@ def _handle_sessions_search(handler, parsed):
     qs = parse_qs(parsed.query)
     q = qs.get("q", [""])[0].lower().strip()
     content_search = qs.get("content", ["1"])[0] == "1"
+    from api.profiles import get_active_profile_name
+    active_profile = get_active_profile_name()
+    all_profiles = _all_profiles_query_flag(parsed)
+    sessions = all_sessions()
+    if not all_profiles:
+        sessions = [
+            s for s in sessions
+            if _profiles_match(s.get("profile"), active_profile)
+        ]
     # Reject a malformed depth instead of letting int() raise ValueError and
     # surface as a confusing 500. Clamp to >= 0 so a negative value can't reach
     # the messages[:depth] slice below — messages[:-n] would silently exclude
@@ -8282,14 +8310,18 @@ def _handle_sessions_search(handler, parsed):
         depth = 5
     if not q:
         safe_sessions = []
-        for s in all_sessions():
+        for s in sessions:
             item = dict(s)
             if isinstance(item.get("title"), str):
                 item["title"] = _redact_text(item["title"])
             safe_sessions.append(item)
-        return j(handler, {"sessions": safe_sessions})
+        return j(handler, {
+            "sessions": safe_sessions,
+            "all_profiles": all_profiles,
+            "active_profile": active_profile,
+        })
     results = []
-    for s in all_sessions():
+    for s in sessions:
         title_match = q in (s.get("title") or "").lower()
         if title_match:
             item = dict(s, match_type="title")
@@ -8314,7 +8346,13 @@ def _handle_sessions_search(handler, parsed):
                         break
             except (KeyError, Exception):
                 pass
-    return j(handler, {"sessions": results, "query": q, "count": len(results)})
+    return j(handler, {
+        "sessions": results,
+        "query": q,
+        "count": len(results),
+        "all_profiles": all_profiles,
+        "active_profile": active_profile,
+    })
 
 
 def _handle_list_dir(handler, parsed):
@@ -8860,64 +8898,105 @@ def _parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | 
         return None
 
 
-def _serve_file_bytes(handler, target: Path, mime: str, disposition: str, cache_control: str, *, csp: str | None = None):
-    """Serve a file with correct MIME/disposition and optional byte-range support."""
+def _open_file_read_fd(target: Path, anchor_root: Path | None = None) -> int:
+    if anchor_root is None:
+        return os.open(str(target), os.O_RDONLY)
+    return open_anchored_fd(anchor_root, target.resolve(), want_dir=False)
+
+
+def _close_fd_quietly(fd: int | None) -> None:
+    if fd is None:
+        return
     try:
-        file_size = target.stat().st_size
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def _serve_file_bytes(handler, target: Path, mime: str, disposition: str, cache_control: str, *, csp: str | None = None, anchor_root: Path | None = None):
+    """Serve a file with correct MIME/disposition and optional byte-range support."""
+    fd = None
+    try:
+        fd = _open_file_read_fd(target, anchor_root)
+        file_size = os.fstat(fd).st_size
     except PermissionError:
+        _close_fd_quietly(fd)
         return bad(handler, "Permission denied", 403)
+    except FileNotFoundError:
+        _close_fd_quietly(fd)
+        return j(handler, {"error": "not found"}, status=404)
+    except ValueError as e:
+        _close_fd_quietly(fd)
+        return bad(handler, _sanitize_error(e), 403)
     except Exception:
+        _close_fd_quietly(fd)
         return bad(handler, "Could not stat file", 500)
 
-    byte_range = _parse_range_header(handler.headers.get("Range", ""), file_size)
-    if handler.headers.get("Range") and byte_range is None:
-        handler.send_response(416)
-        handler.send_header("Content-Range", f"bytes */{file_size}")
-        handler.send_header("Accept-Ranges", "bytes")
-        handler.send_header("Content-Length", "0")
-        _security_headers(handler)
-        handler.end_headers()
-        return True
-
-    start, end = byte_range if byte_range else (0, max(0, file_size - 1))
-    content_length = end - start + 1 if file_size else 0
-    handler.send_response(206 if byte_range else 200)
-    handler.send_header("Content-Type", mime)
-    handler.send_header("Content-Length", str(content_length))
-    handler.send_header("Accept-Ranges", "bytes")
-    if byte_range:
-        handler.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
-    handler.send_header("Cache-Control", cache_control)
-    handler.send_header("Content-Disposition", _content_disposition_value(disposition, target.name))
-    if csp:
-        # Sandboxed inline HTML must remain frameable for workspace previews;
-        # X-Frame-Options: DENY would block the iframe before CSP sandbox applies.
-        handler.send_header("Content-Security-Policy", csp)
-        handler.send_header("X-Content-Type-Options", "nosniff")
-        handler.send_header("Referrer-Policy", "same-origin")
-        handler.send_header(
-            "Permissions-Policy",
-            "camera=(), microphone=(self), geolocation=(), clipboard-write=(self)",
-        )
-    else:
-        _security_headers(handler)
-    handler.end_headers()
-
-    if content_length:
-        try:
-            with target.open("rb") as f:
-                f.seek(start)
-                remaining = content_length
-                while remaining:
-                    chunk = f.read(min(1024 * 1024, remaining))
-                    if not chunk:
-                        break
-                    handler.wfile.write(chunk)
-                    remaining -= len(chunk)
-        except PermissionError:
+    try:
+        byte_range = _parse_range_header(handler.headers.get("Range", ""), file_size)
+        if handler.headers.get("Range") and byte_range is None:
+            handler.send_response(416)
+            handler.send_header("Content-Range", f"bytes */{file_size}")
+            handler.send_header("Accept-Ranges", "bytes")
+            handler.send_header("Content-Length", "0")
+            _security_headers(handler)
+            handler.end_headers()
             return True
-    return True
 
+        start, end = byte_range if byte_range else (0, max(0, file_size - 1))
+        content_length = end - start + 1 if file_size else 0
+        handler.send_response(206 if byte_range else 200)
+        handler.send_header("Content-Type", mime)
+        handler.send_header("Content-Length", str(content_length))
+        handler.send_header("Accept-Ranges", "bytes")
+        if byte_range:
+            handler.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        handler.send_header("Cache-Control", cache_control)
+        handler.send_header("Content-Disposition", _content_disposition_value(disposition, target.name))
+        if csp:
+            # Sandboxed inline HTML must remain frameable for workspace previews;
+            # X-Frame-Options: DENY would block the iframe before CSP sandbox applies.
+            handler.send_header("Content-Security-Policy", csp)
+            handler.send_header("X-Content-Type-Options", "nosniff")
+            handler.send_header("Referrer-Policy", "same-origin")
+            handler.send_header(
+                "Permissions-Policy",
+                "camera=(), microphone=(self), geolocation=(), clipboard-write=(self)",
+            )
+        else:
+            _security_headers(handler)
+        handler.end_headers()
+
+        if content_length:
+            try:
+                with os.fdopen(fd, "rb", closefd=True) as f:
+                    fd = None
+                    f.seek(start)
+                    remaining = content_length
+                    while remaining:
+                        chunk = f.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            break
+                        handler.wfile.write(chunk)
+                        remaining -= len(chunk)
+            except PermissionError:
+                return True
+        return True
+    finally:
+        _close_fd_quietly(fd)
+
+
+
+def _normalize_tts_prosody(value, *, unit: str) -> str | None:
+    if not value:
+        return ""
+    value = str(value).strip()
+    if not re.fullmatch(r"[+-]?\d{1,3}" + re.escape(unit), value):
+        return None
+    amount = int(value[: -len(unit)])
+    if -100 <= amount <= 100:
+        return value
+    return None
 
 
 def _handle_tts(handler, parsed):
@@ -8929,9 +9008,11 @@ def _handle_tts(handler, parsed):
     only its own thread during Microsoft network I/O + streaming; other clients
     are unaffected. Combined with early auth, a strict per-client 2 s rate
     limit, 5000-char cap, and voice allowlist, the blocking cost is bounded and
-    intentional. Streaming chunks directly via stream_sync() keeps memory
-    usage low. A cross-thread pool + queue would add complexity and wfile
-    thread-safety issues with no practical gain under the current model.
+    intentional. All audio chunks are buffered before sending so that a
+    Content-Length header can be included. The 5000-char cap bounds audio to
+    roughly 1-5 MB, making full buffering safe. Without Content-Length the
+    HTTP/1.0 server leaves the response open until a ~31 s timeout fires, and
+    the browser cannot play the blob mid-stream.
     If the HTTP layer ever moves to asyncio we can adopt edge_tts's native
     async API at that time.
     """
@@ -8948,11 +9029,18 @@ def _handle_tts(handler, parsed):
         data = read_body(handler)
         text = (data.get("text") or "").strip()
         voice = data.get("voice") or voice
-        rate_str = data.get("rate") or ""
-        pitch_str = data.get("pitch") or ""
+        rate_str = _normalize_tts_prosody(data.get("rate"), unit="%")
+        pitch_str = _normalize_tts_prosody(data.get("pitch"), unit="Hz")
     except Exception:
         from api.helpers import bad as _bad
         return _bad(handler, "invalid request body", 400)
+
+    if rate_str is None:
+        from api.helpers import bad as _bad
+        return _bad(handler, "invalid rate", 400)
+    if pitch_str is None:
+        from api.helpers import bad as _bad
+        return _bad(handler, "invalid pitch", 400)
 
     if not text:
         from api.helpers import bad as _bad
@@ -8981,12 +9069,14 @@ def _handle_tts(handler, parsed):
                 self._checks = 0
 
             def _get_client_key(self, h):
-                for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded"):
-                    val = h.headers.get(hdr)
-                    if val:
-                        ip = val.split(",")[0].strip().split(";")[0].strip()
-                        if ip:
-                            return ip
+                trust_proxy = os.getenv("HERMES_WEBUI_TRUST_FORWARDED_FOR", "").strip().lower()
+                if trust_proxy in ("1", "true", "yes", "on"):
+                    for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded"):
+                        val = h.headers.get(hdr)
+                        if val:
+                            ip = val.split(",")[0].strip().split(";")[0].strip()
+                            if ip:
+                                return ip
                 return getattr(h, "client_address", ("unknown",))[0]
 
             def check(self, handler, session_cookie=None):
@@ -9037,17 +9127,27 @@ def _handle_tts(handler, parsed):
 
         comm = edge_tts.Communicate(text, voice, **kwargs)
 
-        handler.send_response(200)
-        handler.send_header("Content-Type", "audio/mpeg")
-        handler.send_header("Cache-Control", "no-store")
-        handler.end_headers()
-
+        # Buffer all audio chunks before responding so Content-Length is known.
+        # Without it the HTTP/1.0 server holds the connection open until a ~31 s
+        # timeout fires and the browser cannot play the resulting blob.
+        audio_buf = bytearray()
         for chunk in comm.stream_sync():
             if chunk.get("type") == "audio" and chunk.get("data"):
-                try:
-                    handler.wfile.write(chunk["data"])
-                except (BrokenPipeError, ConnectionResetError):
-                    return True
+                audio_buf.extend(chunk["data"])
+
+        if not audio_buf:
+            from api.helpers import bad as _bad
+            return _bad(handler, "TTS produced no audio", 500)
+
+        handler.send_response(200)
+        handler.send_header("Content-Type", "audio/mpeg")
+        handler.send_header("Content-Length", str(len(audio_buf)))
+        handler.send_header("Cache-Control", "no-store")
+        handler.end_headers()
+        try:
+            handler.wfile.write(audio_buf)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
         return True
 
     except BrokenPipeError:
@@ -9074,14 +9174,28 @@ def _html_preview_with_blank_base(raw: bytes) -> bytes:
     return text.encode("utf-8")
 
 
-def _serve_inline_html_preview(handler, target: Path, cache_control: str, *, csp: str):
+def _serve_inline_html_preview(handler, target: Path, cache_control: str, *, csp: str, anchor_root: Path | None = None):
     """Serve sandboxed workspace HTML preview with links targeting a new tab."""
+    fd = None
     try:
-        body = _html_preview_with_blank_base(target.read_bytes())
+        fd = _open_file_read_fd(target, anchor_root)
+        with os.fdopen(fd, "rb", closefd=True) as f:
+            fd = None
+            body = _html_preview_with_blank_base(f.read())
     except PermissionError:
         return bad(handler, "Permission denied", 403)
+    except FileNotFoundError:
+        return j(handler, {"error": "not found"}, status=404)
+    except ValueError as e:
+        return bad(handler, _sanitize_error(e), 403)
     except Exception:
         return bad(handler, "Could not read file", 500)
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
     handler.send_response(200)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
@@ -9454,14 +9568,15 @@ def _handle_media(handler, parsed):
     return _serve_file_bytes(handler, target, mime, disposition, "private, max-age=3600", csp=csp)
 
 
-def _file_raw_target(session, sid: str, rel: str) -> Path | None:
+def _file_raw_target(session, sid: str, rel: str) -> tuple[Path, Path] | None:
     """Resolve /api/file/raw paths from the workspace or this session's uploads."""
+    workspace_root = Path(session.workspace)
     try:
-        target = safe_resolve(Path(session.workspace), rel)
+        target = safe_resolve(workspace_root, rel)
     except ValueError:
         target = None
     if target and target.exists() and target.is_file():
-        return target
+        return workspace_root, target
 
     # Chat uploads now live in a per-session attachment inbox outside the
     # workspace. Keep the public URL stable while scoping fallback lookup to
@@ -9469,11 +9584,12 @@ def _file_raw_target(session, sid: str, rel: str) -> Path | None:
     try:
         from api.upload import _session_attachment_dir
 
-        attachment_target = safe_resolve(_session_attachment_dir(sid), rel)
+        attachment_root = _session_attachment_dir(sid)
+        attachment_target = safe_resolve(attachment_root, rel)
     except Exception:
         return None
     if attachment_target.exists() and attachment_target.is_file():
-        return attachment_target
+        return attachment_root, attachment_target
     return None
 
 
@@ -9502,8 +9618,9 @@ def _folder_download_collect(target: Path, workspace_root: Path,
                               max_bytes: int, max_files: int):
     """Walk target dir; return (files, total_bytes, hit_limit_reason_or_None).
 
-    files is a list of (filesystem_path, archive_name) tuples ready for
-    ZipFile.write. Symlinks escaping the workspace are skipped.
+    files is a list of (filesystem_path, archive_name) tuples. Each filesystem
+    path is reopened through the workspace anchor when streamed into the ZIP.
+    Symlinks escaping the workspace are skipped.
     """
     import os as _os
     files = []
@@ -9615,11 +9732,24 @@ def _handle_folder_download(handler, parsed):
     written = 0
     with zipfile.ZipFile(handler.wfile, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         for fp, arcname in files:
+            fd = None
             try:
-                zf.write(fp, arcname=arcname)
+                fd = open_anchored_fd(workspace_root, fp.resolve(), want_dir=False)
+                info = zipfile.ZipInfo(arcname)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                with os.fdopen(fd, "rb", closefd=True) as src:
+                    fd = None
+                    with zf.open(info, "w") as dst:
+                        shutil.copyfileobj(src, dst, length=1024 * 1024)
                 written += 1
-            except (OSError, PermissionError) as e:
+            except (ValueError, OSError, PermissionError) as e:
                 logger.warning("folder-download: skipping %s: %s", fp, e)
+            finally:
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
     logger.info(
         "folder-download: streamed %d/%d files (~%d bytes) from %s",
         written, len(files), total_bytes, target,
@@ -9637,9 +9767,10 @@ def _handle_file_raw(handler, parsed):
         return bad(handler, "Session not found", 404)
     rel = qs.get("path", [""])[0]
     force_download = qs.get("download", [""])[0] == "1"
-    target = _file_raw_target(s, sid, rel)
-    if target is None:
+    resolved = _file_raw_target(s, sid, rel)
+    if resolved is None:
         return j(handler, {"error": "not found"}, status=404)
+    anchor_root, target = resolved
     ext = target.suffix.lower()
     mime = MIME_MAP.get(ext, "application/octet-stream")
     # Security: force download for dangerous MIME types to prevent XSS.
@@ -9661,8 +9792,8 @@ def _handle_file_raw(handler, parsed):
     csp = sandbox_csp if (inline_preview and not force_download and disposition == "inline") else None
     # _serve_file_bytes sends Content-Security-Policy when csp is set.
     if html_inline_ok:
-        return _serve_inline_html_preview(handler, target, "no-store", csp=sandbox_csp)
-    return _serve_file_bytes(handler, target, mime, disposition, "no-store", csp=csp)
+        return _serve_inline_html_preview(handler, target, "no-store", csp=sandbox_csp, anchor_root=anchor_root)
+    return _serve_file_bytes(handler, target, mime, disposition, "no-store", csp=csp, anchor_root=anchor_root)
 
 
 def _handle_file_read(handler, parsed):
@@ -10326,11 +10457,17 @@ def _cron_output_snippet(text: str, limit: int = 600) -> str:
 
 def _handle_cron_output(handler, parsed):
     from cron.jobs import OUTPUT_DIR as CRON_OUT
+    import re as _re
 
     qs = parse_qs(parsed.query)
     job_id = qs.get("job_id", [""])[0]
     if not job_id:
         return j(handler, {"error": "job_id required"}, status=400)
+    # Match the job_id boundary enforced by the newer cron history/detail
+    # handlers.  This endpoint also builds CRON_OUT / job_id before globbing
+    # markdown outputs, so reject traversal-shaped IDs before path resolution.
+    if not _re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}", job_id):
+        return j(handler, {"error": "invalid job_id"}, status=400)
     # Reject malformed limit instead of letting int() raise ValueError and
     # surface as a confusing 500. Clamp to a safe range; a negative value must
     # never reach the slice below — files is sorted newest-first, so a negative
@@ -10774,7 +10911,7 @@ def _start_chat_stream_for_session(
             stream_id=stream_id,
         )
     if was_hidden_empty_session:
-        publish_session_list_changed("session_new")
+        publish_session_list_changed("session_new", profile=getattr(s, "profile", None))
     diag.stage("turn_journal_submitted") if diag else None
     journal_event = {}
     try:
@@ -11491,7 +11628,8 @@ def _handle_cron_run(handler, body):
 
     _profile_home = get_active_hermes_home()
     _execution_profile_home = _profile_home_for_cron_job(job)
-    threading.Thread(target=_run_cron_tracked, args=(job, _profile_home, _execution_profile_home), daemon=True).start()
+    _event_profile = _event_profile_for_cron_job(job)
+    threading.Thread(target=_run_cron_tracked, args=(job, _profile_home, _execution_profile_home, _event_profile), daemon=True).start()
     return j(handler, {"ok": True, "job_id": job_id, "status": "running"})
 
 
@@ -12011,17 +12149,18 @@ def _handle_file_delete(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
     try:
-        target = safe_resolve(Path(s.workspace), body["path"])
+        ws_root = Path(s.workspace)
+        target = safe_resolve(ws_root, body["path"])
         if not target.exists():
             return bad(handler, "File not found", 404)
         if target.is_dir():
             if not body.get("recursive"):
                 return bad(handler, "Set recursive=true to delete directories")
-            shutil.rmtree(target)
+            rmtree_anchored(ws_root, target)
         else:
-            target.unlink()
+            unlink_anchored(ws_root, target)
         return j(handler, {"ok": True, "path": body["path"]})
-    except (ValueError, PermissionError) as e:
+    except (ValueError, FileNotFoundError, PermissionError, OSError) as e:
         return bad(handler, _sanitize_error(e))
 
 
@@ -12035,16 +12174,20 @@ def _handle_file_save(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
     try:
-        target = safe_resolve(Path(s.workspace), body["path"])
+        ws_root = Path(s.workspace)
+        target = safe_resolve(ws_root, body["path"])
         if not target.exists():
             return bad(handler, "File not found", 404)
         if target.is_dir():
             return bad(handler, "Cannot save: path is a directory")
-        target.write_text(body.get("content", ""), encoding="utf-8")
+        data = str(body.get("content", "")).encode("utf-8")
+        fd = open_anchored_write_fd(ws_root, target)
+        with os.fdopen(fd, "wb", closefd=True) as fh:
+            fh.write(data)
         return j(
-            handler, {"ok": True, "path": body["path"], "size": target.stat().st_size}
+            handler, {"ok": True, "path": body["path"], "size": len(data)}
         )
-    except (ValueError, PermissionError) as e:
+    except (ValueError, FileNotFoundError, PermissionError, OSError) as e:
         return bad(handler, _sanitize_error(e))
 
 
@@ -12058,15 +12201,20 @@ def _handle_file_create(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
     try:
-        target = safe_resolve(Path(s.workspace), body["path"])
+        ws_root = Path(s.workspace)
+        target = safe_resolve(ws_root, body["path"])
         if target.exists():
             return bad(handler, "File already exists")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body.get("content", ""), encoding="utf-8")
+        data = str(body.get("content", "")).encode("utf-8")
+        fd = open_anchored_create_fd(ws_root, target)
+        with os.fdopen(fd, "wb", closefd=True) as fh:
+            fh.write(data)
         return j(
-            handler, {"ok": True, "path": str(target.relative_to(Path(s.workspace)))}
+            handler, {"ok": True, "path": target.relative_to(ws_root.resolve()).as_posix()}
         )
-    except (ValueError, PermissionError) as e:
+    except FileExistsError:
+        return bad(handler, "File already exists")
+    except (ValueError, FileNotFoundError, PermissionError, OSError) as e:
         return bad(handler, _sanitize_error(e))
 
 
@@ -12080,18 +12228,22 @@ def _handle_file_rename(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
     try:
-        source = safe_resolve(Path(s.workspace), body["path"])
+        ws_root = Path(s.workspace)
+        ws_root_resolved = ws_root.resolve()
+        source = safe_resolve(ws_root, body["path"])
         if not source.exists():
             return bad(handler, "File not found", 404)
         new_name = body["new_name"].strip()
-        if not new_name or "/" in new_name or ".." in new_name:
+        if not new_name or "/" in new_name or "\\" in new_name or ".." in new_name:
             return bad(handler, "Invalid file name")
         dest = source.parent / new_name
         if dest.exists():
             return bad(handler, f'A file named "{new_name}" already exists')
-        source.rename(dest)
-        new_rel = str(dest.relative_to(Path(s.workspace)))
+        rename_anchored(ws_root, source, dest)
+        new_rel = dest.relative_to(ws_root_resolved).as_posix()
         return j(handler, {"ok": True, "old_path": body["path"], "new_path": new_rel})
+    except FileExistsError:
+        return bad(handler, f'A file named "{body.get("new_name", "")}" already exists')
     except (ValueError, PermissionError, OSError) as e:
         return bad(handler, _sanitize_error(e))
 
@@ -12139,7 +12291,7 @@ def _handle_file_move(handler, body):
                 pass
         dest = dest_parent / source.name
         if dest.resolve() == source.resolve():
-            new_rel = str(source.relative_to(ws_root_resolved))
+            new_rel = source.relative_to(ws_root_resolved).as_posix()
             return j(
                 handler,
                 {"ok": True, "old_path": body["path"], "new_path": new_rel},
@@ -12182,7 +12334,7 @@ def _handle_file_move(handler, body):
                     f'A file named "{source.name}" already exists in that folder',
                 )
             source.rename(dest)
-        new_rel = str(dest.relative_to(ws_root_resolved))
+        new_rel = dest.relative_to(ws_root_resolved).as_posix()
         return j(
             handler,
             {"ok": True, "old_path": body["path"], "new_path": new_rel},
@@ -12201,14 +12353,15 @@ def _handle_create_dir(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
     try:
-        target = safe_resolve(Path(s.workspace), body["path"])
+        ws_root = Path(s.workspace)
+        target = safe_resolve(ws_root, body["path"])
         if target.exists():
             return bad(handler, "Path already exists")
-        target.mkdir(parents=True)
+        make_anchored_dir(ws_root, target)
         return j(
-            handler, {"ok": True, "path": str(target.relative_to(Path(s.workspace)))}
+            handler, {"ok": True, "path": target.relative_to(ws_root.resolve()).as_posix()}
         )
-    except (ValueError, PermissionError, OSError) as e:
+    except (ValueError, FileNotFoundError, PermissionError, OSError) as e:
         return bad(handler, _sanitize_error(e))
 
 
@@ -12232,14 +12385,28 @@ def _handle_file_reveal(handler, body):
             # what was missing).
             return bad(handler, f"File not found: {target}", 404)
 
+        target_str = str(target)
+
+        # Optional Docker host/container path translation (mirrors _handle_file_open_vscode).
+        from api.config import get_config as _get_cfg  # noqa: PLC0415
+        vscode_cfg = _get_cfg().get("vscode", {})
+        if not isinstance(vscode_cfg, dict):
+            vscode_cfg = {}
+        container_prefix = vscode_cfg.get("container_path_prefix", "")
+        host_prefix = vscode_cfg.get("host_path_prefix", "")
+        if container_prefix and host_prefix:
+            _norm = container_prefix.rstrip('/') + '/'
+            if target_str.startswith(_norm) or target_str == container_prefix.rstrip('/'):
+                target_str = host_prefix + target_str[len(container_prefix):]
+
         system = platform.system()
         if system == "Darwin":
-            subprocess.Popen(["open", "-R", str(target)])
+            subprocess.Popen(["open", "-R", target_str])
         elif system == "Windows":
-            subprocess.Popen(["explorer.exe", "/select," + str(target)])
+            subprocess.Popen(["explorer.exe", "/select," + target_str])
         else:
             # Linux / other — open parent directory
-            subprocess.Popen(["xdg-open", str(target.parent)])
+            subprocess.Popen(["xdg-open", str(Path(target_str).parent)])
 
         return j(handler, {"ok": True, "path": body["path"]})
     except (ValueError, PermissionError, OSError) as e:
@@ -12312,8 +12479,10 @@ def _handle_file_open_vscode(handler, body):
             vscode_cfg = {}
         container_prefix = vscode_cfg.get("container_path_prefix", "")
         host_prefix = vscode_cfg.get("host_path_prefix", "")
-        if container_prefix and host_prefix and target_str.startswith(container_prefix):
-            target_str = host_prefix + target_str[len(container_prefix):]
+        if container_prefix and host_prefix:
+            _norm = container_prefix.rstrip('/') + '/'
+            if target_str.startswith(_norm) or target_str == container_prefix.rstrip('/'):
+                target_str = host_prefix + target_str[len(container_prefix):]
 
         cmd = vscode_cfg.get("command", "code")
         # Resolve the command to an absolute path so subprocess.Popen finds it
@@ -14029,7 +14198,10 @@ def _handle_session_import_cli(handler, body):
                     changed = True
         if changed:
             existing.save(touch_updated_at=False)
-            publish_session_list_changed("session_import_cli")
+            publish_session_list_changed(
+                "session_import_cli",
+                profile=getattr(existing, "profile", None),
+            )
         return j(
             handler,
             {
@@ -14146,7 +14318,10 @@ def _handle_session_import_cli(handler, body):
     s.platform = cli_platform
     s._cli_origin = sid
     s.save(touch_updated_at=False)
-    publish_session_list_changed("session_import_cli")
+    publish_session_list_changed(
+        "session_import_cli",
+        profile=getattr(s, "profile", None),
+    )
     return j(
         handler,
         {

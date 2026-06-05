@@ -23,6 +23,7 @@ from api.workspace import get_last_workspace
 from api.usage import prompt_cache_hit_percent
 from api.agent_sessions import (
     _is_continuation_session,
+    is_cli_session_row,
     read_importable_agent_session_rows,
     read_session_lineage_metadata,
 )
@@ -135,6 +136,14 @@ def _persisted_session_ids_snapshot() -> frozenset[str]:
         ids = frozenset()
     _PERSISTED_SESSION_IDS_CACHE = (SESSION_DIR, dir_mtime_ns, ids)
     return ids
+
+
+def _session_dir_has_persisted_session_files() -> bool:
+    """Return True when the current session dir has at least one session JSON file."""
+    try:
+        return any(not p.name.startswith('_') for p in SESSION_DIR.glob('*.json'))
+    except Exception:
+        return False
 
 
 def _rebuild_session_index_background() -> None:
@@ -563,6 +572,7 @@ class Session:
                  truncation_watermark=None,
                  gateway_routing=None, gateway_routing_history=None,
                  llm_title_generated: bool=False,
+                 manual_title: bool=False,
                 parent_session_id: str=None,
                 worktree_path=None,
                 worktree_branch=None,
@@ -611,6 +621,7 @@ class Session:
         self.gateway_routing = gateway_routing if isinstance(gateway_routing, dict) else None
         self.gateway_routing_history = gateway_routing_history if isinstance(gateway_routing_history, list) else []
         self.llm_title_generated = bool(llm_title_generated)
+        self.manual_title = bool(manual_title)
         self.parent_session_id = parent_session_id
         self.worktree_path = str(Path(worktree_path).expanduser().resolve()) if worktree_path else None
         self.worktree_branch = str(worktree_branch) if worktree_branch else None
@@ -675,7 +686,7 @@ class Session:
             'compression_anchor_details', 'context_engine_state',
             'context_length', 'threshold_tokens', 'last_prompt_tokens',
             'truncation_watermark',
-            'gateway_routing', 'gateway_routing_history', 'llm_title_generated',
+            'gateway_routing', 'gateway_routing_history', 'llm_title_generated', 'manual_title',
             'parent_session_id',
             'worktree_path', 'worktree_branch', 'worktree_repo_root', 'worktree_created_at',
             'is_cli_session', 'source_tag', 'raw_source', 'session_source', 'source_label', 'read_only',
@@ -881,6 +892,7 @@ class Session:
             'last_prompt_tokens': self.last_prompt_tokens,
             'gateway_routing': self.gateway_routing,
             'gateway_routing_history': self.gateway_routing_history,
+            'manual_title': self.manual_title,
             # Only emit 'parent_session_id' when set (the /branch fork link, #1342).
             # Sessions without a fork must not leak None — see test_session_lineage_metadata_api.
             **({'parent_session_id': self.parent_session_id} if self.parent_session_id else {}),
@@ -2714,6 +2726,71 @@ def _active_state_db_path() -> Path:
     return hermes_home / 'state.db'
 
 
+def _agent_state_db_path(*, profile=None) -> Path | None:
+    """Return agent ``state.db`` for *profile*, or ``None`` when unavailable."""
+    if isinstance(profile, str) and profile:
+        db_path = _get_profile_home(profile) / 'state.db'
+        if not db_path.exists():
+            db_path = _active_state_db_path()
+    else:
+        db_path = _active_state_db_path()
+    if not db_path.exists():
+        return None
+    return db_path
+
+
+def agent_session_rows_existing(
+    session_ids: list[str] | set[str] | frozenset[str],
+    *,
+    profile=None,
+) -> frozenset[str]:
+    """Return session ids confirmed present in the agent ``sessions`` table.
+
+    Used by the sidebar orphan-prune path (#3238) to batch existence probes
+    instead of opening one SQLite connection per candidate row.
+
+    Degrades safely to ``frozenset(wanted)`` (assume all present) on any error,
+    when the DB is missing, or when the ``sessions`` table is absent — matching
+    ``agent_session_row_exists()`` so a transient failure never causes pruning.
+    """
+    wanted = {str(sid).strip() for sid in (session_ids or []) if str(sid or "").strip()}
+    if not wanted:
+        return frozenset()
+    try:
+        import sqlite3
+    except ImportError:
+        return frozenset(wanted)
+    db_path = _agent_state_db_path(profile=profile)
+    if db_path is None:
+        return frozenset(wanted)
+    try:
+        with closing(sqlite3.connect(str(db_path))) as conn:
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(sessions)")
+            cols = {str(row[1]) for row in cur.fetchall()}
+            if 'id' not in cols:
+                return frozenset(wanted)
+            existing: set[str] = set()
+            ids = list(wanted)
+            chunk_size = 500
+            for i in range(0, len(ids), chunk_size):
+                chunk = ids[i:i + chunk_size]
+                placeholders = ','.join('?' * len(chunk))
+                cur.execute(
+                    f"SELECT id FROM sessions WHERE id IN ({placeholders})",
+                    chunk,
+                )
+                existing.update(str(row[0]).strip() for row in cur.fetchall())
+            return frozenset(existing)
+    except Exception:
+        logger.debug(
+            "agent_session_rows_existing probe failed for %d ids",
+            len(wanted),
+            exc_info=True,
+        )
+        return frozenset(wanted)
+
+
 def agent_session_row_exists(session_id: str, *, profile=None) -> bool:
     """Return True if ``session_id`` still has a backing row in the agent state.db.
 
@@ -2730,31 +2807,7 @@ def agent_session_row_exists(session_id: str, *, profile=None) -> bool:
     sid = str(session_id or "").strip()
     if not sid:
         return False
-    try:
-        import sqlite3
-    except ImportError:
-        return True
-    if isinstance(profile, str) and profile:
-        db_path = _get_profile_home(profile) / 'state.db'
-        if not db_path.exists():
-            db_path = _active_state_db_path()
-    else:
-        db_path = _active_state_db_path()
-    if not db_path.exists():
-        # No agent DB at all on this instance — can't claim the row is gone.
-        return True
-    try:
-        with closing(sqlite3.connect(str(db_path))) as conn:
-            cur = conn.cursor()
-            cur.execute("PRAGMA table_info(sessions)")
-            cols = {str(row[1]) for row in cur.fetchall()}
-            if 'id' not in cols:
-                return True
-            cur.execute("SELECT 1 FROM sessions WHERE id = ? LIMIT 1", (sid,))
-            return cur.fetchone() is not None
-    except Exception:
-        logger.debug("agent_session_row_exists probe failed for %s", sid, exc_info=True)
-        return True
+    return sid in agent_session_rows_existing([sid], profile=profile)
 
 
 def _sidebar_title_is_generic_webui(title: str | None) -> bool:
@@ -2825,6 +2878,8 @@ def all_sessions(diag=None):
             with LOCK:
                 in_memory_ids = set(SESSIONS.keys())
             persisted_ids = _persisted_session_ids_snapshot()
+            if not index and _session_dir_has_persisted_session_files():
+                raise ValueError("empty session index while session files exist")
             index = [
                 s for s in index
                 if (
@@ -2839,6 +2894,8 @@ def all_sessions(diag=None):
                     )
                 )
             ]
+            if not index and _session_dir_has_persisted_session_files():
+                raise ValueError("session index has no live rows while session files exist")
             backfilled = []
             for i, s in enumerate(index):
                 if 'last_message_at' not in s:
@@ -3478,7 +3535,7 @@ def _load_cli_sessions_uncached(hermes_home: Path, db_path: Path, _cli_profile) 
         db_path,
         limit=CLI_VISIBLE_SESSION_LIMIT,
         log=logger,
-        exclude_sources=None,
+        exclude_sources=("cron",),
     ):
         sid = row['id']
         raw_ts = row['last_activity'] or row['started_at']
@@ -3549,7 +3606,7 @@ def _load_cli_sessions_uncached(hermes_home: Path, db_path: Path, _cli_profile) 
             '_lineage_root_id': row.get('_lineage_root_id'),
             '_lineage_tip_id': row.get('_lineage_tip_id'),
             '_compression_segment_count': row.get('_compression_segment_count'),
-            'is_cli_session': True,
+            'is_cli_session': is_cli_session_row(row),
         })
 
     # --- Second pass: fetch cron sessions that may have been squeezed out
@@ -3633,7 +3690,7 @@ def _load_cli_sessions_uncached(hermes_home: Path, db_path: Path, _cli_profile) 
                 '_lineage_root_id': row.get('_lineage_root_id'),
                 '_lineage_tip_id': row.get('_lineage_tip_id'),
                 '_compression_segment_count': row.get('_compression_segment_count'),
-                'is_cli_session': True,
+                'is_cli_session': is_cli_session_row(row),
             })
             existing_sids.add(sid)
     except Exception:

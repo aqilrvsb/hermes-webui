@@ -33,6 +33,18 @@ let _draftSaveTimer = null;
 const _DRAFT_SAVE_DELAY_MS = 400;
 const NEW_CHAT_DRAFT_SESSION_KEY = 'hermes-new-chat-draft-session';
 
+function _profileMatchesActiveProfile(profile, activeProfile){
+  const eventName = (typeof profile === 'string' && profile.trim()) ? profile.trim() : 'default';
+  const activeName = (typeof activeProfile === 'string' && activeProfile.trim()) ? activeProfile.trim() : 'default';
+  if(eventName === activeName) return true;
+  return eventName === 'default' && !!S.activeProfileIsDefault;
+}
+
+function _sessionEventProfilesMatch(eventProfile, activeProfile){
+  if(!(typeof eventProfile === 'string' && eventProfile.trim())) return true;
+  return _profileMatchesActiveProfile(eventProfile, activeProfile);
+}
+
 function _isRestorableNewChatDraftSession(session, requireDraft=false) {
   if (!session || !session.session_id) return false;
   const messageCount = Number(session.message_count || 0);
@@ -42,7 +54,7 @@ function _isRestorableNewChatDraftSession(session, requireDraft=false) {
   if (title !== 'Untitled' && title !== 'New Chat') return false;
   const activeProfile = S.activeProfile || 'default';
   const sessionProfile = session.profile || 'default';
-  if (sessionProfile !== activeProfile) return false;
+  if (!_profileMatchesActiveProfile(sessionProfile, activeProfile)) return false;
   if (!requireDraft) return true;
   const draft = session.composer_draft || {};
   const text = (typeof draft.text === 'string') ? draft.text : '';
@@ -604,13 +616,15 @@ async function newSession(flash, options={}){
         if(s.startsWith('openai'))return 'openai';if(s.startsWith('anthropic')||s.startsWith('claude'))return 'anthropic';
         if(s.startsWith('google')||s.startsWith('gemini'))return 'google';return s;};
       const _familyMismatch=_familyProvider&&_fallbackProvider&&_normProv(_fallbackProvider)!==_familyProvider;
+      const _fallbackIsNamedCustom=String(_fallbackProvider||'').toLowerCase().startsWith('custom:');
       reqBody.model_provider=newModelState.model_provider
-        ||((_bareModel&&!_familyMismatch)?(_fallbackProvider||null):null)
+        ||((_bareModel&&!_familyMismatch&&!_fallbackIsNamedCustom)?(_fallbackProvider||null):null)
         ||null;
     }
     const data=await api('/api/session/new',{method:'POST',body:JSON.stringify(reqBody)});
     S.session=data.session;S.messages=data.session.messages||[];
     if(_sessionSourceFilter==='cli') _sessionSourceFilter='webui';
+    if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
     S.lastUsage={...(data.session.last_usage||{})};
     if(!(options&&options.worktree)) _rememberNewChatDraftSession(S.session);
     if(flash)S.session._flash=true;
@@ -802,6 +816,7 @@ async function loadSession(sid){
   // Stale response? A newer loadSession() call has already started (#1060).
   if (_loadingSessionId !== sid) return;
   S.session=data.session;
+  if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
   S.session._modelResolutionDeferred=true;
   S.lastUsage={...(data.session.last_usage||{})};
   // Reset scroll-direction tracker on session switch so the new chat's
@@ -853,6 +868,13 @@ async function loadSession(sid){
         messages:Array.isArray(stored.messages)&&stored.messages.length?stored.messages:[],
         uploaded:Array.isArray(stored.uploaded)?stored.uploaded:[],
         toolCalls:Array.isArray(stored.toolCalls)?stored.toolCalls:[],
+        // Phase 2: restore the live todo snapshot from persisted INFLIGHT
+        // so the panel does not flicker to empty when a mid-stream
+        // browser reload reattaches before the next `todo_state` event
+        // fires.  Both fields are optional; missing values fall back to
+        // cold-load via session.todo_state.
+        todos:Array.isArray(stored.todos)?stored.todos:null,
+        todoStateMeta:stored.todoStateMeta||null,
         reattach:true,
       };
     }
@@ -872,6 +894,8 @@ async function loadSession(sid){
     if(_mergePendingSessionMessage(S.session,S.messages)){
       INFLIGHT[sid].messages=S.messages;
     }
+    // Refresh todos from cold-load or persisted INFLIGHT before painting.
+    if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
     S.busy=true;
     // appendLiveToolCard() is guarded by S.activeStreamId; restore it before
     // replaying persisted live tools so the compact Activity count survives
@@ -990,6 +1014,7 @@ async function loadSession(sid){
   if(_s&&typeof _syncCtxIndicator==='function'){
     const u=S.lastUsage||{};
     const _pick=(latest,stored,dflt=0)=>latest!=null?latest:(stored!=null?stored:dflt);
+    const _pickPositive=(latest,stored,dflt=0)=>Number(latest)>0?latest:(Number(stored)>0?stored:dflt);
     _syncCtxIndicator({
       input_tokens:      _pick(u.input_tokens,      _s.input_tokens),
       output_tokens:     _pick(u.output_tokens,     _s.output_tokens),
@@ -997,7 +1022,7 @@ async function loadSession(sid){
       cache_read_tokens: _pick(u.cache_read_tokens, _s.cache_read_tokens),
       cache_write_tokens:_pick(u.cache_write_tokens,_s.cache_write_tokens),
       cache_hit_percent: _pick(u.cache_hit_percent, _s.cache_hit_percent, null),
-      context_length:    _pick(_s.context_length,    u.context_length),
+      context_length:    _pickPositive(u.context_length, _s.context_length),
       last_prompt_tokens:_pick(u.last_prompt_tokens,_s.last_prompt_tokens),
       threshold_tokens:  _pick(_s.threshold_tokens,  u.threshold_tokens),
     });
@@ -1049,6 +1074,16 @@ function _isMessagingSession(session) {
   // Fallback: check raw_source directly
   const raw = (session.raw_source || session.source_tag || session.source || '').toLowerCase();
   return _MESSAGING_RAW_SOURCES.has(raw);
+}
+
+/**
+ * Returns true when a session originates from an external channel (CLI bridge,
+ * Discord, Telegram, Slack, etc.) and therefore needs a server-side import
+ * before the WebUI can read or send messages into it.
+ * Covers both legacy CLI sessions and messaging-source sessions.
+ */
+function _isExternalSession(session) {
+  return !!(session && (session.is_cli_session || _isMessagingSession(session)));
 }
 
 function _isReadOnlySession(session) {
@@ -1417,7 +1452,8 @@ function _resolveSessionModelForDisplaySoon(sid){
       if(!model||!S.session||S.session.session_id!==sid) return;
       S.session.model=model;
       S.session.model_provider=provider||null;
-      S.session.context_length=data.session.context_length||0;
+      const resolvedContextLength=data.session.context_length||S.session.context_length||0;
+      S.session.context_length=resolvedContextLength;
       S.session.threshold_tokens=data.session.threshold_tokens||0;
       S.session.last_prompt_tokens=data.session.last_prompt_tokens||0;
       S.session._modelResolutionDeferred=false;
@@ -1432,7 +1468,7 @@ function _resolveSessionModelForDisplaySoon(sid){
           cache_read_tokens:_pick(u.cache_read_tokens,S.session.cache_read_tokens),
           cache_write_tokens:_pick(u.cache_write_tokens,S.session.cache_write_tokens),
           cache_hit_percent:_pick(u.cache_hit_percent,S.session.cache_hit_percent,null),
-          context_length:data.session.context_length||0,
+          context_length:resolvedContextLength||u.context_length||0,
           last_prompt_tokens:_pick(u.last_prompt_tokens,S.session.last_prompt_tokens),
           threshold_tokens:data.session.threshold_tokens||0,
         });
@@ -1569,9 +1605,31 @@ async function _ensureMessagesLoaded(sid) {
   S.messages = msgs;
   if(S.session&&S.session.session_id===sid){
     S.session.message_count=Number(data.session.message_count || msgs.length);
-    if(Object.prototype.hasOwnProperty.call(data.session,'todo_state')) S.session.todo_state=data.session.todo_state;
-    else delete S.session.todo_state;
     S.lastUsage={...(data.session.last_usage||S.lastUsage||{})};
+    // Phase 2: the messages=1 response carries the canonical cold-load
+    // `todo_state` snapshot, derived server-side from the FULL untruncated
+    // message list (api/routes.py + api/todo_state.py). The earlier
+    // messages=0 fetch in loadSession() does not include this field —
+    // attach_todo_state is gated on `load_messages`. Without applying it
+    // here, long sessions whose latest todo write falls outside the
+    // _INITIAL_MSG_LIMIT tail would lose the panel on refresh: the
+    // legacy reverse-scan in _legacyTodosFromMessages() can only see the
+    // tail S.messages, while the authoritative snapshot was already
+    // computed by the server and is sitting in this very response.
+    // _hydrateTodosFromSession is idempotent and picks newer of
+    // cold-load vs INFLIGHT by timestamp, so calling it again here is
+    // safe even when an INFLIGHT snapshot was already restored.
+    if(data.session.todo_state !== undefined){
+      S.session.todo_state = data.session.todo_state;
+    }else{
+      delete S.session.todo_state;
+    }
+    if(typeof _hydrateTodosFromSession === 'function'){
+      _hydrateTodosFromSession(S.session);
+    }
+    if(typeof scheduleTodosRefresh === 'function'){
+      scheduleTodosRefresh();
+    }
     _setSessionViewedCount(sid, Number(S.session.message_count || msgs.length));
   }
 }
@@ -2156,6 +2214,7 @@ function _renderBatchActionBar(){
       ids.forEach(_clearHandoffStorageForSession);
       if(S.session&&ids.includes(S.session.session_id)){
         S.session=null;S.messages=[];S.entries=[];localStorage.removeItem('hermes-webui-session');
+        if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(null);
         const remaining=await api('/api/sessions');
         if(remaining.sessions&&remaining.sessions.length){await loadSession(remaining.sessions[0].session_id);}
         else{$('msgInner').innerHTML='';$('emptyState').style.display='';}
@@ -3007,7 +3066,18 @@ function ensureSessionEventsSSE(){
       _sessionEventsNeedsRefreshOnOpen = false;
       void refreshSessionList('reconnect');
     };
-    _sessionEventsSSE.addEventListener('sessions_changed', () => {
+    _sessionEventsSSE.addEventListener('sessions_changed', (ev) => {
+      const activeProfile = S.activeProfile || 'default';
+      try {
+        const payload = typeof ev?.data === 'string' ? JSON.parse(ev.data) : {};
+        const eventProfile = payload && typeof payload.profile === 'string' ? payload.profile : '';
+        if (!_sessionEventProfilesMatch(eventProfile, activeProfile)) {
+          return;
+        }
+      } catch (_err) {
+        // Non-JSON payload (or transient malformed event). Keep legacy behavior:
+        // refresh once event was seen.
+      }
       _scheduleSessionEventsRefresh('event');
     });
     _sessionEventsSSE.onerror = () => {
@@ -3110,8 +3180,9 @@ function startGatewaySSE(){
           }
           // If the active session received new gateway messages, refresh the conversation view.
           // S.busy check prevents stomping on an in-progress WebUI response.
-          // is_cli_session check ensures we only poll import_cli for CLI-originated sessions.
-          if(S.session && !S.busy && S.session.is_cli_session){
+          // _isExternalSession covers CLI-originated and messaging-source sessions
+          // that need a server-side import before WebUI can read them.
+          if(S.session && !S.busy && _isExternalSession(S.session)){
             const changedIds = new Set((data.sessions||[]).map(s=>s.session_id));
             if(changedIds.has(S.session.session_id)){
               // Capture active session ID before async fetch — race guard.
@@ -4025,6 +4096,55 @@ function _resyncSessionVirtualWindowAfterRender(list, expectedScrollTop, virtual
   });
 }
 
+function _sidebarRowHasVisibleMessages(s, activeSidForSidebar){
+  return (s.message_count||0)>0 ||
+    _sessionAttentionState(s) ||
+    _isSessionEffectivelyStreaming(s) ||
+    !!s.active_stream_id ||
+    !!s.pending_user_message ||
+    (activeSidForSidebar&&s.session_id===activeSidForSidebar) ||
+    (S.session&&s.session_id===S.session.session_id&&(S.session.message_count||0)>0);
+}
+
+function _partitionSidebarSessionRows(allMatched, activeSidForSidebar){
+  let webuiSessionCount=0;
+  let cliSessionCount=0;
+  for(const s of allMatched){
+    if(!_sidebarRowHasVisibleMessages(s, activeSidForSidebar)) continue;
+    if(_isCliSession(s)) cliSessionCount++;
+    else webuiSessionCount++;
+  }
+  if(_sessionSourceFilter==='cli' && !window._showCliSessions && cliSessionCount===0){
+    _sessionSourceFilter='webui';
+  }
+  const showCliOnly=_sessionSourceFilter==='cli';
+  const profileFiltered=[];
+  const sessionsRaw=[];
+  let archivedCount=0;
+  for(const s of allMatched){
+    if(!_sidebarRowHasVisibleMessages(s, activeSidForSidebar)) continue;
+    const isCli=_isCliSession(s);
+    if(showCliOnly ? !isCli : isCli) continue;
+    if(s.default_hidden&&!(_activeProject&&_activeProject!==NO_PROJECT_FILTER&&s.project_id===_activeProject)) continue;
+    profileFiltered.push(s);
+    if(_activeProject===NO_PROJECT_FILTER){
+      if(s.project_id) continue;
+    } else if(_activeProject){
+      if(s.project_id!==_activeProject) continue;
+    }
+    if(s.archived) archivedCount++;
+    if(!_showArchived&&s.archived) continue;
+    sessionsRaw.push(s);
+  }
+  return {
+    webuiSessionCount,
+    cliSessionCount,
+    profileFiltered,
+    sessionsRaw,
+    archivedCount,
+  };
+}
+
 function renderSessionListFromCache(){
   // Don't re-render while user is actively renaming a session (would destroy the input)
   if(_renamingSid) return;
@@ -4047,49 +4167,15 @@ function renderSessionListFromCache(){
   // session id into another conversation, that content hit should still appear.
   const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,_contentSearchResults);
   const allMatched=_ensureActiveSessionRowPresent(searchMatches,sidebarRows);
-  // Keep inactive ephemeral 0-message sessions out of the sidebar — they only
-  // become real once the first message is sent. The server already filters them.
-  // Exception: the active freshly-created chat is injected above so it remains
-  // visible/selected until the user sends the first turn or switches away.
-  const withMessages=allMatched.filter(s=>
-    (s.message_count||0)>0 ||
-    _sessionAttentionState(s) ||
-    _isSessionEffectivelyStreaming(s) ||
-    !!s.active_stream_id ||
-    !!s.pending_user_message ||
-    (activeSidForSidebar&&s.session_id===activeSidForSidebar) ||
-    (S.session&&s.session_id===S.session.session_id&&(S.session.message_count||0)>0)
-  );
-  const webuiSessionCount = withMessages.filter(s=>!_isCliSession(s)).length;
-  const cliSessionCount = withMessages.filter(s=>_isCliSession(s)).length;
-  if(_sessionSourceFilter==='cli' && !window._showCliSessions && cliSessionCount===0){
-    _sessionSourceFilter='webui';
-  }
-  const sourceFiltered = _sessionSourceFilter==='cli'
-    ? withMessages.filter(s=>_isCliSession(s))
-    : withMessages.filter(s=>!_isCliSession(s));
-  // The server is authoritative for profile scoping (#1611): it filters by
-  // active profile when no query param is set, and returns the aggregate when
-  // we send ?all_profiles=1. The renamed-root cross-alias (a row tagged
-  // 'default' matching active 'kinni' when kinni.is_default) lives server-side
-  // in _profiles_match, and a strict-equality client filter would reject those
-  // rows incorrectly. So we trust the wire data and skip the redundant client
-  // filter entirely.
-  const profileFiltered=sourceFiltered.filter(s=>
-    !s.default_hidden||(_activeProject&&_activeProject!==NO_PROJECT_FILTER&&s.project_id===_activeProject)
-  );
-  // Filter by active project. NO_PROJECT_FILTER sentinel asks for sessions
-  // with no project_id; otherwise filter to the matching project_id, or
-  // pass through when no filter is active.
-  const projectFiltered=
-    _activeProject===NO_PROJECT_FILTER
-      ?profileFiltered.filter(s=>!s.project_id)
-      :(_activeProject?profileFiltered.filter(s=>s.project_id===_activeProject):profileFiltered);
-  // Filter archived unless toggle is on
-  const sessionsRaw=_showArchived?projectFiltered:projectFiltered.filter(s=>!s.archived);
+  const {
+    webuiSessionCount,
+    cliSessionCount,
+    profileFiltered,
+    sessionsRaw,
+    archivedCount,
+  }=_partitionSidebarSessionRows(allMatched, activeSidForSidebar);
   const sessions=_attachChildSessionsToSidebarRows(_collapseSessionLineageForSidebar(sessionsRaw), sessionsRaw);
   _syncSidebarExpansionForActiveSession(sessions, activeSidForSidebar);
-  const archivedCount=projectFiltered.filter(s=>s.archived).length;
   const list=$('sessionList');
   const animateRefresh=_sessionListRefreshAnimationPending;
   _sessionListRefreshAnimationPending=false;
@@ -4591,7 +4677,7 @@ function renderSessionListFromCache(){
         row.title=t('session_lineage_segment_open');
         row.onclick=async(e)=>{
           e.stopPropagation();
-          if(seg.is_cli_session){
+          if(_isExternalSession(seg)){
             try{await api('/api/session/import_cli',{method:'POST',body:JSON.stringify({session_id:seg.session_id})});}
             catch(_e){ /* read-only fallback */ }
           }
@@ -4618,7 +4704,7 @@ function renderSessionListFromCache(){
         row.title='Open child session';
         row.onclick=async(e)=>{
           e.stopPropagation();
-          if(child.is_cli_session){
+          if(_isExternalSession(child)){
             try{await api('/api/session/import_cli',{method:'POST',body:JSON.stringify({session_id:child.session_id})});}
             catch(_e){ /* read-only fallback */ }
           }
@@ -5008,8 +5094,9 @@ function renderSessionListFromCache(){
         _tapTimer=null;
         _lastTapTime=0;
         if(_renamingSid) return;
-        // For CLI sessions, import into WebUI store first (idempotent)
-        if(s.is_cli_session){
+        // For external sessions (CLI, Discord, Telegram, Slack), import into
+        // WebUI store first so /api/chat/start finds a persisted session.
+        if(_isExternalSession(s)){
           try{
             await api('/api/session/import_cli',{method:'POST',body:JSON.stringify({session_id:s.session_id})});
           }catch(e){ /* import failed -- fall through to read-only view */ }
@@ -5225,6 +5312,7 @@ async function deleteSession(sid, beforeDelete=null){
   }
   if(S.session&&S.session.session_id===sid){
     S.session=null;S.messages=[];S.entries=[];
+    if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(null);
     localStorage.removeItem('hermes-webui-session');
     // load the most recent remaining session, or show blank if none left
     const remaining=await api('/api/sessions');

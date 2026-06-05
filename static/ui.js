@@ -1,4 +1,11 @@
-const S={session:null,messages:[],entries:[],busy:false,pendingFiles:[],toolCalls:[],activeStreamId:null,currentDir:'.',activeProfile:'default',showHiddenWorkspaceFiles:false};
+// `todos` is the single source of truth for the Todos panel.  Any update
+// goes through the `todo_state` SSE event (live) or session.todo_state
+// (cold-load).  `todoStateMeta` doubles as a sentinel: while it is null
+// no explicit signal has been seen, so loadTodos() falls back to the
+// legacy reverse-scan over S.messages — that keeps new clients working
+// against old servers (Phase 1 may not yet be deployed everywhere).
+// See api/todo_state.py for the wire contract.
+const S={session:null,messages:[],entries:[],busy:false,pendingFiles:[],toolCalls:[],activeStreamId:null,currentDir:'.',activeProfile:'default',activeProfileIsDefault:true,showHiddenWorkspaceFiles:false,todos:[],todoStateMeta:null};
 
 function assistantDisplayName(){
   if(S.activeProfile&&S.activeProfile!=='default') return S.activeProfile.charAt(0).toUpperCase()+S.activeProfile.slice(1);
@@ -1369,13 +1376,13 @@ function _addLiveModelsToSelect(provider, models, sel){
   if(!providerGroup){
     providerGroup=document.createElement('optgroup');
     providerGroup.label=provider.charAt(0).toUpperCase()+provider.slice(1)+' (live)';
+    providerGroup.dataset.provider=provider;
     sel.appendChild(providerGroup);
+  }else if(!providerGroup.dataset.provider){
+    providerGroup.dataset.provider=provider;
   }
   const existingIds=new Set([...sel.options].map(o=>o.value));
-  // Normalized dedup: strip @provider: prefix and namespace so
-  // 'minimax/minimax-m2.7' matches '@nous:minimax/minimax-m2.7' (#907).
-  // Named custom IDs (@custom:name:model) have a known two-segment prefix
-  // and must strip both to dedup against bare model IDs (#3478).
+  // Normalized dedup strips provider/custom prefixes and namespaces (#907, #3478).
   const _normId=id=>{
     let s=String(id||'');
     if(s.startsWith('@')&&s.includes(':')){
@@ -1405,6 +1412,7 @@ function _addLiveModelsToSelect(provider, models, sel){
     opt.value=mid;
     opt.textContent=m.label||m.id;
     opt.title='Live model — fetched from provider';
+    opt.dataset.provider=provider;
     providerGroup.appendChild(opt);
     _dynamicModelLabels[mid]=m.label||m.id;
     added++;
@@ -2743,6 +2751,30 @@ function _syncMobileCtxDisplay(state){
     }
   }
   _setCtxCompressButton(compressBtn,state.compressText||'');
+}
+
+function _mergeUsageForCtxIndicator(latest, fallback){
+  const latestObj=(latest&&typeof latest==='object')?latest:{};
+  const fallbackObj=(fallback&&typeof fallback==='object')?fallback:{};
+  const merged={...latestObj};
+  for(const field of [
+    'input_tokens','output_tokens','estimated_cost',
+    'cache_read_tokens','cache_write_tokens','cache_hit_percent',
+    'turn_cache_hit_percent','duration_seconds','tps','gateway_routing',
+  ]){
+    if(merged[field]==null&&fallbackObj[field]!=null){
+      merged[field]=fallbackObj[field];
+    }
+  }
+  if(!(Number(latestObj.context_length)>0)&&Number(fallbackObj.context_length)>0){
+    merged.context_length=fallbackObj.context_length;
+  }
+  for(const field of ['threshold_tokens','last_prompt_tokens']){
+    if(latestObj[field]==null&&fallbackObj[field]!=null){
+      merged[field]=fallbackObj[field];
+    }
+  }
+  return merged;
 }
 
 // Context usage indicator in composer footer
@@ -4528,9 +4560,131 @@ function _stripForTTS(text){
   return text;
 }
 
+function _splitForTTS(text, maxChars){
+  // Split long text into chunks at natural sentence/paragraph boundaries
+  // to avoid browser SpeechSynthesis truncation on long texts.
+  maxChars=maxChars||300;
+  if(text.length<=maxChars) return [text];
+  const chunks=[];
+  let remaining=text;
+  while(remaining.length>0){
+    if(remaining.length<=maxChars){ chunks.push(remaining); break; }
+    let splitAt=maxChars;
+    const sentencePattern=new RegExp('^[\\s\\S]{0,'+(maxChars-1)+'}[。！？.!？](?=\\s|$)','g');
+    const m=sentencePattern.exec(remaining);
+    if(m) splitAt=m.index+m[0].length;
+    else{
+      const sub=remaining.slice(0,maxChars);
+      const lastSpace=Math.max(sub.lastIndexOf(' '),sub.lastIndexOf('\n'),sub.lastIndexOf(','),sub.lastIndexOf('，'));
+      if(lastSpace>maxChars*0.5) splitAt=lastSpace+1;
+    }
+    chunks.push(remaining.slice(0,splitAt).trim());
+    remaining=remaining.slice(splitAt).trim();
+  }
+  return chunks.filter(Boolean);
+}
+
 let _ttsSpeaking=false;
 let _ttsCurrentUtterance=null;
+let _ttsChunkQueue=[];
+let _ttsChunkIndex=0;
+let _ttsActiveBtn=null;
 let _playingEdgeAudio=null;
+
+function _buildBrowserUtterance(text, btn){
+  const utter=new SpeechSynthesisUtterance(text);
+  const savedVoice=localStorage.getItem('hermes-tts-voice');
+  const voices=speechSynthesis.getVoices();
+  if(savedVoice&&voices.length){
+    const match=voices.find(v=>v.name===savedVoice);
+    if(match) utter.voice=match;
+  }
+  const savedRate=parseFloat(localStorage.getItem('hermes-tts-rate'));
+  if(!isNaN(savedRate)) utter.rate=Math.min(2,Math.max(0.5,savedRate));
+  const savedPitch=parseFloat(localStorage.getItem('hermes-tts-pitch'));
+  if(!isNaN(savedPitch)) utter.pitch=Math.min(2,Math.max(0,savedPitch));
+  utter.onend=()=>{
+    _ttsChunkIndex++;
+    if(_ttsChunkIndex<_ttsChunkQueue.length){
+      const next=new SpeechSynthesisUtterance(_ttsChunkQueue[_ttsChunkIndex]);
+      next.voice=utter.voice; next.rate=utter.rate; next.pitch=utter.pitch;
+      next.onend=utter.onend; next.onerror=utter.onerror;
+      _ttsCurrentUtterance=next;
+      speechSynthesis.speak(next);
+    } else {
+      _ttsSpeaking=false; _ttsCurrentUtterance=null;
+      _ttsChunkQueue=[]; _ttsChunkIndex=0; _ttsActiveBtn=null;
+      if(btn) btn.dataset.speaking='0';
+    }
+  };
+  utter.onerror=()=>{
+    _ttsSpeaking=false; _ttsCurrentUtterance=null;
+    _ttsChunkQueue=[]; _ttsChunkIndex=0; _ttsActiveBtn=null;
+    if(btn) btn.dataset.speaking='0';
+  };
+  return utter;
+}
+
+function _playEdgeTtsChunked(text, btn){
+  const chunks=_splitForTTS(text);
+  const _playOne=function(idx){
+    if(idx>=chunks.length){
+      _ttsSpeaking=false;_playingEdgeAudio=null;
+      if(btn) btn.dataset.speaking='0';
+      return;
+    }
+    const chunk=chunks[idx];
+    const voice=localStorage.getItem('hermes-tts-voice')||'zh-CN-XiaoxiaoNeural';
+    const savedRate=parseFloat(localStorage.getItem('hermes-tts-rate'));
+    const savedPitch=parseFloat(localStorage.getItem('hermes-tts-pitch'));
+    let rate='', pitch='';
+    if(!isNaN(savedRate)){const pct=Math.round((savedRate-1)*100);const sign=pct>=0?'+':'';rate=sign+pct+'%';}
+    if(!isNaN(savedPitch)){const hz=Math.round((savedPitch-1)*50);const sign=hz>=0?'+':'';pitch=sign+hz+'Hz';}
+    fetch(new URL('api/tts', document.baseURI || location.href).href, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:chunk, voice:voice, rate:rate, pitch:pitch})
+    })
+    .then(function(r){
+      if(!r.ok){
+        return r.json().catch(function(){return {};}).then(function(j){
+          throw new Error((j&&j.error)||('TTS request failed: '+r.status));
+        });
+      }
+      return r.blob();
+    })
+    .then(function(blob){
+      if(!_ttsSpeaking) return;
+      const url=URL.createObjectURL(blob);
+      const audio=new Audio(url);
+      _playingEdgeAudio=audio;
+      audio.onended=function(){
+        URL.revokeObjectURL(url);
+        _playingEdgeAudio=null;
+        if(_ttsSpeaking) _playOne(idx+1);
+      };
+      audio.onerror=function(){
+        URL.revokeObjectURL(url);
+        _playingEdgeAudio=null;
+        _ttsSpeaking=false;
+        if(btn) btn.dataset.speaking='0';
+      };
+      audio.play().catch(function(e){
+        URL.revokeObjectURL(url);
+        _playingEdgeAudio=null;
+        _ttsSpeaking=false;
+        if(btn) btn.dataset.speaking='0';
+        if(typeof showToast==='function') showToast('Edge TTS error: '+(e&&e.message||e));
+      });
+    })
+    .catch(function(e){
+      _ttsSpeaking=false;_playingEdgeAudio=null;
+      if(btn) btn.dataset.speaking='0';
+      if(typeof showToast==='function') showToast('Edge TTS failed: '+(e&&e.message||e));
+    });
+  };
+  _playOne(0);
+}
 
 function speakMessage(btn){
   if(btn&&btn.dataset.speaking==='1'){
@@ -4548,7 +4702,7 @@ function speakMessage(btn){
 
   const engine=localStorage.getItem('hermes-tts-engine')||'browser';
   if(engine==='edge'){
-    _playEdgeTts(clean, btn);
+    _playEdgeTtsChunked(clean, btn);
     return;
   }
 
@@ -4557,74 +4711,15 @@ function speakMessage(btn){
     return;
   }
 
-  const utter=new SpeechSynthesisUtterance(clean);
+  _ttsChunkQueue=_splitForTTS(clean);
+  _ttsChunkIndex=0;
+  _ttsActiveBtn=btn;
+  _ttsSpeaking=true;
+  if(btn) btn.dataset.speaking='1';
 
-  // Apply saved voice preference
-  const savedVoice=localStorage.getItem('hermes-tts-voice');
-  const voices=speechSynthesis.getVoices();
-  if(savedVoice&&voices.length){
-    const match=voices.find(v=>v.name===savedVoice);
-    if(match) utter.voice=match;
-  }
-
-  // Apply saved rate/pitch
-  const savedRate=parseFloat(localStorage.getItem('hermes-tts-rate'));
-  if(!isNaN(savedRate)) utter.rate= Math.min(2,Math.max(0.5,savedRate));
-  const savedPitch=parseFloat(localStorage.getItem('hermes-tts-pitch'));
-  if(!isNaN(savedPitch)) utter.pitch=Math.min(2,Math.max(0,savedPitch));
-
+  const utter=_buildBrowserUtterance(_ttsChunkQueue[0], btn);
   _ttsCurrentUtterance=utter;
-  _ttsSpeaking=true;
-  if(btn) btn.dataset.speaking='1';
-
-  utter.onend=()=>{ _ttsSpeaking=false; _ttsCurrentUtterance=null; if(btn) btn.dataset.speaking='0'; };
-  utter.onerror=()=>{ _ttsSpeaking=false; _ttsCurrentUtterance=null; if(btn) btn.dataset.speaking='0'; };
-
   speechSynthesis.speak(utter);
-}
-
-function _playEdgeTts(text, btn){
-  const voice=localStorage.getItem('hermes-tts-voice')||'zh-CN-XiaoxiaoNeural';
-  const savedRate=parseFloat(localStorage.getItem('hermes-tts-rate'));
-  const savedPitch=parseFloat(localStorage.getItem('hermes-tts-pitch'));
-  let rate='', pitch='';
-  if(!isNaN(savedRate)){const pct=Math.round((savedRate-1)*100);const sign=pct>=0?'+':'';rate=sign+pct+'%';}
-  if(!isNaN(savedPitch)){const hz=Math.round((savedPitch-1)*50);const sign=hz>=0?'+':'';pitch=sign+hz+'Hz';}
-  if(btn) btn.dataset.speaking='1';
-  _ttsSpeaking=true;
-  // /api/tts is POST-only (and behind the same-origin CSRF gate); GET via
-  // new Audio(url) would 405 and silently fail, and would also leak the message
-  // text into the query string / access log. POST the JSON body, then play the
-  // returned audio via an object URL — mirrors the working boot.js edge path.
-  const _fail=function(msg){
-    _ttsSpeaking=false;_playingEdgeAudio=null;
-    if(btn)btn.dataset.speaking='0';
-    if(msg&&typeof showToast==='function') showToast(msg,4000,'error');
-  };
-  fetch(new URL('api/tts', document.baseURI || location.href).href, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text:text, voice:voice, rate:rate, pitch:pitch})
-  })
-  .then(function(r){
-    if(!r.ok){
-      // Surface the server error (e.g. 503 "edge-tts not installed", 429 rate limit)
-      return r.json().catch(function(){return {};}).then(function(j){
-        throw new Error((j&&j.error)||('TTS request failed: '+r.status));
-      });
-    }
-    return r.blob();
-  })
-  .then(function(blob){
-    const url=URL.createObjectURL(blob);
-    const audio=new Audio(url);
-    _playingEdgeAudio=audio;
-    const _cleanup=function(){_ttsSpeaking=false;_playingEdgeAudio=null;if(btn)btn.dataset.speaking='0';try{URL.revokeObjectURL(url);}catch(_){}};
-    audio.onended=_cleanup;
-    audio.onerror=function(){_cleanup();};
-    audio.play().catch(function(e){_cleanup();showToast('Edge TTS error: '+(e&&e.message||e));});
-  })
-  .catch(function(e){ _fail((e&&e.message)||'Edge TTS failed'); });
 }
 
 function stopTTS(){
@@ -4638,6 +4733,9 @@ function stopTTS(){
   }
   _ttsSpeaking=false;
   _ttsCurrentUtterance=null;
+  _ttsChunkQueue=[];
+  _ttsChunkIndex=0;
+  _ttsActiveBtn=null;
   // Reset all speaking buttons
   document.querySelectorAll('[data-speaking="1"]').forEach(btn=>{ btn.dataset.speaking='0'; });
 }
@@ -4656,21 +4754,15 @@ function autoReadLastAssistant(){
   const clean=_stripForTTS(text);
   if(!clean) return;
   if(engine==='edge'){
-    _playEdgeTts(clean, null);
+    _playEdgeTtsChunked(clean, null);
     return;
   }
-  const utter=new SpeechSynthesisUtterance(clean);
-  const savedVoice=localStorage.getItem('hermes-tts-voice');
-  const voices=speechSynthesis.getVoices();
-  if(savedVoice&&voices.length){
-    const match=voices.find(v=>v.name===savedVoice);
-    if(match) utter.voice=match;
-  }
-  const savedRate=parseFloat(localStorage.getItem('hermes-tts-rate'));
-  if(!isNaN(savedRate)) utter.rate=Math.min(2,Math.max(0.5,savedRate));
-  const savedPitch=parseFloat(localStorage.getItem('hermes-tts-pitch'));
-  if(!isNaN(savedPitch)) utter.pitch=Math.min(2,Math.max(0,savedPitch));
-
+  // Use chunked playback for browser TTS
+  _ttsChunkQueue=_splitForTTS(clean);
+  _ttsChunkIndex=0;
+  _ttsSpeaking=true;
+  const utter=_buildBrowserUtterance(_ttsChunkQueue[0], null);
+  _ttsCurrentUtterance=utter;
   speechSynthesis.speak(utter);
 }
 
@@ -4737,11 +4829,20 @@ function _compactInflightState(state){
   const limits=_getInflightStateLimits();
   const messages=Array.isArray(state.messages)?state.messages.slice(-limits.messages):[];
   const toolCalls=Array.isArray(state.toolCalls)?state.toolCalls.slice(-limits.toolCalls):[];
+  // Phase 2: persist the live todo snapshot so reload / SSE reattach
+  // restores the panel without waiting for the next live `todo` write.
+  // The list is bounded by the agent (typically <20 items) and each
+  // item is small, so no per-list cap is needed beyond the existing
+  // stringChars truncation in _truncateInflightValue.
+  const todos=Array.isArray(state.todos)?state.todos:null;
+  const todoStateMeta=(state.todoStateMeta&&typeof state.todoStateMeta==='object')?state.todoStateMeta:null;
   return _truncateInflightValue({
     streamId:state.streamId||null,
     messages,
     uploaded:Array.isArray(state.uploaded)?state.uploaded.slice(-20):[],
     toolCalls,
+    todos,
+    todoStateMeta,
   }, limits.stringChars);
 }
 function _writeInflightStateMap(all){
@@ -4801,6 +4902,154 @@ function clearInflightState(sid){
     if(Object.keys(all).length) localStorage.setItem(INFLIGHT_STATE_KEY, JSON.stringify(all));
     else localStorage.removeItem(INFLIGHT_STATE_KEY);
   }catch(_){ }
+}
+
+// ─── Todo state: single source of truth + render scheduling ─────────────────
+//
+// Three concerns live together so they can share state cleanly:
+//
+//   1. _todosHash(items)  — cheap content fingerprint; skips re-render when
+//      a snapshot would paint the same DOM.  Used both as a short-circuit
+//      and as the hash that compares "rendered vs current" snapshots.
+//
+//   2. scheduleTodosRefresh() — coalesces multiple `todo_state` events that
+//      land in the same animation frame into a single loadTodos() call.
+//      Skips work entirely when the panel is not active.
+//
+//   3. _hydrateTodosFromSession(session) — applies cold-load todo_state
+//      from the session GET payload, or clears the panel when neither a
+//      cold-load nor an INFLIGHT signal is available.  Called at every
+//      `S.session = ...` settle point so cross-session navigation never
+//      leaves a stale list visible.
+//
+// The hash is keyed on (id, content, status); the render itself uses
+// `esc()` for any user-controlled string, so XSS surface is the same as
+// any other innerHTML path in this file.
+let _todosLastRenderedHash=null;
+let _todosRenderRafId=0;
+
+function _todosHash(items){
+  if(!Array.isArray(items)) return '';
+  // String concat outperforms JSON.stringify on small arrays in V8 (no
+  // intermediate object allocation) and is exact enough — the field set
+  // matches what the renderer reads, so any visible change in DOM
+  // implies a hash change.  Field separators (\x1f, \x1e) are control
+  // chars unlikely to appear in real todo content, so collisions across
+  // boundaries are not realistic.
+  let h=items.length+'|';
+  for(let i=0;i<items.length;i++){
+    const t=items[i]||{};
+    h+=String(t.id==null?'':t.id)+'\x1f'+String(t.content==null?'':t.content)+'\x1f'+String(t.status==null?'':t.status)+'\x1e';
+  }
+  return h;
+}
+
+function _todosPanelIsActive(){
+  if(typeof document==='undefined') return false;
+  const panel=document.getElementById('panelTodos');
+  return !!(panel&&panel.classList&&panel.classList.contains('active'));
+}
+
+function scheduleTodosRefresh(){
+  // Idempotent: many `todo_state` events fire on each tool result, but
+  // only the latest snapshot needs to paint.  RAF lets us coalesce
+  // without timer drift.
+  if(_todosRenderRafId) return;
+  if(typeof requestAnimationFrame!=='function'){
+    if(typeof loadTodos==='function') loadTodos();
+    return;
+  }
+  _todosRenderRafId=requestAnimationFrame(()=>{
+    _todosRenderRafId=0;
+    if(!_todosPanelIsActive()) return;
+    if(typeof loadTodos==='function') loadTodos();
+  });
+}
+
+function _resetTodosRenderCache(){
+  // Clear after every cross-session navigation so the next render is
+  // never short-circuited against a hash from a different session.
+  _todosLastRenderedHash=null;
+}
+
+function _hydrateTodosFromSession(session){
+  // Three input cases, three deterministic outcomes:
+  //   a) cold-load AND inflight both present  → pick newer by ts so a
+  //      stale cold-load from the session GET cannot regress a fresher
+  //      INFLIGHT snapshot persisted from a still-running stream
+  //      (avoids visible rollback on reload).
+  //   b) only one of cold-load / inflight is present  → use it.
+  //   c) neither  → reset to empty + sentinel so loadTodos() falls
+  //      through to the legacy reverse-scan or paints the empty state.
+  const sid=(session&&session.session_id)||'';
+  const inflight=(typeof INFLIGHT==='object'&&INFLIGHT&&sid)?INFLIGHT[sid]:null;
+  const cold=session&&session.todo_state;
+  const coldOk=!!(cold&&Array.isArray(cold.todos));
+  const inflightOk=!!(inflight&&Array.isArray(inflight.todos)&&inflight.todoStateMeta);
+  const coldTs=coldOk?(Number(cold.ts)||0):0;
+  const inflightTs=inflightOk?(Number(inflight.todoStateMeta&&inflight.todoStateMeta.ts)||0):0;
+  // Whether a live stream currently owns this session. This is the signal
+  // that disambiguates a ts-less cold-load (see below); it comes from the
+  // session GET payload (mirrors sessions.js `S.session.active_stream_id`).
+  const streamActive=!!(session&&session.active_stream_id);
+  if(coldOk&&inflightOk){
+    // Reconcile the server's settled cold-load snapshot against the
+    // locally-persisted INFLIGHT snapshot.
+    //
+    // coldTs===0 means the cold-load carries NO usable timestamp, so we
+    // cannot order it against INFLIGHT by recency. A todo tool message can
+    // legitimately lose its `timestamp` during context compression/rebuild
+    // (the on-disk message ends up timestamp=None), and derive_todo_state
+    // (api/todo_state.py) then returns the correct latest-by-POSITION todos
+    // but omits `ts`. The tie-break depends on who owns the INFLIGHT tail:
+    //
+    //   - stream ACTIVE → INFLIGHT is the live tail. The most recent todo
+    //     write may still be in flight and not yet settled into the message
+    //     list derive_todo_state scans, so a ts-less cold-load can be an
+    //     OLDER (pre-latest-write) view. Letting cold win here rolls the
+    //     panel back to a stale list, and since the stream may have just
+    //     ended on that very write there is no guaranteed forward SSE event
+    //     to self-heal. So prefer INFLIGHT. If cold is in fact newer, the
+    //     reattach replay (sessions.js attachLiveStream, reconnecting) re-
+    //     emits the journaled `todo_state` events which reconcile forward by
+    //     ts, so any transient discrepancy corrects itself.
+    //
+    //   - stream IDLE → INFLIGHT is leftover from a finished/crashed stream
+    //     (idle sessions purge it shortly after, sessions.js), and there is
+    //     no replay to correct anything. The settled cold-load is the
+    //     authoritative latest-by-position view, so prefer cold. This also
+    //     preserves the original fix for the "shows an old todo list" bug,
+    //     where a stale prior-turn INFLIGHT must not beat a ts-less cold-load.
+    //
+    // When coldTs>0 the original recency rule stands: strict ">", and on a
+    // tie prefer INFLIGHT for the freshest in-tab edits.
+    const coldWins=(coldTs===0)?(!streamActive):(coldTs>inflightTs);
+    if(coldWins){
+      S.todos=cold.todos;
+      S.todoStateMeta={
+        ts:coldTs,
+        source:'cold-load',
+        version:Number(cold.version)||1,
+      };
+    }else{
+      S.todos=inflight.todos;
+      S.todoStateMeta=inflight.todoStateMeta;
+    }
+  }else if(coldOk){
+    S.todos=cold.todos;
+    S.todoStateMeta={
+      ts:coldTs,
+      source:'cold-load',
+      version:Number(cold.version)||1,
+    };
+  }else if(inflightOk){
+    S.todos=inflight.todos;
+    S.todoStateMeta=inflight.todoStateMeta;
+  }else{
+    S.todos=[];
+    S.todoStateMeta=null;
+  }
+  _resetTodosRenderCache();
 }
 
 function snapshotLiveTurnHtmlForSession(sid){
@@ -5383,6 +5632,7 @@ async function applyUpdates(){
     return;
   }
   try{
+    const stashConflictMessages=[];
     for(const target of targets){
       const res=await api('/api/updates/apply',{method:'POST',body:JSON.stringify({target}),timeoutMs:120000});
       if(!res.ok){
@@ -5390,8 +5640,13 @@ async function applyUpdates(){
         resetApplyButton(0);
         return;
       }
+      if(res.stash_conflict){
+        stashConflictMessages.push('Update applied ('+target+'): '+(res.message||'Local changes were preserved in git stash.'));
+        if(errEl){errEl.textContent=stashConflictMessages.join('\n\n');errEl.style.display='block';}
+      }
     }
-    showToast('Update applied — restarting…');
+    const stashConflictMessage=stashConflictMessages.join('\n\n');
+    showToast(stashConflictMessage||'Update applied — restarting…',stashConflictMessages.length?10000:undefined,stashConflictMessages.length?'warning':undefined);
     sessionStorage.removeItem('hermes-update-checked');
     sessionStorage.removeItem('hermes-update-dismissed');
     _waitForServerThenReload();
@@ -5676,9 +5931,19 @@ function syncTopbar(){
   if(typeof syncWorkspaceDisplays==='function') syncWorkspaceDisplays();
   if(typeof syncTerminalButton==='function') syncTerminalButton();
   // modelSelect already set above
-  // Update profile chip label
+  // Update profile chip label.
+  // The chip is the profile-SWITCHER trigger (it fronts the profile dropdown) and
+  // governs where the next message / new chat routes — both follow the client
+  // active profile (the hermes_profile cookie, set only by /api/profile/switch).
+  // It must therefore reflect S.activeProfile, NOT the loaded session's profile.
+  // #3331 briefly keyed this on S.session.profile so the label would track the
+  // session being browsed, but loadSession() never updates S.activeProfile, so
+  // opening a cross-profile session made the chip disagree with the dropdown
+  // checkmark and lie about message routing (#3635). #3331's legitimate work —
+  // scoping project/session operations to the session's own profile — is
+  // unaffected by this line.
   const profileLabel=$('profileChipLabel');
-  if(profileLabel) profileLabel.textContent=(S.session&&S.session.profile)||S.activeProfile||'default';
+  if(profileLabel) profileLabel.textContent=S.activeProfile||'default';
 }
 
 function msgContent(m){
@@ -7213,6 +7478,13 @@ function renderMessages(options){
       const activityIdxs=[...new Set([...Object.keys(byAssistant).map(k=>parseInt(k)), ...assistantThinking.keys()])].sort((a,b)=>a-b);
       for(const aIdx of activityIdxs){
         const cards=byAssistant[aIdx]||[];
+        if(!cards.length&&assistantThinking.has(aIdx)){
+          const anchorRow=assistantSegments.get(aIdx);
+          if(anchorRow&&window._showThinking!==false){
+            anchorRow.insertAdjacentHTML('beforeend',_thinkingCardHtml(assistantThinking.get(aIdx)));
+          }
+          continue;
+        }
         let anchorRow=assistantSegments.get(aIdx)||null;
         if(!anchorRow&&assistantIdxs.length){
           if(aIdx<assistantIdxs[0]) continue;
@@ -7294,10 +7566,13 @@ function renderMessages(options){
       const failoverText=_gatewayRoutingFailoverText(routing);
       const modelWarningText=_gatewayModelWarningText(routing);
       const hasTurnUsage=!!msg._turnUsage;
-      const compactActivityForMessage=isSimplifiedToolCalling()&&(
-        assistantThinking.has(mi)||
-        toolCallAssistantIdxs.has(mi)
-      );
+      // The activity-group summary owns the "Done in …" duration ONLY when a
+      // group is actually created. A tool-call turn always builds one. A
+      // thinking-only turn under Simplified Tool Calling now renders thinking
+      // inline (no group — see the `continue` at the activityIdxs loop, #3592),
+      // so it must keep its footer duration; suppressing it there would silently
+      // drop "Done in …" for thinking-only turns (#3592 review).
+      const compactActivityForMessage=isSimplifiedToolCalling()&&toolCallAssistantIdxs.has(mi);
       const durationText=compactActivityForMessage?'':_formatTurnDuration(msg._turnDuration);
       if(!hasTurnUsage&&!durationText&&!gatewayText&&!failoverText&&!modelWarningText) continue;
       const seg=assistantSegments.get(mi);
