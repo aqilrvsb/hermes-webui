@@ -112,41 +112,57 @@ for home in homes():
     tm = cfg.get("terminal") or {}
     tm["cwd"] = os.path.join(HOME, "workspace")
     cfg["terminal"] = tm
-    # ── MAIN provider = OpenRouter (chat + agents on minimax/minimax-m3); GRSAI = image/PDF vision
-    # + fallback. All in THIS config.yaml on the volume (editable; model switchable in the dropdown).
-    # Keys are env-refs (never hit git). Gated on OPENROUTER_API_KEY existing -> safe rollback.
-    #   openrouter -> https://openrouter.ai/api/v1 (key ${OPENROUTER_API_KEY})  [MAIN: minimax-m3]
-    #   grsai      -> https://grsaiapi.com/v1      (key ${GRSAI_API_KEY})       [image/PDF gemini + fallback]
-    if os.environ.get("OPENROUTER_API_KEY", "").strip():
+    # ── MAIN provider = OpenCode Go (low-cost open coding models, OpenAI-compatible /chat/completions),
+    # default minimax-m3. OpenRouter + GRSAI stay as alternates/fallback (GRSAI also = image/PDF vision).
+    # All in THIS config.yaml on the volume (editable; model switchable in the Model Routing tab/dropdown).
+    # Keys are env-refs (never hit git). Gated on a key existing -> safe rollback.
+    #   opencode   -> https://opencode.ai/zen/go/v1 (key ${OPENCODE_API_KEY})  [MAIN: minimax-m3]
+    #   openrouter -> https://openrouter.ai/api/v1   (key ${OPENROUTER_API_KEY}) [alternate + fallback/auto]
+    #   grsai      -> https://grsaiapi.com/v1        (key ${GRSAI_API_KEY})      [image/PDF gemini + fallback]
+    HAS_OC = bool(os.environ.get("OPENCODE_API_KEY", "").strip())
+    HAS_OR = bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
+    HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
+    if HAS_OC or HAS_OR:
+        OC_BASE = "https://opencode.ai/zen/go/v1"
         OR_BASE = "https://openrouter.ai/api/v1"
         GRSAI_BASE = "https://grsaiapi.com/v1"
-        OR_MODELS = ["minimax/minimax-m3", "minimax/minimax-m2.7", "openrouter/auto",
-                     "anthropic/claude-sonnet-4.5", "google/gemini-2.5-flash", "openai/gpt-5.4"]
+        OC_MODELS = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "kimi-k2.6", "kimi-k2.5",
+                     "glm-5.1", "glm-5", "deepseek-v4-pro", "deepseek-v4-flash",
+                     "mimo-v2.5-pro", "qwen3.7-plus", "qwen3.7-max"]
+        OR_MODELS = ["minimax/minimax-m3", "openrouter/auto", "anthropic/claude-sonnet-4.5",
+                     "google/gemini-2.5-flash", "openai/gpt-5.4"]
         GRSAI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-2.5-flash",
                         "gemini-2.5-pro", "gpt-image-2", "gpt-5.5"]
-        has_grsai = bool(os.environ.get("GRSAI_API_KEY", "").strip())
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
         have = {str(c.get("name") or "").lower() for c in cps if isinstance(c, dict)}
-        if "openrouter" not in have:
+        if HAS_OC and "opencode" not in have:
+            cps.append({"name": "opencode", "base_url": OC_BASE,
+                        "api_key": "${OPENCODE_API_KEY}", "models": OC_MODELS})
+        if HAS_OR and "openrouter" not in have:
             cps.append({"name": "openrouter", "base_url": OR_BASE,
                         "api_key": "${OPENROUTER_API_KEY}", "models": OR_MODELS})
-        if has_grsai and "grsai" not in have:
+        if HAS_GR and "grsai" not in have:
             cps.append({"name": "grsai", "base_url": GRSAI_BASE,
                         "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
         cfg["custom_providers"] = cps
-        # MAIN (chat + agents default) = OpenRouter minimax/minimax-m3.
-        # For image/PDF, switch the chat model to a GRSAI gemini-* (read-documents skill).
-        cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
-                        "api_key": "${OPENROUTER_API_KEY}", "default": "minimax/minimax-m3"}
-        # FALLBACK on error -> GRSAI gemini (if configured) then OpenRouter auto.
-        cfg["fallback_providers"] = ([
-            {"provider": "grsai", "model": "gemini-3.1-flash-lite", "base_url": GRSAI_BASE,
-             "api_key": "${GRSAI_API_KEY}"}] if has_grsai else []) + [
-            {"provider": "openrouter", "model": "openrouter/auto", "base_url": OR_BASE,
-             "api_key": "${OPENROUTER_API_KEY}"},
-        ]
+        # MAIN (chat + agents default) = OpenCode Go minimax-m3 (else OpenRouter if no OC key).
+        if HAS_OC:
+            cfg["model"] = {"provider": "opencode", "base_url": OC_BASE,
+                            "api_key": "${OPENCODE_API_KEY}", "default": "minimax-m3"}
+        else:
+            cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
+                            "api_key": "${OPENROUTER_API_KEY}", "default": "minimax/minimax-m3"}
+        # FALLBACK on error -> OpenRouter auto, then GRSAI gemini (vision/backup).
+        fb = []
+        if HAS_OR:
+            fb.append({"provider": "openrouter", "model": "openrouter/auto",
+                       "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
+        if HAS_GR:
+            fb.append({"provider": "grsai", "model": "gemini-3.1-flash-lite",
+                       "base_url": GRSAI_BASE, "api_key": "${GRSAI_API_KEY}"})
+        cfg["fallback_providers"] = fb
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
