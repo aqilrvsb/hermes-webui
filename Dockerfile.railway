@@ -30,6 +30,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 RUN /opt/node/bin/npx -y playwright@latest install --with-deps chromium \
  || /opt/node/bin/npx -y playwright@latest install chromium || true
 
+# OmniRoute — OpenAI-compatible LLM gateway (177 providers, vision, auto-fallback, token compression).
+# Runs internally on 127.0.0.1:20128; Hermes proxies /omni/* to it and the agent can use its /v1.
+# Heavy (Next.js app) but kept ABOVE the cache-bust so it stays cached. Fail-safe (|| true).
+RUN /opt/node/bin/npm install -g omniroute || true
+
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
 
 # ---- DAILY REFRESH BOUNDARY ----
@@ -51,6 +56,17 @@ COPY pixel.html /apptoo/static/pixel.html
 # Real Claude-Office room art + character sprites (MIT, W17ant/Claude-Office), web-light (~0.7MB).
 # Served at /static/office/* — the dashboard renders the real isometric office with these.
 COPY office /apptoo/static/office
+# OmniRoute: dynamic config tab + same-origin reverse proxy (/omni/* -> 127.0.0.1:20128).
+COPY omniroute.html /apptoo/static/omniroute.html
+COPY omniroute_proxy.py /apptoo/api/omniroute_proxy.py
+RUN cp -f /apptoo/api/omniroute_proxy.py /app/api/omniroute_proxy.py 2>/dev/null || true
+# Sidebar icon -> OmniRoute tab (same pattern as the AI Agents Floor link)
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/omniroute.html" target="_blank" rel="noopener" data-tooltip="OmniRoute" aria-label="OmniRoute"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="12" r="2.4"/><path d="M8.4 6H13a4 4 0 0 1 4 4v.4M8.4 18H13a4 4 0 0 0 4-4v-.4"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# Same-origin proxy hook: route /omni/* through OmniRoute (placed AFTER check_auth, so it's login-gated).
+RUN for SRV in /apptoo/server.py /app/server.py; do [ -f "$SRV" ] && sed -i \
+      -e 's#^\(\s*\)result = handle_get(self, parsed)#\1if parsed.path.startswith("/omni"):\n\1    from api.omniroute_proxy import proxy_omni; return proxy_omni(self, parsed)\n\1result = handle_get(self, parsed)#' \
+      -e 's#^\(\s*\)result = route_func(self, parsed)#\1if parsed.path.startswith("/omni"):\n\1    from api.omniroute_proxy import proxy_omni; return proxy_omni(self, parsed)\n\1result = route_func(self, parsed)#' \
+      "$SRV"; done || true
 # Enable Ctrl+V paste of images into the chat (hooks the existing global addFiles()). drag-drop already works.
 COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
