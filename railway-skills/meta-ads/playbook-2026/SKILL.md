@@ -1,34 +1,73 @@
 ---
 name: meta-ads-playbook-2026
-description: The master Meta/Facebook ads strategy + creative brain for 2026 — Ben Heath + Antonio Ventre synthesis, Andromeda creative-diversity, Malaysian (Bahasa) copywriting, and AI image/video creative rules. Use for EVERY ad decision: structure, targeting, creative briefs, copy, testing, scaling, and judging results for PeningBot/PeningLab.
+description: The master Meta/Facebook ads strategy brain for 2026 — the consensus of 9 top media buyers (Ben Heath, Sam Piliero, North Digital, Tiana Asperjan, Andy Stauring, Jordan Hayes, CT the Disrupter, Media Ninja, Nick Theriot), ~110 videos. Use for EVERY ad decision: account structure, targeting, funnel, the non-negotiable rules. Product = PeningBot + PeningLab (WhatsApp-automation SaaS, Malaysia), run as click-to-WhatsApp (CTWA).
 ---
 
-# Meta Ads Playbook 2026 (the marketing brain)
+# Meta Ads Playbook 2026 — the marketing brain
 
-Quick-reference index of the 2026 Meta playbook (Ben Heath, 26 videos + Antonio Ventre, 15 videos).
-Product = **PeningBot/PeningLab** (WhatsApp-automation SaaS, Malaysia). Always resolve the live ad
-account before acting. **This page is the summary — full depth lives once in the `reference/` docs;
-open the relevant one when a decision needs more than the one-liner below.**
+Synthesized from 9 elite 2026 sources. Where they AGREE, it's law. Product = **PeningBot / PeningLab**
+(WhatsApp SaaS, Malaysia), sold via **click-to-WhatsApp (CTWA)**. Always resolve the live ad account first.
+Sister skills (read when relevant): `creative-andromeda`, `copywriting`, `creative-image`, `creative-video`,
+`testing-scaling`, `spy-research`, `ctwa-funnel`, `measurement`, `account-safety`, `agency-architecture`.
 
-| Need depth on… | Read |
-|---|---|
-| The full playbook (structure, scaling, incrementality, attribution, offer/funnel — verbatim source) | `reference/MARKETING_PLAYBOOK.md` |
-| Creative diversity / Andromeda entity-collapse | `reference/ANDROMEDA.md` |
-| Malaysian bahasa-pasar copy (frameworks, hooks, CTAs, offers) | `reference/COPYWRITING_MY.md` |
-| Image prompts (gpt-image-2 / nano-banana) | `reference/CREATIVE_IMAGE.md` |
-| Video prompts (Veo/Gemini, ~16–20 words dialogue per 8s clip) | `reference/CREATIVE_VIDEO.md` |
+## The 12 laws (near-unanimous across all 9 creators)
 
-## The 10 rules (act on these; open a reference for the *why* / detail)
-1. **Andromeda → creative is the #1 lever.** Meta collapses near-identical ads into ONE entity; make every ad a DIFFERENT entity (unique visual + copy), 15–20 per ad set. → `ANDROMEDA.md`
-2. **Consolidate structure:** one CBO + one ad set per product/pixel, many diverse ads inside. No cold/warm or TOFU-MOFU-BOFU splits; never duplicate a campaign (auction overlap). Split only by product range (PeningBot vs PeningLab).
-3. **Judge by INCREMENTALITY, not reported ROAS.** New-customer + incremental column; learn on 7-day-click, kill/scale on incremental. Never kill the high-spend top-funnel "heavy lifter" — Meta optimizes the winning SEQUENCE.
-4. **Frequency discipline:** scale only high-ROAS **and** low-freq (<~1.7); kill high-freq/low-ROAS. Funnel mix ≈ 50/30/20 top/mid/bottom.
-5. **Targeting:** broad + Value Rules; interests are suggestions; only location is a hard constraint.
-6. **Test big things first:** Offer → Angle → Style → Hook → (last) copy/colour. One angle per ad; most tests fail, one winner pays for many.
-7. **Creative:** hook = first ~3s (hook-rate 20–33%); net-new concepts beat AI-recycled; real faces/UGC = cheat code; recombine proven hook+body. Images = gpt-image-2 (text/layout) / nano-banana (realism); 1–3 videos 9:16. → `CREATIVE_IMAGE.md`, `CREATIVE_VIDEO.md`
-8. **MY copy:** ~70% casual BM + 30% English business nouns; PAS default; lean on "pening/penat balas WA"; free-trial / 24-7 auto-reply offers; halal-safe, no scam-y claims. → `COPYWRITING_MY.md`
-9. **Scaling:** stepped budget (5–7 day waits) or +3%/day when cost/result < target. **Bid cap = AOV ÷ target ROAS** (leads: lead-value ÷ target) on a separate proven-winner campaign.
-10. **Funnel → sales:** match angle to a congruent landing page by awareness; use **CTWA** (cheap, MY-preferred); optimize value of conversions, not count. Diagnose leaks: clicks-no-leads = landing/offer; leads-no-sales = offer/closing; sales-unprofitable = value-optimize/upsell.
+1. **CONSOLIDATE. One CBO campaign per business goal.** A "business goal" = one country/market, one
+   product/offer, or one storefront. Budget at campaign level (Advantage Campaign Budget), let Meta
+   allocate. One campaign at 50 conv/wk beats two at 25 (no fragmentation, exits learning faster).
+   → PeningBot = its own CBO; PeningLab = its own CBO. (Heath, Sam, North, Jordan, CT, Media Ninja, Nick)
 
-## Account safety
-Complete business verification. If disabled: request review → Meta AI Business Assistant → human agent → your Meta rep. Avoid bought accounts / "recovery services".
+2. **NEVER duplicate a campaign to scale.** Identical campaigns to the same users = **auction overlap**
+   (breaks Meta's per-user impression-sequence plan). Add ad sets to the existing campaign instead. (Heath, CT)
+
+3. **BROAD targeting always. The CREATIVE is the targeting.** No interest stacking, no lookalikes for
+   prospecting. You build an ad for an avatar; Meta finds the people. Only hard inputs: **geo + age + gender**
+   (and language for MY). Over-narrow audiences are the #1 reason ads won't spend. (ALL 9)
+
+4. **Ad set = ONE idea/avatar/angle.** New creative idea → new ad set in the same CBO (number them
+   sequentially: 100, 101, 102…). Don't mix avatars in one ad set. (Sam "packs", Jordan, Nick, Media Ninja)
+
+5. **Hybrid warm+cold — no separate retargeting campaign** for prospecting. Custom audiences are now
+   "suggestions"; a "cold" set spends on warm anyway and auto-reallocates. (Heath, CT) *(Light broad
+   retargeting/retention is OK as a small separate budget once you have a buyer pool — Media Ninja 85/10/5.)*
+
+6. **Creative is the #1 lever and the only thing you truly control.** Post-**Andromeda**, Meta is a
+   matchmaker on the visual/copy. Diversity > volume, but you still need real volume. (ALL — see `creative-andromeda`)
+
+7. **Optimize for the DEEPEST real event, never a cheap proxy.** Always optimize for the true outcome
+   (Purchase / qualified Lead), never traffic/ATC/"messaging started". For CTWA: optimize for a **qualified
+   WhatsApp conversation** and send it back via CAPI as the conversion. (Sam, CT, Nick, Media Ninja — see `measurement`)
+
+8. **Judge by PROFIT and INCREMENTALITY, not reported ROAS.** Track GPT (gross profit per transaction) /
+   new-customer CAC, not blended ROAS. A 2x-ROAS ad can out-earn a 4x one. (CT, Jordan, Sam — see `measurement`)
+
+9. **Funnel mix by awareness ≈ 50–70% TOF / 20–30% MOF / 10–20% BOF.** TOF = unsung heavy lifter; BOF gets
+   the credit. Build a *team* of ads, each with a funnel job. (Tiana — see `copywriting`)
+
+10. **Test big first: Offer → Angle → Style → Hook → (last) copy/colour.** Most "no sales" = offer problem,
+    not targeting ("Meta's targeting is great now"). Expect most tests to fail; one winner pays for many. (Heath, all)
+
+11. **Scale in steps, never spike.** ~20% up once/day when KPI is hit (Nick's 20% rule); or 20–30% every
+    3–7 days; or a marginal automated rule (raise % only while CPA < target, capped by margin). Bigger % at
+    low budgets, smaller % high. Cut at HALF the speed you scaled. (Heath, Sam, Jordan, CT, Nick — see `testing-scaling`)
+
+12. **Stability wins. Don't day-trade the account.** Don't reset learning, don't react to one bad day, batch
+    changes (≤ once/7 days per ad set), judge on 7- and 30-day windows — never hourly/24h. (CT, Nick, Heath)
+
+## 2026 platform facts you must know
+- **Andromeda / Advantage+ AI** runs delivery; the advertiser's job is creative + offer + signal quality.
+- **Attribution changed:** "click-through" now = a real **link click only**; old social/engagement clicks +
+  5-sec video views are reclassified as **"engage-through"** (1-day window). Expect REPORTED conversions to
+  drop with no real change — reconcile against back-end/CRM; don't compare pre/post-change campaigns. (Heath, Tiana)
+- **Learning phase** exits at ~**50 optimization events/week** per ad set (often 20–40 in practice). You can
+  be profitable while "Learning Limited" — fix offer/creative/consolidation, don't panic-spend.
+- **Value Rules** (up to 10): keep targeting broad but bid DOWN on weak segments (or up on a starved
+  high-value one). Needs your real numbers (LTV, close rate). (Heath, Sam, CT)
+- **Flexible ads were killed** → use single image/video + Advantage+ "Flex media"; check crops before publish.
+
+## Brand bindings (LOCKED)
+- **PeningBot pixel** `986352420917190` · **PeningLab pixel** `1013990424497184` (pass the right one as
+  `promoted_object.pixelId` + a purchase `customEventType`).
+- Objective = **OUTCOME_SALES** with **WhatsApp/CTWA** conversion location (or website + Pixel where used).
+- Budget = RM 3/day per project to start (resolve live; scale via `testing-scaling`).
+- One brand = one CBO = its own creatives. **Never mix PeningBot and PeningLab.** Always create **PAUSED**.
