@@ -20,7 +20,8 @@
   .sub{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--faint);margin-top:3px}
   .conn{margin-left:auto;display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;text-transform:uppercase;color:var(--dim);background:var(--glass);border:1px solid var(--line);padding:8px 13px;border-radius:999px}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--rose)}.dot.on{background:var(--lime)}
-  select{font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:9px;padding:8px 11px;outline:none;cursor:pointer}
+  select{font-family:var(--mono);font-size:13px;color:var(--ink);background-color:#161b2e;border:1px solid var(--line);border-radius:9px;padding:8px 11px;outline:none;cursor:pointer}
+  select option{background:#0e1322;color:var(--ink)}  /* dark dropdown options (were white/invisible) */
   .card{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
   .card h2{margin:0 0 4px;font-size:16px;font-weight:800}
   .card .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin:0 0 14px}
@@ -96,7 +97,14 @@
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 let toastT;function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("show"),2200);}
-async function j(p,opts){const r=await fetch(p,Object.assign({credentials:"include",headers:{"Content-Type":"application/json"}},opts||{}));
+// Hermes requires X-Hermes-CSRF-Token on writes; it's injected into the main page, so fetch & extract it.
+let CSRF="";
+async function getCsrf(){try{const r=await fetch("/",{credentials:"include"});const t=await r.text();
+  const m=t.match(/csrf[^"']{0,40}["']([a-fA-F0-9]{64})["']/)||t.match(/["']([a-fA-F0-9]{64})["']/);
+  if(m)CSRF=m[1];}catch(e){}}
+async function j(p,opts){opts=opts||{};const h=Object.assign({"Content-Type":"application/json"},opts.headers||{});
+  if(opts.method&&opts.method.toUpperCase()!=="GET"){if(!CSRF)await getCsrf();if(CSRF)h["X-Hermes-CSRF-Token"]=CSRF;}
+  const r=await fetch(p,Object.assign({credentials:"include"},opts,{headers:h}));
   let b=null;try{b=await r.json();}catch(e){}
   if(!r.ok)throw new Error((b&&(b.error&&(b.error.message||b.error)||b.message))||("HTTP "+r.status));return b;}
 let MODELS=[],CRONS=[],SEL="";
@@ -109,24 +117,30 @@ function roleOf(n){n=(n||"").toLowerCase();
   if(/intel|research|spy|competitor|trend|market/.test(n))return"Research";
   if(/strateg/.test(n))return"Strategist";return"Agent";}
 
+const GRSAI_SET=["gpt-5.5","gpt-5.4","gemini-3.1-pro","gemini-3.1-flash-lite","gemini-3.5-flash","gemini-3-pro","gemini-3-flash","gemini-2.5-pro","gemini-2.5-flash"];
 async function loadAll(){
+  if(!CSRF)getCsrf();   // prefetch CSRF for Save
   try{
     const [cr,md]=await Promise.all([j("/api/crons"),j("/api/models").catch(()=>({models:[]}))]);
     CRONS=cr.jobs||[];MODELS=modelIds(md);
-    if(!MODELS.length)MODELS=["gpt-5.5","gpt-5.4","gemini-3.1-pro","gemini-3.1-flash-lite","gemini-3.5-flash","gemini-3-pro","gemini-3-flash","gemini-2.5-pro","gemini-2.5-flash","openrouter/auto"];
+    // always offer the GRSAI set + the OpenRouter fallback in the dropdown (deduped)
+    GRSAI_SET.concat(["openrouter/auto"]).forEach(m=>{if(MODELS.indexOf(m)<0)MODELS.push(m);});
     $("#dot").className="dot on";$("#status").textContent="live";$("#err").style.display="none";
-    buildProfiles();renderProviders();renderAgents();
+    await buildProfiles();renderProviders();renderAgents();
   }catch(e){
     $("#dot").className="dot";$("#status").textContent="error";
     $("#err").style.display="block";$("#err").innerHTML="⚠ Can't read Hermes data ("+esc(e.message)+"). Open <a href='/'>Hermes</a>, log in, reload.";
   }
   $("#ts").textContent=new Date().toLocaleTimeString();
 }
-function buildProfiles(){const sel=$("#profsel");const set={};CRONS.forEach(c=>{const p=(c.profile||"default");set[p]=1;});
-  const ps=Object.keys(set);if(!ps.length){sel.innerHTML="<option>default</option>";return;}
-  if(!SEL){const cnt={};CRONS.forEach(c=>{const p=(c.profile||"default");cnt[p]=(cnt[p]||0)+1;});SEL=ps.sort((a,b)=>cnt[b]-cnt[a])[0];}
-  sel.innerHTML=ps.map(p=>`<option ${p===SEL?"selected":""}>👤 ${esc(p)}</option>`).join("");
-  sel.onchange=()=>{SEL=sel.value.replace(/^👤 /,"");renderAgents();};}
+async function buildProfiles(){const sel=$("#profsel");let ps=[];
+  try{const d=await j("/api/profiles");ps=((d&&d.profiles)||[]).map(x=>(x&&x.name)||x).filter(Boolean);}catch(e){}
+  const set={};ps.forEach(p=>set[p]=1);CRONS.forEach(c=>{set[c.profile||"default"]=1;});  // all profiles + any with crons
+  ps=Object.keys(set);if(!ps.length)ps=["default"];
+  if(!SEL||ps.indexOf(SEL)<0){const cnt={};CRONS.forEach(c=>{const p=(c.profile||"default");cnt[p]=(cnt[p]||0)+1;});
+    SEL=ps.slice().sort((a,b)=>(cnt[b]||0)-(cnt[a]||0))[0];}
+  sel.innerHTML=ps.map(p=>`<option value="${esc(p)}" ${p===SEL?"selected":""}>👤 ${esc(p)}</option>`).join("");
+  sel.onchange=()=>{SEL=sel.value;renderAgents();};}
 async function loadProviders(){try{const d=await j("/api/providers");return (d&&(d.providers||d.connections||d))||[];}catch(e){return null;}}
 async function renderProviders(){const el=$("#providers");
   // Show the providers we know are configured + their models (from custom_providers via /api/models grouping is messy; show known set).
