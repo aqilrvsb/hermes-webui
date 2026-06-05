@@ -5,8 +5,10 @@ description: Read PDFs (including scanned/image-only PDFs), images/screenshots, 
 
 # read-documents
 
-**Your model (minimax-m3) is multimodal — it can SEE images and video, like Claude Code.**
+**You run on a multimodal Claude model (via APIPod) — you can SEE images, like Claude Code.**
 So your FIRST choice for anything visual is to *look at the image itself*, not OCR it.
+For image/PDF reading the recommended model is **claude-sonnet-4-5** (strong, cheap vision) — if you're
+on a non-vision model, switch the chat model to **claude-sonnet-4-5** in the picker before reading.
 PDFs aren't a native image type, so render their pages to images first, then view them.
 
 Terminal tools available (no MCP, no extra model needed):

@@ -139,18 +139,15 @@ for home in homes():
         if "openrouter" not in have:
             cps.append({"name": "openrouter", "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
         cfg["custom_providers"] = cps
-        # MAIN model — seed once (your dropdown / config edits then persist across restarts).
-        if not (isinstance(cfg.get("model"), dict) and cfg["model"].get("default")):
-            cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
-                            "api_key": "${APIPOD_API_KEY}", "default": "claude-opus-4-6"}
-        # CASCADE FALLBACK — seed once. Tried in order when the main provider errors.
-        if not cfg.get("fallback_providers"):
-            cfg["fallback_providers"] = [
-                {"provider": "apipod-gpt", "model": "gpt-5.5", "base_url": APIPOD_BASE,
-                 "api_key": "${APIPOD_GPT_API_KEY}"},
-                {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.5", "base_url": OR_BASE,
-                 "api_key": "${OPENROUTER_API_KEY}"},
-            ]
+        # MAIN (chat default) = APIPod Claude Opus-4-6. Switch live per-chat in the dropdown —
+        # e.g. pick claude-sonnet-4-5 for image/PDF reading (cheaper vision).
+        cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
+                        "api_key": "${APIPOD_API_KEY}", "default": "claude-opus-4-6"}
+        # FALLBACK on any provider error -> OpenRouter (applies to chat AND agents).
+        cfg["fallback_providers"] = [
+            {"provider": "openrouter", "model": "openrouter/auto", "base_url": OR_BASE,
+             "api_key": "${OPENROUTER_API_KEY}"},
+        ]
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
@@ -158,6 +155,33 @@ for home in homes():
     except Exception:
         pass
 print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
+
+# ── ALL AGENTS -> GPT-5.5 (APIPod). One-time migration: rewrite any cron still on the OLD minimax
+# default to the agent model. Only touches minimax/* models, so a model you later pick per-agent in
+# the Scheduled Jobs UI is preserved. Gated on APIPOD_GPT_API_KEY (so we only switch when GPT works).
+if os.environ.get("APIPOD_GPT_API_KEY", "").strip():
+    import glob as _cg, json as _cj
+    AGENT_MODEL = os.environ.get("AGENT_MODEL", "gpt-5.5").strip()
+    _seen_jf = set()
+    for _pat in (os.path.join(HOME, "cron", "jobs.json"),
+                 os.path.join(HOME, "**", "cron", "jobs.json")):
+        for jf in _cg.glob(_pat, recursive=True):
+            if jf in _seen_jf:
+                continue
+            _seen_jf.add(jf)
+            try:
+                _d = _cj.load(open(jf, encoding="utf-8"))
+                _jobs = _d.get("jobs") if isinstance(_d, dict) else _d
+                _ch = False
+                for _jb in (_jobs or []):
+                    if isinstance(_jb, dict) and str(_jb.get("model") or "").lower().startswith("minimax"):
+                        _jb["model"] = AGENT_MODEL
+                        _ch = True
+                if _ch:
+                    _cj.dump(_d, open(jf, "w", encoding="utf-8"), indent=2)
+                    print("== agents -> %s in %s ==" % (AGENT_MODEL, jf))
+            except Exception:
+                pass
 
 # ---- Heal workspace paths: /app/<x> (ephemeral, wiped on redeploy) -> /workspace/<x> (persistent) ----
 # Spaces saved with an absolute /app path fail with "Path does not exist" after a redeploy.
