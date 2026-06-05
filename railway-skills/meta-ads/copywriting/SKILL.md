@@ -63,12 +63,13 @@ customer surveys** (see `spy-research`). "Enter the conversation already in thei
   "harga?" sehari, lead hilang celah WA/IG, burnout, tutup kedai → takde sales.
 - **Hooks:** "Penat balas WhatsApp sampai lewat malam? 😩" / "Customer tanya tengah malam, esok dah beli kat
   orang lain." / "Owner kedai 40-an, sorang balas 100 WhatsApp sehari?"
-- **CTAs:** "Jom cuba FREE 7 hari", "PM 'PENING'", "WhatsApp kami sekarang".
-- **Offers:** free trial (no card), auto-reply 24/7, masa terjimat, festive (Raya/CNY/payday/11.11).
-- **Tone:** modest, halal-safe; NO scam-y "untung besar/cepat kaya"; keep a human-escalation note.
-- **Local proof:** "dibalas dalam 5 minit", real WhatsApp testimonial screenshots, founder/owner ads for trust.
+- **CTAs (website-SALES — drive to the site, NOT WhatsApp):** "Mula sekarang di peningbot.com", "Cuba plan RM35", "Subscribe Pro di peninglab.com", "Daftar sekarang". Never "PM us".
+- **Offers:** neither product has a free trial — lead with the low entry tier + refund/risk-reversal (see `offer-design`); festive promos (Raya/CNY/Merdeka/payday/11.11).
+- **Tone:** modest, halal-safe; NO scam-y "untung besar/cepat kaya".
+- **Local proof:** specific numbers, real testimonial screenshots, founder/owner ads for trust.
+- **Brand-specific (never mix):** PeningBot pains = lost sales/time (WhatsApp overwhelm, admin cost); PeningLab pains = expensive/slow content, competitors out-posting. Pull the right brand's pains/hooks from `_products/<brand>.md`.
 
-## 9. CTWA greeting congruence (critical — see `ctwa-funnel`)
-The **first WhatsApp auto-reply MUST mirror the ad's hook/angle** (problem-aware ad → greeting names that
-problem). Congruence ad→greeting is what lifts conversion (Jordan saw 1.6%→3.6% from congruence). Write the ad
-copy and the WhatsApp opening message as a matched pair.
+## 9. Ad ↔ landing-page congruence (critical — see `landing-funnel`, `website-sales-funnel`)
+The landing-page **headline MUST continue the ad's hook/angle** (problem-aware ad → page leads with that
+problem). Congruence ad→page is a top conversion lever (Jordan: 1.6%→3.6%). Write the ad copy, the page
+headline, and the CTA as a matched set; CTA wording stays continuous ad→page→checkout.

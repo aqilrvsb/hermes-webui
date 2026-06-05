@@ -9,10 +9,12 @@ USER root
 #   tesseract-ocr -> OCR for scanned PDFs / images / screenshots (English + Malay)
 # Pure CLI so it doesn't depend on the runtime venv. Kept ABOVE the cache-bust so it stays cached.
 RUN (apt-get update && apt-get install -y --no-install-recommends \
-       tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa poppler-utils file ghostscript \
+       tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa poppler-utils file ghostscript tzdata \
      && rm -rf /var/lib/apt/lists/*) \
- || (apk add --no-cache tesseract-ocr tesseract-ocr-data-eng poppler-utils file) \
+ || (apk add --no-cache tesseract-ocr tesseract-ocr-data-eng poppler-utils file tzdata) \
  || true
+# Malaysia timezone so all cron schedules (e.g. Ad Builder 01:00) fire in MYT, not UTC.
+ENV TZ=Asia/Kuala_Lumpur
 
 # Node (required by the npx-based MCP servers)
 RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -o /tmp/node.txz \
@@ -79,6 +81,7 @@ COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh
 COPY seed_roles.sh /opt/seed_roles.sh
+COPY seed_crons.sh /opt/seed_crons.sh
 
 # Make the "New space" form auto-create the folder (force the backend create flag on)
 RUN sed -i 's/auto_create = body.get("create", False)/auto_create = True/' /apptoo/api/routes.py || true
@@ -95,7 +98,7 @@ RUN sed -i 's#dirs.extend(Path(p) for p in get_external_skills_dirs())#import ya
 # Patch the upstream init: (1) line-164 env-reload crash guard,
 # (2) auto-create workspaces + write MCP config + launch the gateway daemon before the server.
 RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
- && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; sh /opt/seed_roles.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; echo "== mcp config + gateway launched =="' /hermeswebui_init.bash
+ && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; sh /opt/seed_roles.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; sh /opt/seed_crons.sh || true ; echo "== mcp config + gateway + crons launched =="' /hermeswebui_init.bash
 
 USER root
 # CMD is inherited from the base image (/hermeswebui_init.bash), now patched.

@@ -5,9 +5,19 @@ description: Produce ad VIDEOS with the gemini/Veo model (and the AI-UGC pipelin
 
 # Creative — VIDEO generation (gemini / Veo + AI-UGC)
 
-Generate via the **peninglab** MCP. Default video model = the **gemini** model (user preference); Veo 3.1 is
-the realism/consistency benchmark for the pipeline. Fire ~3–4 generations in parallel; on timeout recover via
-`get_status(task_id)` (still charged — don't regenerate). Ask before spend > RM5.
+Generate via the **peninglab** MCP. Default video model = the **gemini** model (Gemini Omni, 10s fixed, 1080p,
+RM1.30/clip); Veo 3.1 (8s, RM0.40) is the realism/consistency benchmark. Ask before spend > RM5.
+
+## Fire-and-Poll (NEVER double-charge — mandatory)
+A timeout does NOT mean failure — the clip is still rendering and is **already paid for**. So:
+1. **Check state first (Safety Lock).** Before calling `generate_video`, check `state.json` / `task_status.json`
+   for this slot. **If a `task_id` exists → `get_status(task_id)`** to recover the clip. **Never** start a new
+   generation when a `task_id` exists.
+2. **Fire** only if no `task_id` → call `generate_video`, immediately **log the `task_id`** to state.
+3. **Ignore the timeout** → take the `task_id` from the error trace and **poll `get_status(task_id)`**, never retry.
+4. **Parallel dispatch** ~3–4 clips at once (concurrent on the server; wall-clock = slowest, not sum). Shrink on
+   rate-limit/overload.
+Decision rule per slot: *task_id exists? → `get_status`. No/failed? → `generate_video` + log new task_id.*
 
 ## Prompt structure
 `[subject] · [action] · [camera: shot type + movement] · [lighting] · [lens/mood] · [setting] · [audio /

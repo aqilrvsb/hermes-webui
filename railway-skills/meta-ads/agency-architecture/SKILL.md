@@ -1,76 +1,97 @@
 ---
 name: agency-architecture
-description: The complete A-to-Z AI marketing agency architecture for PeningBot + PeningLab — the recommended 11 agents in 4 layers, what each does, its schedule, the skills it loads, the tools it uses (zernio/peninglab/whacenter), the shared state files, and the hard rules (only ONE agent writes ads; everything PAUSED; never mix brands). Use to understand your role in the pipeline and the hand-offs.
+description: The complete A-to-Z AI marketing agency for PeningBot + PeningLab — 17 agents in 6 layers, each agent's role, its schedule (MYT, anchored on the 01:00 Ad Builder), the skills it loads, the tools it uses (zernio/peninglab/whacenter), the shared state files, and the hard rules (only ONE agent writes ads; everything PAUSED; never mix brands; website-SALES objective). Use to know your role + the hand-offs.
 ---
 
 # AI Marketing Agency — full architecture (A → Z)
 
-Goal: an autonomous system that researches, creates, launches, optimizes, and reports Meta CTWA ad campaigns
-for **PeningBot** and **PeningLab** — laptop-off. Built from the 2026 consensus of 9 elite media buyers.
-**Each brand is a separate world** (its own CBO, pixel, creatives). One agent = one role; no overlap, no gaps.
+Autonomous system that researches → creates → launches → optimizes → reports website-purchase Meta
+campaigns for **PeningBot** and **PeningLab** (Malaysia), laptop-off. Objective = **OUTCOME_SALES → website
+→ paid subscription** (NOT click-to-WhatsApp). Each brand is a **separate world** (own CBO, pixel, product
+brief, creatives — never shared). Read `_products/peningbot.md` + `_products/peninglab.md` first.
 
-## Recommended: 11 agents in 4 layers
-Run the **full 11** for "complete & perfect." A **lean 7** to start = merge {1+2}, {5+6}, drop {11} into {7},
-fold {10}'s build into {7} — see "Lean start" below.
+## The daily cycle — anchored on the 01:00 Ad Builder (MYT)
+Ads are **always built at 01:00**, so each batch runs a full ~23–24h before the next cycle measures it and
+rebuilds. The pipeline is timed so creatives are ready *before* 01:00 and the prior batch is measured *just
+before* the new build:
+```
+   (prep the next batch, evening)            (measure + report the last 24h)        (build)
+20:00 Spy → 20:30 Researcher → 21:00 Head of Growth → 21:30 Copywriter
+   → 22:00 Image + Video Producers  →  23:30 Analyst  →  00:00 Reporter  →  01:00 AD BUILDER
+   then through the day: Optimizer hourly · CRO hourly · Retention 10:00 · Account Safety 05:00
+```
+Cycle logic: built 01:00 (day N) → runs ~23h → Analyst 23:30 + Reporter 00:00 close the cycle → Ad Builder
+01:00 (day N+1) builds informed by that report. Always **PAUSED** → owner approves on WhatsApp before spend.
 
-### LAYER 1 — INTELLIGENCE (input)
-1. **Spy** — Meta Ad Library: find competitor + cross-niche winners (sort by impressions, inactive ads,
-   funnel-hack). Skills: `spy-research`. Tools: agentql/playwright, zernio. Runs **3×/day (00:00, 08:00, 16:00)**.
-2. **Market Researcher** — DIG/Gold: Reddit, reviews, surveys, comments → personas, awareness/sophistication,
-   ranked angles in the customer's words. Skills: `spy-research`, `copywriting`. Tools: playwright/web. **Daily 00:15**.
+## The 17 agents (6 layers)
 
-### LAYER 2 — STRATEGY (brain)
-3. **Head of Growth / Strategist** — the orchestrator. Sets the weekly account goal per brand, the offer (3
-   P's / Value Bridge), persona×awareness map, budget split across PeningBot/PeningLab, and the creative brief
-   (what slots to make). Approves direction; never touches ads directly. Skills: `meta-ads-playbook-2026`,
-   `copywriting`, `spy-research`, `measurement`. Tools: zernio (read). **Weekly Mon 09:00** + daily 00:30 check.
+### LAYER 0 — FOUNDATION
+1. **Product Analyst** — studies peningbot.com + peninglab.com → maintains `_products/*.md` (features,
+   pains, offer, USPs, objections, brand voice). Skills: `spy-research`. Tools: playwright. **Weekly Mon 04:00.**
 
-### LAYER 3 — CREATIVE (production)
-4. **Copywriter** — hooks, scripts, primary text, headlines, and the matched **CTWA greeting** per angle/
-   awareness (BM/Manglish). Skills: `copywriting`, `ctwa-funnel`. Tools: none (writes briefs). **Daily 00:45**.
-5. **Image Producer** — gpt-image-2 / nano-banana statics (15–20 distinct entities/batch). Skills:
-   `creative-image`, `creative-andromeda`. Tools: **peninglab** (generate_image). **Daily 01:00**.
-6. **Video Producer** — gemini/Veo + AI-UGC pipeline + VO. Skills: `creative-video`, `creative-andromeda`.
-   Tools: **peninglab** (generate_video). **Daily 01:00** (parallel with Image).
+### LAYER 1 — INTELLIGENCE
+2. **Spy** — Meta Ad Library (sort by impressions, inactive ads, funnel-hack), cross-niche winners.
+   Skills: `spy-research`. Tools: playwright/agentql, zernio. **20:00 + 13:00 (2×/day).**
+3. **Market Researcher** — Reddit/reviews/comments → personas, awareness, angles in the customer's words
+   (local: Lowyat, r/malaysia, Shopee/TikTok reviews). Skills: `spy-research`, `copywriting`. **Daily 20:30.**
 
-### LAYER 4 — EXECUTION & OPTIMIZATION (output + loop)
-7. **Ad Builder / Executor** — the **ONLY agent that writes ads.** Assembles CBO + ad-set(=one idea) +
-   3-ads/hook CTWA ads, correct pixel, broad targeting, **always PAUSED**. Skills: `meta-ads-playbook-2026`,
-   `ctwa-funnel`, `creative-andromeda`, `account-safety`. Tools: **zernio** (`ads_create_ctwa_ad`). **Daily 01:15**.
-8. **Media Buyer / Optimizer** — the 20% rule, min-spend trick, 4-quadrant classifier, win-ratio, kill/scale,
-   frequency, creative-learnings ritual → relaunch winners. Skills: `testing-scaling`, `creative-andromeda`,
-   `measurement`. Tools: **zernio** (update budgets/status). **Hourly or 3×/day**.
-9. **Measurement / Analyst** — GPT/profit, incremental + new-customer attribution, CAPI gut-check, audience-
-   segment reporting, attribution-2026 reconciliation. Skills: `measurement`. Tools: **zernio** (analytics,
-   conversions). **Daily 01:30** + feeds #8.
-10. **CTWA Conversion Guardian** — owns the WhatsApp side: greeting congruence, lead qualification gating,
-    **sends qualified-lead events back via CAPI**, follow-up sequences. Skills: `ctwa-funnel`, `copywriting`,
-    `measurement`. Tools: **zernio** (messaging/conversions), **whacenter**. **Hourly.**
-11. **Account Safety / Health** — watches account/page status, write-locks, policy, special-ad-categories,
-    pixel-event sanity; resolves the live working account. Skills: `account-safety`. Tools: **zernio**. **Daily 07:00**.
+### LAYER 2 — STRATEGY
+4. **Head of Growth** — conductor. Sets tomorrow's goal per brand, budget split (RM4 PeningBot / RM4
+   PeningLab), persona×awareness map, the creative brief. Skills: `meta-ads-playbook-2026`, `measurement`,
+   `offer-design`. Tools: zernio (read). **Daily 21:00** + **weekly Mon 08:00** deep-dive.
+5. **Offer Architect** — crafts/tests the offer (trial terms, price framing, bonuses, guarantee, Hormozi
+   stack) per brand. Skills: `offer-design`, `copywriting`. **Weekly Mon 06:00.**
 
-### ORCHESTRATION
-Agent #3 (Head of Growth) is the conductor; the daily chain runs **Spy → Researcher → Strategist → Copywriter
-→ Image+Video → Builder → Guardian/Optimizer/Analyst** as a staggered pipeline (times above). The owner gets a
-**weekly report** (#3) + daily one-line status (#9) via whacenter to `$WHACENTER_DEFAULT_TO`.
+### LAYER 3 — CREATIVE
+6. **Copywriter** — brand-specific hooks, scripts (timed beats for video), primary text, headlines, website
+   CTAs. Skills: `copywriting`. **Daily 21:30.**
+7. **Image Producer** — gpt-image-2 / nano-banana statics (Fire-and-Poll). Skills: `creative-image`,
+   `creative-andromeda`, `creative-concepts`. Tools: **peninglab**. **Daily 22:00.**
+8. **Video Producer** — gemini omni (10s) + AI-UGC (Fire-and-Poll). Skills: `creative-video`,
+   `creative-andromeda`, `creative-concepts`. Tools: **peninglab**. **Daily 22:00** (parallel).
+9. **Creative R&D / Prompt Specialist** — masters gemini omni + gpt-image-2, maintains the prompt libraries,
+   closes the win→prompt feedback loop. Skills: `creative-rnd`. Tools: **peninglab** (budget-gated). **Weekly Tue 04:00.**
 
-## Shared state (the agents' memory — in the persistent workspace `_shared/`)
-- `personas.json` (#2→#3) · `brief.json` (#3→#4/5/6 — per-slot: persona, awareness, angle, hook, format,
-  image/video prompt, the matched greeting) · `creatives.json` (#5/6→#7, asset URLs) · `live_ads.json`
-  (#7→#8/9, ids) · `results.json` (#9→#8/3, GPT/CPL/incremental) · `learnings.json` (#8, the 15-min-stare log)
-  · `account_health.json` (#11). Read your inputs, write your outputs; never skip a hand-off.
+### LAYER 4 — EXECUTION & OPTIMIZATION
+10. **Funnel / Landing Builder** — advertorial/listicle/quiz pages congruent to each angle → the website.
+    Skills: `landing-funnel`, `website-sales-funnel`. **Weekly Mon 06:30 + on-demand.**
+11. **Ad Builder** — the **ONLY agent that writes ads.** Builds CBO + ad-set(=one idea) + 3-ads/hook,
+    correct pixel, broad MY targeting, OUTCOME_SALES website, **always PAUSED**. Skills:
+    `meta-ads-playbook-2026`, `website-sales-funnel`, `creative-andromeda`, `account-safety`. Tools:
+    **zernio** (`ads_create_standalone_ad`). **Daily 01:00 (FIXED).**
+12. **Media Buyer / Optimizer** — 20% rule, min-spend trick, 4-quadrant, win-ratio, kill/scale, frequency.
+    Skills: `testing-scaling`, `creative-andromeda`, `measurement`. Tools: **zernio**. **Hourly 09:00–23:00.**
+13. **Analyst** — GPT/profit, incremental + new-customer attribution, CAPI gut-check, segment reporting,
+    closes the ~24h cycle. Skills: `measurement`. Tools: **zernio** (analytics). **Daily 23:30.**
+14. **Conversion / Checkout CRO** — landing→checkout conversion, abandoned-checkout retargeting, page CRO.
+    Skills: `website-sales-funnel`, `measurement`. Tools: **zernio**. **Hourly (day).**
+15. **Retention / Lifecycle** — post-purchase onboarding, churn-save, upsell, win-back (subscription LTV).
+    Skills: `retention-lifecycle`. Tools: **zernio**, **whacenter**. **Daily 10:00.**
+16. **Account Safety** — account/page status, write-locks, policy, special categories, pixel sanity; resolves
+    the live account. Skills: `account-safety`. Tools: **zernio**. **Daily 05:00.**
+
+### LAYER 5 — COMMS
+17. **Reporter** — single owner-facing voice on WhatsApp: daily cycle digest + weekly report + proactive
+    alerts (write-lock, ban, winner found, hard-deck). Skills: `measurement`. Tools: **whacenter** (to
+    `$WHACENTER_DEFAULT_TO`). **Daily 00:00 + weekly Mon 09:00 + hourly alert check.**
+
+## Shared state (`_shared/` in the persistent workspace — the agents' memory)
+`product_*` (from `_products/`) · `personas.json` (#3→#4) · `brief.json` (#4/#6 → producers: per slot =
+brand, persona, awareness, angle, hook, format, image/video prompt, matched website CTA) ·
+`creatives.json` (#7/#8→#11, asset URLs + **task_id per slot** for Fire-and-Poll) · `live_ads.json`
+(#11→#12/#13) · `results.json` (#13→#12/#4/#17, GPT/CPA/incremental) · `learnings.json` (#9/#12) ·
+`prompt_lib_video.json` + `prompt_lib_image.json` (#9) · `account_health.json` (#16).
 
 ## HARD RULES (every agent)
-1. **Only the Ad Builder (#7) creates/edits ads.** Everyone else reads or writes briefs/state.
-2. **Always create PAUSED.** Never set live or spend without explicit owner confirmation.
-3. **Never mix PeningBot and PeningLab** — separate CBO, pixel (`986352420917190` / `1013990424497184`), creatives.
-4. **Resolve the live ad account every run** (it changes); tiny PAUSED smoke-test before building.
-5. **Broad targeting, one CBO/brand, ad-set=one idea, 3-ads/hook, optimize for qualified WhatsApp lead.**
-6. Judge by **GPT/profit + incremental**, 7/30-day windows, never 24h. Scale in steps, cut at half-speed.
-7. Generate creatives **in parallel** (peninglab batches); on timeout recover via `get_status` (don't double-charge).
-8. Never go silent on long work — post a one-line progress note (keeps the live connection alive).
-
-## Lean start (7 agents) — if you want fewer crons first
-1 **Intelligence** (Spy+Researcher merged) · 2 **Head of Growth** · 3 **Copywriter** · 4 **Creative** (Image+
-Video merged) · 5 **Ad Builder** · 6 **Optimizer+Analyst merged** · 7 **CTWA Guardian**. Add #11 Safety and
-split the merged ones as spend grows. The 11-agent form is the target for "ultimately complete and perfect."
+1. **Only the Ad Builder (#11) creates/edits ads.** Everyone else reads or writes briefs/state.
+2. **Always PAUSED.** Never go live / spend without explicit owner approval on WhatsApp.
+3. **Never mix PeningBot & PeningLab** — separate CBO, pixel (`986352420917190` / `1013990424497184`),
+   product brief, creatives. Different audiences/offers/visual identity.
+4. **Objective = OUTCOME_SALES → website → Purchase** (paid subscription) via the brand pixel + CAPI. At
+   RM4/day, optimize a higher-funnel event (InitiateCheckout) first, switch to Purchase as volume grows.
+5. **Broad MY targeting, one CBO/brand, ad-set=one idea, 3-ads/hook.** Judge by profit/GPT + incremental,
+   7/30-day windows. Scale in steps, cut at half-speed.
+6. **Creatives via peninglab use Fire-and-Poll** (check task_id → get_status; never re-generate; parallel batch).
+7. **Budget RM4/day PeningBot + RM4/day PeningLab.** Don't overspend; flag the hard deck.
+8. Never go silent on long work — post a one-line progress note.
+9. Everything is **Malaysia-only** (geo MY, BM/Manglish, MYT, MYR, MY festive calendar).

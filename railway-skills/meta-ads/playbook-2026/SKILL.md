@@ -5,10 +5,14 @@ description: The master Meta/Facebook ads strategy brain for 2026 — the consen
 
 # Meta Ads Playbook 2026 — the marketing brain
 
-Synthesized from 9 elite 2026 sources. Where they AGREE, it's law. Product = **PeningBot / PeningLab**
-(WhatsApp SaaS, Malaysia), sold via **click-to-WhatsApp (CTWA)**. Always resolve the live ad account first.
-Sister skills (read when relevant): `creative-andromeda`, `copywriting`, `creative-image`, `creative-video`,
-`testing-scaling`, `spy-research`, `ctwa-funnel`, `measurement`, `account-safety`, `agency-architecture`.
+Synthesized from 9 elite 2026 sources. Where they AGREE, it's law. Products = **PeningBot** (B2B WhatsApp-
+automation SaaS for SME owners) + **PeningLab** (AI UGC-content studio for TikTok Shop sellers) — both
+Malaysia, both sold as a **paid subscription on the website** (objective = SALES, drive to the site to buy —
+NOT click-to-WhatsApp). Read the per-brand briefs in `_products/peningbot.md` + `_products/peninglab.md`
+FIRST; they're different products — never share creative. Always resolve the live ad account first.
+Sister skills: `creative-andromeda`, `copywriting`, `creative-image`, `creative-video`, `testing-scaling`,
+`spy-research`, `website-sales-funnel`, `measurement`, `account-safety`, `offer-design`, `landing-funnel`,
+`retention-lifecycle`, `creative-rnd`, `agency-architecture`.
 
 ## The 12 laws (near-unanimous across all 9 creators)
 
