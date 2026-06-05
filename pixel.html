@@ -98,6 +98,8 @@
   .char.sleeping .tag,.char.sleeping .ring,.char.sleeping .bubble{display:none}
   .char .zzz{position:absolute;top:-22px;left:60%;width:24px;height:auto;display:none;image-rendering:auto}
   .char.sleeping .zzz{display:block;animation:zfloat 3s ease-in-out infinite}
+  .char.napping .zzz{display:block;animation:zfloat 3s ease-in-out infinite}
+  .char.napping .sprite{filter:brightness(.82) saturate(.92)}
   @keyframes zfloat{0%,100%{transform:translateY(0);opacity:.85}50%{transform:translateY(-5px);opacity:1}}
   .char .pencil{position:absolute;top:-2px;right:-14px;font-size:10px;opacity:0;transition:.15s;color:var(--dim)}
   .stageempty{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);color:var(--faint);font-size:13px}
@@ -108,7 +110,7 @@
   .feed h3{margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:8px}
   .feed .rows{display:flex;flex-direction:column;gap:9px;overflow:auto;max-height:430px}
   .fr{display:flex;gap:10px;align-items:flex-start;font-size:13px}
-  .fr .av{width:26px;height:26px;flex:none;border-radius:7px;display:grid;place-items:center;font-size:14px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
+  .fr .av{width:28px;height:28px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:15px;background:rgba(255,255,255,.06);border:1px solid var(--line2)}
   .fr .b{min-width:0}
   .fr .nm{font-weight:700;font-size:13px}.fr .nm b{font-weight:700}
   .fr .ev{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
@@ -474,13 +476,11 @@ const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
 /* monitor desks = fixed furniture (always shown, like the real office). char stands behind, facing the screen. */
 /* Desks (computers) + beds are GENERATED to match the agent count — one workstation and one
    bed PER agent — so every agent is visible and they never stack. Grids scale with FLOOR.length. */
-function genDesks(n){const out=[],cols=4,x0=40,dx=8,y0=46,dy=5.4,sh=-1.6;
-  for(let i=0;i<n;i++){const r=Math.floor(i/cols),c=i%cols,rl=c<2;
-    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*1.1,spr:rl?"desk-lr":"desk-rr",cf:rl?"rear-left":"rear-right"});}
-  return out;}
-function genBeds(n){const out=[],cols=4,x0=12,dx=8,y0=64,dy=5.6,sh=1.2;
-  for(let i=0;i<n;i++){const r=Math.floor(i/cols),c=i%cols;
-    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*0.8});}
+/* Neat ISOMETRIC desk grid — aligned rows of workstations (organized, like a real office floor).
+   cols across; each column steps right+down, each row steps left+down → a clean iso parallelogram. */
+function genDesks(n){const out=[],cols=4,ox=43,oy=39,cx=6.0,cy=2.9,rx=-4.4,ry=3.3;
+  for(let i=0;i<n;i++){const c=i%cols,r=Math.floor(i/cols),rl=c<2;
+    out.push({x:ox+c*cx+r*rx, y:oy+c*cy+r*ry, spr:rl?"desk-lr":"desk-rr", cf:rl?"rear-left":"rear-right"});}
   return out;}
 const POIS=[{x:80,y:49},{x:55,y:43},{x:30,y:55},{x:70,y:46}]; // coffee / water / wander spots
 const DOOR={x:80,y:36};
@@ -512,17 +512,18 @@ async function renameAgent(id,name){
 function buildStage(){const wrap=$("#chars");if(!wrap)return;
   if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
-  // desks + beds sized to the live agent count (one each per agent — no stacking, scales dynamically)
-  const N=Math.max(FLOOR.length,6); const DESKS=genDesks(N), BEDS=genBeds(N);
-  // assign homes: workers -> desks, sleepers -> beds, hermes -> standby
-  let di=0,bi=0;
+  // EVERY agent gets its OWN workstation in the organized iso grid; Hermes Agent = standby. No bed pile —
+  // napping agents doze standing at their desk, so the floor always looks tidy & sorted (like a real office).
+  const crons=FLOOR.filter(a=>a.kind!=="hermes");
+  const DESKS=genDesks(Math.max(crons.length,6));
+  let di=0;
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
-    if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.5,face:d.cf,desk:d};}
-    else if(a.mode==="standby"){a._home={x:72,y:40,face:"front-left",standby:true};}
-    else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};}});
-  // desks furniture (build once)
-  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:13%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
-  const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:7%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
+    if(a.kind==="hermes"||a.mode==="standby"){a._home={x:72,y:40,face:"front-left",standby:true};}
+    else{const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.5,face:d.cf,desk:d};}});
+  // desk furniture — one monitor-desk per assigned agent (at least 6 so the room isn't bare)
+  const shown=Math.max(di,Math.min(DESKS.length,6));
+  const deskHTML=DESKS.slice(0,shown).map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:12%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
+  const bedHTML="";
   const charHTML=FLOOR.map((a,i)=>`<div class="char ${a.status}" data-i="${i}" data-id="${esc(a.id)}"
        title="${esc(a.name)} — ${esc(a.role)}" onclick="if(!event.target.classList.contains('nm'))openModal(${i})">
       <div class="bubble"><i></i><i></i><i></i></div>
@@ -542,7 +543,7 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   Object.keys(AG).forEach(id=>{if(!FLOOR.some(a=>a.id===id))delete AG[id];});
 }
 function renderStage(){const wrap=$("#chars");if(!wrap)return;
-  const sz=Math.max(40,Math.round(($("#stagewrap").clientHeight||340)*0.155));
+  const sz=Math.max(46,Math.round(($("#stagewrap").clientHeight||340)*0.185));
   wrap.style.setProperty("--csz",sz+"px");
   const key=FLOOR.map(a=>a.id+":"+a.mode+":"+a.name+":"+a.color+":"+(a.busy?1:0)).join("|")||"empty";
   if(key!==_stageKey){_stageKey=key;buildStage();}
@@ -568,11 +569,11 @@ function engine(t){const dt=Math.min(0.05,((t-_lastT)||16)/1000);_lastT=t;
       else{setFace(r,home.face);r.phase+=dt*1.4;r.bob=sleeping?0:Math.sin(r.phase)*0.8;}
     }
     // dom write
-    const el=r.el,atDesk=!r.walking&&home.desk&&r.mode==="work";
-    el.classList.toggle("sleeping",sleeping&&!r.walking);
+    const el=r.el,atDesk=!r.walking&&home.desk;
+    el.classList.toggle("napping",sleeping&&!r.walking);   // doze AT the desk (standing) — stays tidy/organized
     el.classList.toggle("work",r.mode==="work");
     const bub=el.querySelector(".bubble");if(bub)bub.style.display=(r.busy&&!r.walking)?"flex":"none";
-    const anchor=(sleeping&&!r.walking)?-52:-87;
+    const anchor=-87;
     el.style.left=r.x+"%";el.style.top=r.y+"%";
     el.style.transform="translate(-50%,"+anchor+"%) translateY("+r.bob+"px)";
     el.style.zIndex=Math.round(r.y*10)+(atDesk?-1:60); // behind its desk when seated, above floor when walking
