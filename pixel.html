@@ -463,12 +463,16 @@ const POOL=["dev-1","employee-2","employee-3","Me-1","dev-2","explore-1","employ
 const FXB="/static/office/";
 const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
 /* monitor desks = fixed furniture (always shown, like the real office). char stands behind, facing the screen. */
-const DESKS=[
-  {x:46,y:50,spr:"desk-lr",cf:"rear-left"},  {x:57,y:53,spr:"desk-rr",cf:"rear-right"},
-  {x:43,y:60,spr:"desk-lr",cf:"rear-left"},  {x:60,y:63,spr:"desk-rr",cf:"rear-right"},
-  {x:51,y:46,spr:"desk-lr",cf:"rear-left"},  {x:65,y:58,spr:"desk-rf",cf:"rear-right"}
-];
-const BEDS=[{x:24,y:80},{x:34,y:87},{x:16,y:71},{x:45,y:90},{x:27,y:69},{x:13,y:62}];
+/* Desks (computers) + beds are GENERATED to match the agent count — one workstation and one
+   bed PER agent — so every agent is visible and they never stack. Grids scale with FLOOR.length. */
+function genDesks(n){const out=[],cols=4,x0=40,dx=8,y0=46,dy=5.4,sh=-1.6;
+  for(let i=0;i<n;i++){const r=Math.floor(i/cols),c=i%cols,rl=c<2;
+    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*1.1,spr:rl?"desk-lr":"desk-rr",cf:rl?"rear-left":"rear-right"});}
+  return out;}
+function genBeds(n){const out=[],cols=4,x0=12,dx=8,y0=64,dy=5.6,sh=1.2;
+  for(let i=0;i<n;i++){const r=Math.floor(i/cols),c=i%cols;
+    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*0.8});}
+  return out;}
 const POIS=[{x:80,y:49},{x:55,y:43},{x:30,y:55},{x:70,y:46}]; // coffee / water / wander spots
 const DOOR={x:80,y:36};
 function assignSprites(){const used={},out={};let pi=0;
@@ -499,6 +503,8 @@ async function renameAgent(id,name){
 function buildStage(){const wrap=$("#chars");if(!wrap)return;
   if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
+  // desks + beds sized to the live agent count (one each per agent — no stacking, scales dynamically)
+  const N=Math.max(FLOOR.length,6); const DESKS=genDesks(N), BEDS=genBeds(N);
   // assign homes: workers -> desks, sleepers -> beds, hermes -> standby
   let di=0,bi=0;
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
