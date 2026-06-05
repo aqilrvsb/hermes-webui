@@ -271,3 +271,52 @@ try:
     _heal_skill_categories()
 except Exception:
     pass
+
+# ---- Prune OLD agent-created marketing skills (the legacy 4-agent system + duplicate playbook/
+# zernio docs). Superseded by the 8-agent bundle: agency-8-agents + meta-ads-playbook-2026 (external
+# /opt/skills-mkt). These legacy skills were authored by the agent and live on the volume under
+# <home>/skills/**, so the Dockerfile bundle can't remove them — prune by name here. Idempotent;
+# matches BOTH the folder basename and the SKILL.md `name:` field so renames/category moves still hit. ----
+_KILL_SKILLS = {
+    "hermes-4agent-ads-system",
+    "peningbot-peninglab-marketing-playbook",
+    "zernio-ads-rest-api",
+    "zernio-meta-ads-patterns", "zernio-meta-patterns",
+    "agent2-actor-4agent-flow",
+    "agent3-reporter-4agent-flow",
+    "agent4-marketing-intel-4agent-flow",
+    "hermes-fb-ads-marketing",
+}
+def _skill_name(skill_md):
+    try:
+        for ln in open(skill_md, encoding="utf-8"):
+            s = ln.strip()
+            if s.lower().startswith("name:"):
+                return s.split(":", 1)[1].strip().strip('"').strip("'").lower()
+            if s and not s.startswith("---") and ":" not in s:
+                break  # past the frontmatter
+    except Exception:
+        pass
+    return ""
+def _prune_old_skills():
+    removed = []
+    for home in homes():
+        sk_root = os.path.join(home, "skills")
+        if not os.path.isdir(sk_root):
+            continue
+        # a skill dir is any dir containing SKILL.md, at <skills>/<name>/ or <skills>/<category>/<name>/
+        for md in _glob.glob(os.path.join(sk_root, "**", "SKILL.md"), recursive=True):
+            d = os.path.dirname(md)
+            base = os.path.basename(d).lower()
+            nm = _skill_name(md)
+            if base in _KILL_SKILLS or (nm and nm in _KILL_SKILLS):
+                try:
+                    _shutil.rmtree(d)
+                    removed.append(base or nm)
+                except Exception:
+                    pass
+    print("== skill prune: removed %d legacy skill(s): %s ==" % (len(removed), ", ".join(removed) or "none"))
+try:
+    _prune_old_skills()
+except Exception:
+    pass
