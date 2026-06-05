@@ -60,15 +60,10 @@ RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></bo
 # Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
-# Marketing skills (irinabuht12-oss/marketing-skills): flat .md -> SKILL.md dirs under /opt/skills-extra/marketing
-# NOTE: converted with node (the runtime venv python does not exist at build time).
-COPY scripts/import_marketing_skills.js /opt/import_marketing_skills.js
-RUN git clone --depth 1 https://github.com/irinabuht12-oss/marketing-skills /tmp/mkskills \
- && /opt/node/bin/node /opt/import_marketing_skills.js /tmp/mkskills /opt/skills-extra/marketing \
- && rm -rf /tmp/mkskills
-
-# Fold the remaining 'marketer' skill (new-client) INTO 'marketing' (single marketing group).
-RUN cp -r /opt/skills-extra/marketer/. /opt/skills-extra/marketing/ && rm -rf /opt/skills-extra/marketer
+# (Removed irinabuht12-oss/marketing-skills — replaced by the single meta-ads/playbook-2026 skill,
+#  the 2026 Ben Heath + Antonio Ventre brain. The marketer now loads meta-ads/* only.)
+# Fold the marketer onboarding skill (new-client) INTO meta-ads (single marketing bundle).
+RUN cp -r /opt/skills-extra/marketer/. /opt/skills-extra/meta-ads/ 2>/dev/null && rm -rf /opt/skills-extra/marketer || true
 
 # SHARED 'general' skills every profile gets (whatsapp-whacenter, etc.). Placed DIRECTLY under
 # /opt/skills-common (no sub-folder) so they show in the GENERAL category for every profile.
@@ -77,7 +72,6 @@ RUN mkdir -p /opt/skills-common && cp -r /opt/skills-extra/common/. /opt/skills-
 # Per-role skill bundles (category-preserving). mcp_setup points each profile at its own bundle + the shared common dir:
 #   marketer -> /opt/skills-mkt (marketing + meta-ads)   developer -> superpowers + /opt/skills-dev (dev + cavecrew)   ALL -> /opt/skills-common
 RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
- && cp -r /opt/skills-extra/marketing /opt/skills-mkt/marketing \
  && cp -r /opt/skills-extra/meta-ads  /opt/skills-mkt/meta-ads \
  && cp -r /opt/skills-extra/dev       /opt/skills-dev/dev \
  && cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew
