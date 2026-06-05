@@ -10,14 +10,28 @@ export TZ=Asia/Kuala_Lumpur
 
 LIST="$("$HB" cron list --profile marketer 2>/dev/null || "$HB" cron list 2>/dev/null || true)"
 
-# --- Replace: remove the legacy 4-agent system crons ---
-for OLD in agent1-marketing-expert-00-10 agent2-actor-00-30-MYT agent3-reporter-01-00-MYT agent4-marketing-intel-12h; do
-  "$HB" cron remove "$OLD" --profile marketer >/dev/null 2>&1 || "$HB" cron remove "$OLD" >/dev/null 2>&1 || true
-done
-# also sweep any other agent1..4 / 4agent named jobs
-echo "$LIST" | grep -Eo 'agent[1-9][A-Za-z0-9._-]*' | sort -u | while read -r J; do
-  "$HB" cron remove "$J" --profile marketer >/dev/null 2>&1 || "$HB" cron remove "$J" >/dev/null 2>&1 || true
-done
+# --- Replace: remove the legacy agent1..4 crons. Parse the REAL job ids from jobs.json
+# (any name starting with "agent<digit>") and remove via the CLI — reliable path. ---
+PYBIN=/app/venv/bin/python; [ -x "$PYBIN" ] || PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
+if [ -n "$PYBIN" ]; then
+  OLDIDS="$("$PYBIN" - "$H" <<'PY'
+import json, glob, os, re, sys
+H = sys.argv[1]; pat = re.compile(r'^agent[1-9]', re.I); ids = []
+for jf in glob.glob(os.path.join(H, "**", "cron", "jobs.json"), recursive=True):
+    try: d = json.load(open(jf, encoding="utf-8"))
+    except Exception: continue
+    jobs = d.get("jobs") if isinstance(d, dict) else d
+    if not isinstance(jobs, list): continue
+    for j in jobs:
+        if isinstance(j, dict) and pat.search(str(j.get("name", ""))):
+            ids.append(str(j.get("id") or j.get("job_id") or j.get("name")))
+print("\n".join(i for i in ids if i))
+PY
+)"
+  for ID in $OLDIDS; do
+    "$HB" cron remove "$ID" >/dev/null 2>&1 && echo "== removed legacy cron: $ID ==" || true
+  done
+fi
 
 # mk <name> <cron> <prompt> [--skill X ...]
 mk() {
