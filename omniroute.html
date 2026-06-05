@@ -76,13 +76,9 @@
       <p class="hint">Add an upstream provider + API key. OmniRoute then exposes its models (incl. vision) and auto-falls-back between them.</p>
       <div class="row">
         <div>
-          <label>Provider</label>
-          <input id="p_provider" list="provlist" placeholder="openrouter" value="openrouter">
-          <datalist id="provlist">
-            <option value="openrouter"><option value="anthropic"><option value="openai"><option value="google">
-            <option value="deepseek"><option value="minimax"><option value="groq"><option value="mistral">
-            <option value="together"><option value="xai"><option value="fireworks"><option value="cerebras">
-          </datalist>
+          <label>Provider <span id="provcount" style="color:var(--faint)"></span></label>
+          <input id="p_provider" list="provlist" placeholder="type to search 152 providers…" value="openrouter" autocomplete="off">
+          <datalist id="provlist"></datalist>
         </div>
         <div><label>Label / name</label><input id="p_name" placeholder="My OpenRouter"></div>
       </div>
@@ -143,6 +139,11 @@
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 let MODELS=[];
+// Full OmniRoute API-key provider catalog (id,label) — extracted from OmniRoute's providers.ts.
+const PROVIDERS=[["360ai","360 AI"],["agentrouter","AgentRouter"],["aimlapi","AI/ML API"],["ai21","AI21 Labs"],["alibaba","Alibaba"],["alibaba-cn","Alibaba (China)"],["bailian-coding-plan","Alibaba Coding Plan"],["bedrock","Amazon Bedrock"],["anthropic","Anthropic"],["api-airforce","Api.airforce"],["arcee-ai","Arcee AI"],["azure-ai","Azure AI Foundry"],["azure-openai","Azure OpenAI"],["baichuan","Baichuan"],["baidu","Baidu (ERNIE)"],["qianfan","Baidu Qianfan"],["baseten","Baseten"],["bazaarlink","BazaarLink"],["black-forest-labs","Black Forest Labs"],["blackbox","Blackbox AI"],["bluesminds","BluesMinds"],["byteplus","BytePlus ModelArk"],["bytez","Bytez"],["cablyai","CablyAI"],["cerebras","Cerebras"],["chutes","Chutes.ai"],["clarifai","Clarifai"],["cloudflare-ai","Cloudflare Workers AI"],["codestral","Codestral"],["cohere","Cohere"],["command-code","Command Code"],["completions","Completions.me"],["coze","Coze"],["crof","CrofAI"],["databricks","Databricks"],["datarobot","DataRobot"],["deepinfra","DeepInfra"],["deepseek","DeepSeek"],["dify","Dify"],["doubao","Doubao"],["empower","Empower"],["fal-ai","Fal.ai"],["featherless-ai","Featherless AI"],["fenayai","FenayAI"],["firecrawl","Firecrawl"],["fireworks","Fireworks AI"],["freeaiapikey","FreeAIAPIKey"],["freemodel-dev","FreeModel.dev"],["friendliai","FriendliAI"],["galadriel","Galadriel"],["gemini","Gemini (Google AI Studio)"],["gigachat","GigaChat (Sber)"],["github-models","GitHub Models"],["gitlab","GitLab Duo PAT"],["gitlawb-gmi","Gitlawb Opengateway (GMI Cloud)"],["gitlawb","Gitlawb Opengateway (MiMo)"],["glhf","GLHF Chat"],["glm","GLM Coding"],["glm-cn","GLM Coding (China)"],["glmt","GLM Thinking"],["getgoapi","GoAPI"],["groq","Groq"],["hackclub","Hackclub AI"],["haiper","Haiper"],["heroku","Heroku AI"],["huggingchat","HuggingChat"],["huggingface","HuggingFace"],["hyperbolic","Hyperbolic"],["watsonx","IBM watsonx.ai Gateway"],["ideogram","Ideogram"],["iflytek","iFlytek Spark"],["inclusionai","InclusionAI"],["inference-net","Inference.net"],["jina-ai","Jina AI"],["jina-reader","Jina Reader"],["kie","KIE.AI"],["kilo-gateway","Kilo Gateway"],["kimi","Kimi"],["kimi-coding-apikey","Kimi Coding (API Key)"],["kluster","Kluster AI"],["lambda-ai","Lambda AI"],["laozhang","LaoZhang AI"],["leonardo","Leonardo AI"],["liquid","Liquid AI"],["llamagate","LlamaGate"],["llm7","LLM7.io"],["longcat","LongCat AI"],["maritalk","Maritalk"],["meta-llama","Meta Llama API"],["minimax-cn","Minimax (China)"],["minimax","Minimax Coding"],["mistral","Mistral"],["modal","Modal"],["monsterapi","MonsterAPI"],["moonshot","Moonshot AI"],["morph","Morph"],["nanogpt","NanoGPT"],["nebius","Nebius AI"],["nlpcloud","NLP Cloud"],["nomic","Nomic"],["nous-research","Nous Research"],["novita","Novita AI"],["nscale","nScale"],["nvidia","NVIDIA NIM"],["oci","OCI Generative AI"],["ollama-cloud","Ollama Cloud"],["openai","OpenAI"],["opencode-go","OpenCode Go"],["opencode-zen","OpenCode Zen"],["openrouter","OpenRouter"],["ovhcloud","OVHcloud AI"],["perplexity","Perplexity"],["phind","Phind"],["piapi","PiAPI"],["poe","Poe"],["pollinations","Pollinations AI"],["predibase","Predibase"],["publicai","PublicAI"],["puter","Puter AI"],["recraft","Recraft"],["reka","Reka"],["runwayml","Runway"],["sambanova","SambaNova"],["sap","SAP Generative AI Hub"],["scaleway","Scaleway AI"],["sensenova","SenseNova"],["siliconflow","SiliconFlow"],["snowflake","Snowflake Cortex"],["sparkdesk","SparkDesk"],["stability-ai","Stability AI"],["stepfun","StepFun"],["suno","Suno"],["synthetic","Synthetic"],["tencent","Tencent Hunyuan"],["thebai","TheB.AI"],["together","Together AI"],["topaz","Topaz"],["udio","Udio"],["uncloseai","UncloseAI"],["upstage","Upstage"],["v0-vercel","v0 (Vercel)"],["venice","Venice.ai"],["vercel-ai-gateway","Vercel AI Gateway"],["vertex","Vertex AI"],["vertex-partner","Vertex AI Partners"],["volcengine","Volcengine"],["voyage-ai","Voyage AI"],["wandb","Weights & Biases Inference"],["xai","xAI (Grok)"],["xiaomi-mimo","Xiaomi MiMo"],["yi","Yi (01.AI)"],["zai","Z.AI"]];
+function fillProviders(){const dl=$("#provlist");if(!dl)return;
+  dl.innerHTML=PROVIDERS.map(p=>`<option value="${esc(p[0])}">${esc(p[1])}</option>`).join("");
+  const c=$("#provcount");if(c)c.textContent="("+PROVIDERS.length+" available)";}
 let toastT;function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("show"),2200);}
 async function api(path,opts){const r=await fetch("/omni"+path,Object.assign({credentials:"include",headers:{"Content-Type":"application/json"}},opts||{}));
   let body=null;try{body=await r.json();}catch(e){}
@@ -206,7 +207,7 @@ async function runTest(){const model=$("#t_model").value.trim()||"auto",prompt=$
     out.textContent="✓ "+(r.model||model)+"\n\n"+txt;}
   catch(e){out.textContent="⚠ "+e.message;}
   finally{b.disabled=false;b.textContent="Run test";}}
-refresh();setInterval(refresh,8000);
+fillProviders();refresh();setInterval(refresh,8000);
 </script>
 </body>
 </html>
