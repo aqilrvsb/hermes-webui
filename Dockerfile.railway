@@ -98,6 +98,7 @@ RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
 # Boot-time helpers
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
+COPY seed_omniroute.sh /opt/seed_omniroute.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh
 COPY seed_roles.sh /opt/seed_roles.sh
 
