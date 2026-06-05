@@ -110,39 +110,33 @@ for home in homes():
     tm = cfg.get("terminal") or {}
     tm["cwd"] = os.path.join(HOME, "workspace")
     cfg["terminal"] = tm
-    # ── 3 model providers + MAIN + CASCADE FALLBACK, all NATIVE to Hermes & stored in THIS
-    # config.yaml on the volume (editable in Hermes, survives restarts; the model is also switchable
-    # live from the chat dropdown — no Railway env for the model choice). Keys are env-refs so secrets
-    # never hit git. Gated on APIPOD_API_KEY existing (so the main always has a working key -> safe;
-    # remove that env var to instantly fall back to minimax). SEED-ONCE: we add only what's MISSING
-    # and never overwrite your edits.
-    #   Provider 1: apipod      -> APIPod Claude  (key ${APIPOD_API_KEY})
-    #   Provider 2: apipod-gpt  -> APIPod GPT/Codex (key ${APIPOD_GPT_API_KEY}; create a Codex-group key)
-    #   Provider 3: openrouter  -> OpenRouter     (key ${OPENROUTER_API_KEY})
-    # MAIN = apipod/claude-opus-4-6 ; CASCADE = main fails -> apipod-gpt/gpt-5.5 -> openrouter.
-    if os.environ.get("APIPOD_API_KEY", "").strip():
-        APIPOD_BASE = "https://code.apipod.ai/v1"
+    # ── GRSAI as the model provider (OpenAI-compatible; GPT-5.5/5.4 + Gemini 3.x/2.5, cheap),
+    # with OpenRouter as the cascade fallback. Stored in THIS config.yaml on the volume (editable
+    # in Hermes, model switchable live from the chat dropdown). Keys are env-refs (never hit git).
+    # Gated on GRSAI_API_KEY existing -> safe rollback (remove the env var to fall back to minimax).
+    #   grsai      -> https://grsaiapi.com/v1  (key ${GRSAI_API_KEY})  [GPT + Gemini; Gemini = vision]
+    #   openrouter -> fallback on error        (key ${OPENROUTER_API_KEY})
+    # MAIN (chat + agents) = grsai/gpt-5.5 ; image/PDF -> a gemini-* model (cheap, multimodal).
+    if os.environ.get("GRSAI_API_KEY", "").strip():
+        GRSAI_BASE = "https://grsaiapi.com/v1"
         OR_BASE = "https://openrouter.ai/api/v1"
-        CLAUDE_MODELS = ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
-                         "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"]
-        GPT_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
-        cps = cfg.get("custom_providers") or []
-        if not isinstance(cps, list):
-            cps = []
+        GRSAI_MODELS = ["gpt-5.5", "gpt-5.4",
+                        "gemini-3.1-pro", "gemini-3.5-flash", "gemini-3-pro", "gemini-3-flash",
+                        "gemini-2.5-pro", "gemini-2.5-flash"]
+        cps = [c for c in (cfg.get("custom_providers") or [])
+               if isinstance(c, dict) and str(c.get("name") or "").lower()
+               not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
         have = {str(c.get("name") or "").lower() for c in cps if isinstance(c, dict)}
-        if "apipod" not in have:
-            cps.append({"name": "apipod", "base_url": APIPOD_BASE,
-                        "api_key": "${APIPOD_API_KEY}", "models": CLAUDE_MODELS})
-        if "apipod-gpt" not in have:
-            cps.append({"name": "apipod-gpt", "base_url": APIPOD_BASE,
-                        "api_key": "${APIPOD_GPT_API_KEY}", "models": GPT_MODELS})
+        if "grsai" not in have:
+            cps.append({"name": "grsai", "base_url": GRSAI_BASE,
+                        "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
         if "openrouter" not in have:
             cps.append({"name": "openrouter", "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
         cfg["custom_providers"] = cps
-        # MAIN (chat default) = APIPod Claude Opus-4-6. Switch live per-chat in the dropdown —
-        # e.g. pick claude-sonnet-4-5 for image/PDF reading (cheaper vision).
-        cfg["model"] = {"provider": "apipod", "base_url": APIPOD_BASE,
-                        "api_key": "${APIPOD_API_KEY}", "default": "claude-opus-4-6"}
+        # MAIN (chat default) = GRSAI gpt-5.5. Switch live per-chat in the dropdown —
+        # e.g. pick gemini-2.5-flash / gemini-3.1-pro for image/PDF reading (cheap vision).
+        cfg["model"] = {"provider": "grsai", "base_url": GRSAI_BASE,
+                        "api_key": "${GRSAI_API_KEY}", "default": "gpt-5.5"}
         # FALLBACK on any provider error -> OpenRouter (applies to chat AND agents).
         cfg["fallback_providers"] = [
             {"provider": "openrouter", "model": "openrouter/auto", "base_url": OR_BASE,
@@ -156,10 +150,10 @@ for home in homes():
         pass
 print("== mcp_setup: direct-bin servers, profiles:", ", ".join(done), "==")
 
-# ── ALL AGENTS -> GPT-5.5 (APIPod). One-time migration: rewrite any cron still on the OLD minimax
+# ── ALL AGENTS -> GPT-5.5 (GRSAI). One-time migration: rewrite any cron still on the OLD minimax
 # default to the agent model. Only touches minimax/* models, so a model you later pick per-agent in
-# the Scheduled Jobs UI is preserved. Gated on APIPOD_GPT_API_KEY (so we only switch when GPT works).
-if os.environ.get("APIPOD_GPT_API_KEY", "").strip():
+# the Scheduled Jobs UI is preserved. Gated on GRSAI_API_KEY (so we only switch when the provider works).
+if os.environ.get("GRSAI_API_KEY", "").strip():
     import glob as _cg, json as _cj
     AGENT_MODEL = os.environ.get("AGENT_MODEL", "gpt-5.5").strip()
     _seen_jf = set()

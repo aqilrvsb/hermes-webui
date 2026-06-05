@@ -5,10 +5,11 @@ description: Read PDFs (including scanned/image-only PDFs), images/screenshots, 
 
 # read-documents
 
-**You run on a multimodal Claude model (via APIPod) — you can SEE images, like Claude Code.**
+**You can run on a multimodal model (Gemini via GRSAI) — you can SEE images, like Claude Code.**
 So your FIRST choice for anything visual is to *look at the image itself*, not OCR it.
-For image/PDF reading the recommended model is **claude-sonnet-4-5** (strong, cheap vision) — if you're
-on a non-vision model, switch the chat model to **claude-sonnet-4-5** in the picker before reading.
+For image/PDF reading the recommended model is **gemini-2.5-flash** (cheap, strong vision) or
+**gemini-3.1-pro** (higher quality) — GPT-5.5 is text-first, so switch the chat model to a
+**gemini-*** model in the picker before reading images/PDFs.
 PDFs aren't a native image type, so render their pages to images first, then view them.
 
 Terminal tools available (no MCP, no extra model needed):
