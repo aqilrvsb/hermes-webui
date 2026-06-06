@@ -15,7 +15,7 @@
   .meta{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
   .chip{font-size:11px;padding:2px 8px;border-radius:99px;background:#13203a;color:#bcd}
   select{background:#0e1322;color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:5px 8px;font-size:12px}
-  select option{background:#0e1322}
+  select option{background:#0e1322} select optgroup{background:#0e1322;color:#8a98b8;font-style:normal;font-weight:700}
   button{border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
   .go{background:var(--lime);color:#04210a} .no{background:#2a1414;color:var(--rose);border:1px solid #54232a}
   .go:disabled{opacity:.5;cursor:default}
@@ -53,8 +53,10 @@ async function load(){
       <h3>${esc(it.title||"Instruction")}</h3>
       <div class="meta"><span class="chip">→ marketer agent</span>${it.brand?`<span class="chip">${esc(it.brand)}</span>`:""}
         <span class="chip">model:
-          <select class="msel"><option value="">profile default</option>
-            ${["openrouter/auto","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","minimax-m3","kimi-k2.6","deepseek-v4-pro"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}
+          <select class="msel"><option value="">profile default (OpenCode minimax-m3)</option>
+            <optgroup label="OpenCode Go (main)">${["minimax-m3","minimax-m2.7","kimi-k2.6","kimi-k2.5","glm-5.1","deepseek-v4-pro","deepseek-v4-flash","qwen3.7-plus"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
+            <optgroup label="OpenRouter">${["openrouter/auto","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","minimax/minimax-m3"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
+            <optgroup label="GRSAI">${["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gpt-5.5"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
           </select></span></div>
       <textarea class="body">${esc(it.instruction||"")}</textarea>
       <div class="row">
