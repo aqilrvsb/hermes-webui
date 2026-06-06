@@ -56,6 +56,12 @@ COPY office /apptoo/static/office
 # Model Routing config tab (read-only view + inline per-agent model editor) at /static/model-config.html
 COPY model-config.html /apptoo/static/model-config.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/model-config.html" target="_blank" rel="noopener" data-tooltip="Model Routing" aria-label="Model Routing"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# Instruction Claude tab — Claude pushes finalized tasks to a separate inbox repo; you approve -> Hermes runs.
+COPY instruction.html /apptoo/static/instruction.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/instruction.html" target="_blank" rel="noopener" data-tooltip="Instruction Claude" aria-label="Instruction Claude"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v12H7l-3 3z"/><path d="M8 9h8M8 12h5"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# Agent Reports tab — each agent's latest run output.
+COPY reports.html /apptoo/static/reports.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/reports.html" target="_blank" rel="noopener" data-tooltip="Agent Reports" aria-label="Agent Reports"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2h9l5 5v15H6z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Enable Ctrl+V paste of images into the chat (hooks the existing global addFiles()). drag-drop already works.
 COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true

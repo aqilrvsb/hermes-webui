@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Instruction Claude — Hermes</title>
+<style>
+  :root{--bg:#0a0e18;--panel:#0e1322;--line:#20283f;--line2:#2a3350;--dim:#8a98b8;--ink:#dfe9ff;--lime:#b8ff5b;--rose:#ff6b6b;--accent:#7c8cff}
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:22px 18px 60px}
+  h1{font-size:20px;margin:0 0 2px} .sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  .src{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim)}
+  .card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:14px 16px;margin:0 0 14px}
+  .card h3{margin:0 0 8px;font-size:15px;color:#fff}
+  textarea{width:100%;min-height:160px;background:#0a0e18;color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;resize:vertical}
+  .row{display:flex;gap:10px;align-items:center;margin-top:10px}
+  .meta{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:2px 8px;border-radius:99px;background:#13203a;color:#bcd}
+  select{background:#0e1322;color:var(--ink);border:1px solid var(--line2);border-radius:7px;padding:5px 8px;font-size:12px}
+  select option{background:#0e1322}
+  button{border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}
+  .go{background:var(--lime);color:#04210a} .no{background:#2a1414;color:var(--rose);border:1px solid #54232a}
+  .go:disabled{opacity:.5;cursor:default}
+  .empty{color:var(--dim);text-align:center;padding:48px 0}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#13203a;border:1px solid var(--line2);color:#fff;padding:10px 16px;border-radius:10px;opacity:0;transition:.2s;pointer-events:none;font-size:13px}
+  .toast.show{opacity:1}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#3a4a6a}
+  a{color:#8aa0ff}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>📥 Instruction Claude</h1><span style="margin-left:auto" class="src">inbox: <a href="https://github.com/aqilrvsb/hermes-inbox" target="_blank">hermes-inbox</a> · <span id="status">loading…</span></span></div>
+  <div class="sub">Claude (Opus 4.8) pushes finalized tasks here. <b>Read → edit → Proceed</b> (Hermes runs it instantly on the marketer agent) <b>or Reject</b>. Pushing an instruction never redeploys Hermes.</div>
+  <div id="list"><div class="empty">Loading…</div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const INBOX="https://raw.githubusercontent.com/aqilrvsb/hermes-inbox/main/inbox.json";
+const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let CSRF=""; let handled=[];
+try{handled=JSON.parse(localStorage.getItem("hermes_handled_instructions")||"[]")}catch(e){handled=[]}
+function saveHandled(){localStorage.setItem("hermes_handled_instructions",JSON.stringify(handled.slice(-200)))}
+let toastT; function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("show"),2600)}
+async function getCsrf(){ if(CSRF)return CSRF; try{const r=await fetch("/",{credentials:"include"});const t=await r.text();const m=t.match(/["']([a-fA-F0-9]{64})["']/);if(m)CSRF=m[1];}catch(e){} return CSRF; }
+async function post(path,obj){ await getCsrf(); const r=await fetch(path,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","X-Hermes-CSRF-Token":CSRF},body:JSON.stringify(obj)}); const d=await r.json().catch(()=>({})); if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status)); return d; }
+async function load(){
+  try{
+    const r=await fetch(INBOX+"?t="+Date.now(),{cache:"no-store"});
+    const d=await r.json(); const items=(d.instructions||[]).filter(x=>x&&x.id&&handled.indexOf(x.id)<0);
+    $("#status").textContent="live · "+items.length+" pending";
+    const el=$("#list");
+    if(!items.length){el.innerHTML='<div class="empty">No pending instructions. When you finish planning a task with Claude, it appears here.</div>';return;}
+    el.innerHTML=items.map(it=>`<div class="card" data-id="${esc(it.id)}">
+      <h3>${esc(it.title||"Instruction")}</h3>
+      <div class="meta"><span class="chip">→ marketer agent</span>${it.brand?`<span class="chip">${esc(it.brand)}</span>`:""}
+        <span class="chip">model:
+          <select class="msel"><option value="">profile default</option>
+            ${["openrouter/auto","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","minimax-m3","kimi-k2.6","deepseek-v4-pro"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}
+          </select></span></div>
+      <textarea class="body">${esc(it.instruction||"")}</textarea>
+      <div class="row">
+        <button class="go" onclick="proceed(this)">▶ Proceed — run on Hermes now</button>
+        <button class="no" onclick="reject(this)">✕ Reject</button>
+        <span style="color:var(--dim);font-size:11px;margin-left:auto">runs once, immediately</span>
+      </div></div>`).join("");
+  }catch(e){ $("#status").textContent="error"; $("#list").innerHTML='<div class="empty">Could not load the inbox ('+esc(e.message)+'). Retrying…</div>'; }
+}
+async function proceed(btn){
+  const card=btn.closest(".card"); const id=card.dataset.id;
+  const prompt=card.querySelector(".body").value.trim(); const model=card.querySelector(".msel").value;
+  const title=card.querySelector("h3").textContent;
+  if(!prompt){toast("Empty instruction");return;}
+  btn.disabled=true; btn.textContent="Sending…";
+  try{
+    const body={prompt:prompt,schedule:"0 0 31 2 *",name:"[Claude] "+title.slice(0,48),profile:"marketer"};
+    if(model) body.model=model;
+    const c=await post("/api/crons/create",body);
+    const jid=(c.job&&(c.job.id||c.job.job_id))||c.id; if(!jid) throw new Error("no job id");
+    await post("/api/crons/run",{job_id:jid});
+    handled.push(id); saveHandled();
+    toast("✓ Sent to Hermes — executing now. Watch the office / chat.");
+    load();
+  }catch(e){ toast("⚠ "+e.message); btn.disabled=false; btn.textContent="▶ Proceed — run on Hermes now"; }
+}
+function reject(btn){ const id=btn.closest(".card").dataset.id; handled.push(id); saveHandled(); toast("Rejected — dismissed."); load(); }
+load(); setInterval(load,20000);
+</script>
+</body></html>

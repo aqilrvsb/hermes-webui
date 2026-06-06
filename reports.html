@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent Reports — Hermes</title>
+<style>
+  :root{--bg:#0a0e18;--panel:#0e1322;--line:#20283f;--line2:#2a3350;--dim:#8a98b8;--ink:#dfe9ff}
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:22px 18px 60px}
+  h1{font-size:20px;margin:0} .sub{color:var(--dim);font-size:13px;margin:2px 0 16px}
+  .dept{font-weight:800;font-size:14px;margin:18px 0 8px}
+  details{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c,#62c9ff);border-radius:10px;padding:9px 13px;margin:0 0 8px}
+  summary{cursor:pointer;font-weight:700;color:#dfe9ff;list-style:none;display:flex;align-items:center;gap:8px}
+  summary::-webkit-details-marker{display:none}
+  .when{margin-left:auto;font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);font-weight:400}
+  .out{margin-top:8px;white-space:pre-wrap;line-height:1.5;font-size:12.5px;color:#c3cee0;max-height:380px;overflow:auto;border-top:1px solid var(--line);padding-top:8px}
+  .empty{color:var(--dim);text-align:center;padding:48px 0}
+  .top{display:flex;align-items:center;gap:10px}
+  a{color:#8aa0ff}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>📒 Agent Reports</h1><span style="margin-left:auto;color:var(--dim);font-size:12px" id="status">loading…</span></div>
+  <div class="sub">Each agent's latest run output — what it researched, collected & decided. Updates as agents run on schedule.</div>
+  <div id="list"><div class="empty">Loading…</div></div>
+</div>
+<script>
+const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function j(p){const r=await fetch(p,{credentials:"include"});if(!r.ok)throw new Error(p+" "+r.status);return r.json();}
+function deptOf(n){n=(n||"").toLowerCase();
+  if(/spy|research|analyst|optim|cro/.test(n))return{d:"🔎 Intelligence",c:"#ffcf63"};
+  if(/head of growth|offer|strateg/.test(n))return{d:"🧠 Strategy",c:"#9a86ff"};
+  if(/copywriter|image|video|creative/.test(n))return{d:"🎨 Creative",c:"#37e7cf"};
+  if(/ad builder|builder|execution/.test(n))return{d:"🚀 Execution",c:"#b8ff5b"};
+  if(/report|comms/.test(n))return{d:"📨 Comms",c:"#62c9ff"};
+  return{d:"Other",c:"#62c9ff"};}
+const ORDER=["🔎 Intelligence","🧠 Strategy","🎨 Creative","🚀 Execution","📨 Comms","Other"];
+function extractOutput(o){
+  if(!o)return["",""];
+  if(typeof o==="string")return[o,""];
+  // common shapes: {outputs:[{ts,content}]} / {runs:[...]} / {history:[...]} / {output:"..."} / {content:"..."}
+  const arr=o.outputs||o.runs||o.history||o.items||(Array.isArray(o)?o:null);
+  if(Array.isArray(arr)&&arr.length){const last=arr[arr.length-1]||arr[0];
+    if(typeof last==="string")return[last,""];
+    return[last.content||last.text||last.markdown||last.output||last.body||JSON.stringify(last,null,1),last.timestamp||last.ts||last.created||last.time||""];}
+  return[o.output||o.content||o.text||o.markdown||"", o.timestamp||o.ts||""];}
+async function load(){
+  let jobs=[];
+  try{const c=await j("/api/crons");jobs=(c.jobs||[]).filter(x=>(x.profile||"default").toLowerCase()==="marketer");}
+  catch(e){$("#status").textContent="error";$("#list").innerHTML='<div class="empty">Can\'t read crons ('+esc(e.message)+'). Open <a href="/">Hermes</a>, log in, reload.</div>';return;}
+  $("#status").textContent=jobs.length+" agents";
+  // fetch each job's latest output
+  const byDept={};
+  for(const jb of jobs){
+    const dept=deptOf(jb.name); let text="",when="";
+    try{const o=await j("/api/crons/output?job_id="+encodeURIComponent(jb.id)+"&limit=1");[text,when]=extractOutput(o);}catch(e){}
+    if(!text){try{const o=await j("/api/crons/recent?job_id="+encodeURIComponent(jb.id)+"&limit=1");[text,when]=extractOutput(o);}catch(e){}}
+    (byDept[dept.d]=byDept[dept.d]||{c:dept.c,rows:[]}).rows.push({name:jb.name,text:text,when:when||jb.last_run_at||"",last:jb.last_run_at});
+  }
+  let html="";
+  for(const d of ORDER){ if(!byDept[d])continue; const g=byDept[d];
+    html+=`<div class="dept" style="color:${g.c}">${d}</div>`;
+    for(const r of g.rows){
+      const body = r.text ? esc(r.text) : '<span style="color:#667">— no run output yet (writes when it runs on schedule)</span>';
+      html+=`<details style="--c:${g.c}"><summary>${esc(r.name)}<span class="when">${r.last?("last run "+esc(String(r.when||r.last))):"not run yet"}</span></summary><div class="out">${body}</div></details>`;
+    }
+  }
+  $("#list").innerHTML=html||'<div class="empty">No marketer agents found.</div>';
+}
+load(); setInterval(load,30000);
+</script>
+</body></html>
