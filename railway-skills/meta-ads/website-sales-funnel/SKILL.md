@@ -14,7 +14,8 @@ purchase is a CHIP subscription; the Pixel + CAPI fire on it. NOT click-to-Whats
   `customEventType`. CAPI sends server-side Purchase (deduped: PeningBot by payment_id, PeningLab by
   `purchase-<payment.id>`).
 - **One CBO per brand**, broad Malaysia targeting (geo MY, age, gender, language), Advantage+ placements,
-  ad-set = one idea, 3-ads/hook. **Always PAUSED** → owner approves before spend.
+  ad-set = one idea, 3-ads/hook. **Launch LIVE (status ACTIVE), each campaign capped RM4/day** — no PAUSE,
+  no approval gate; the RM4/day cap is the safety. (Only the Ad Builder creates/closes ads.)
 
 ## Optimization event at low budget (RM4/day) — important
 RM4/day yields too few *purchases* to optimize Purchase directly (can't hit ~50/wk learning volume). So:

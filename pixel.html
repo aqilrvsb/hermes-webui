@@ -481,7 +481,7 @@ const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
    Agents fill them in order (17 agents -> 17 PCs busy, 8 spare). */
 // The wooden floor is a DIAMOND. Pods sit at its real corners (top/back, bottom/front, left, right) + center,
 // inset so a pod never spills into the window/wall. Tune these if a pod still clips a wall.
-const POD_CENTERS=[{ox:47,oy:44},{ox:49,oy:84},{ox:26,oy:66},{ox:71,oy:62},{ox:48,oy:63}]; // T(back), B(front), L, R, C — placed per the floor reference marks
+const POD_CENTERS=[{ox:26,oy:60},{ox:47,oy:56},{ox:64,oy:59}]; // 3 pods: Left, Center, Right — across the mid-floor
 const POD_REL=[ // 5 PCs per pod — widely spaced so each avatar stands CLEAR in front of its own PC
   {dx:-5.0,dy:0,  rl:true},{dx:5.0,dy:2.2,rl:false},
   {dx:-4.4,dy:5.4,rl:true},{dx:5.6,dy:7.6,rl:false},

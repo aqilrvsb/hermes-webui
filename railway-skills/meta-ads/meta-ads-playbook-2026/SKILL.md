@@ -72,6 +72,6 @@ Sister skills: `creative-andromeda`, `copywriting`, `creative-image`, `creative-
 ## Brand bindings (LOCKED)
 - **PeningBot pixel** `986352420917190` · **PeningLab pixel** `1013990424497184` (pass the right one as
   `promoted_object.pixelId` + a purchase `customEventType`).
-- Objective = **OUTCOME_SALES** with **WhatsApp/CTWA** conversion location (or website + Pixel where used).
-- Budget = RM 3/day per project to start (resolve live; scale via `testing-scaling`).
-- One brand = one CBO = its own creatives. **Never mix PeningBot and PeningLab.** Always create **PAUSED**.
+- Objective = **OUTCOME_SALES → website → Purchase** (Pixel + CAPI, customEventType PURCHASE). NOT CTWA.
+- Budget = RM 4/day per brand, hard-capped (resolve account live).
+- One brand = one CBO = its own creatives. **Never mix PeningBot and PeningLab.** Launch **LIVE (ACTIVE), capped RM4/day** — only the Ad Builder creates/closes ads.

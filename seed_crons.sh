@@ -1,7 +1,9 @@
 #!/bin/sh
-# Seed the 17-agent marketing pipeline as Hermes cron jobs on the MARKETER profile.
-# Idempotent: skips agents that already exist. Removes the legacy 4-agent crons (replaced).
-# Times are Malaysia (TZ=Asia/Kuala_Lumpur, set in the image). Model = marketer profile config (minimax-m3).
+# Seed the 12-agent marketing pipeline (5 departments) as Hermes cron jobs on the MARKETER profile.
+# Idempotent: skips agents that already exist. Removes the legacy 4-agent + the 5 deprecated agents.
+# Times are Malaysia (TZ=Asia/Kuala_Lumpur). Model = marketer profile config (OpenCode Go minimax-m3).
+# CYCLE: 08:00 INTELLIGENCE (watch today) -> 00:00 STRATEGY (decide close/maintain + brief N new)
+#        -> 00:30 CREATIVE (make only N) -> 01:15 EXECUTION (launch LIVE) -> 01:45 COMMS (report).
 H="${HERMES_HOME:-$HOME/.hermes}"
 HB=/app/venv/bin/hermes
 [ -x "$HB" ] || HB="$(command -v hermes 2>/dev/null)"
@@ -11,13 +13,12 @@ export HERMES_PROFILE=marketer   # new crons default to the marketer profile
 
 LIST="$("$HB" cron list --profile marketer 2>/dev/null || "$HB" cron list 2>/dev/null || true)"
 
-# --- Replace: remove the legacy agent1..4 crons. Parse the REAL job ids from jobs.json
-# (any name starting with "agent<digit>") and remove via the CLI — reliable path. ---
+# --- Remove legacy agent1..4 + the 5 deprecated agents (parse real ids from jobs.json, remove via CLI) ---
 PYBIN=/app/venv/bin/python; [ -x "$PYBIN" ] || PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
 if [ -n "$PYBIN" ]; then
   OLDIDS="$("$PYBIN" - "$H" <<'PY'
 import json, glob, os, re, sys
-H = sys.argv[1]; pat = re.compile(r'^agent[1-9]', re.I); ids = []
+H = sys.argv[1]; pat = re.compile(r'^agent[1-9]|^(?:00-product-analyst|08-creative-rnd|09-funnel-builder|14-retention|15-account-safety)', re.I); ids = []
 for jf in glob.glob(os.path.join(H, "**", "cron", "jobs.json"), recursive=True):
     try: d = json.load(open(jf, encoding="utf-8"))
     except Exception: continue
@@ -30,7 +31,7 @@ print("\n".join(i for i in ids if i))
 PY
 )"
   for ID in $OLDIDS; do
-    "$HB" cron remove "$ID" >/dev/null 2>&1 && echo "== removed legacy cron: $ID ==" || true
+    "$HB" cron remove "$ID" >/dev/null 2>&1 && echo "== removed deprecated cron: $ID ==" || true
   done
 fi
 
@@ -43,96 +44,66 @@ mk() {
 }
 
 PB="Do this for BOTH brands SEPARATELY (PeningBot + PeningLab) — never mix; read _products/<brand>.md."
-RULES="Marketer profile. Malaysia only (BM/Manglish, MYT, MYR). Objective=SALES->website->paid subscription. Only the Ad Builder writes ads; you read/write _shared state. Post a one-line progress note."
+RULES="Marketer profile. Malaysia only (BM/Manglish, MYT, MYR). Objective=SALES->website->paid subscription (pixel+CAPI, customEventType PURCHASE). Only the Ad Builder touches ads. Post a one-line progress note."
 
-# ---------- LAYER 0 FOUNDATION ----------
-mk "00-product-analyst" "0 4 * * 1" \
-"PRODUCT ANALYST (weekly). Study peningbot.com and peninglab.com with playwright. $PB Update each brand's product knowledge (features, pains, offer/pricing, USPs, objections, brand voice). READ: the live sites + _products/<brand>.md. WRITE: _shared/product_<brand>.json. $RULES" \
+# ========== 🔎 INTELLIGENCE (08:00 — watch the current day, feed tonight's Strategy) ==========
+mk "01-spy" "0 8 * * *" \
+"SPY (Intelligence). Use playwright to scan the Meta Ad Library (facebook.com/ads/library, country=MY, sort by total impressions) for competitor + cross-niche WINNING ads; read their hooks/offers/funnels. $PB WRITE: _shared/spy_<brand>.json (ranked angles/offers/hooks to beat). $RULES" \
 --skill spy-research
 
-# ---------- LAYER 1 INTELLIGENCE ----------
-mk "01-spy" "0 13,20 * * *" \
-"SPY. Meta Ad Library (location=Malaysia): find competitor + cross-niche winning ads (sort by impressions, view inactive, funnel-hack their pages). $PB READ: _shared/product_<brand>.json. WRITE: _shared/spy_<brand>.json (ranked angles/offers/hooks to beat). $RULES" \
---skill spy-research
-
-mk "02-market-researcher" "30 20 * * *" \
-"MARKET RESEARCHER. Mine Malaysian customer language (Reddit r/malaysia, Lowyat, Shopee/TikTok reviews, FB groups) for pains/desires/objections in real BM/Manglish. Build personas (urgency x stakes) + ranked angles per awareness stage. $PB READ: _shared/product_<brand>.json, _shared/spy_<brand>.json. WRITE: _shared/personas_<brand>.json, _shared/angles_<brand>.json. $RULES" \
+mk "02-market-researcher" "10 8 * * *" \
+"MARKET RESEARCHER (Intelligence). Use playwright + web search to mine Malaysian customer language (Reddit, Lowyat, Shopee/TikTok reviews, FB groups) for pains/desires/objections in real BM/Manglish. Build personas + ranked angles per awareness stage. $PB WRITE: _shared/personas_<brand>.json, _shared/angles_<brand>.json. $RULES" \
 --skill spy-research --skill copywriting
 
-# ---------- LAYER 2 STRATEGY ----------
-mk "03-head-of-growth" "0 21 * * *" \
-"HEAD OF GROWTH (daily conductor). $PB Set tomorrow's goal + budget (RM4/day each), pick today's personas/angles/awareness mix (~50-70/20-30/10-20 TOF/MOF/BOF), and write the creative brief (per slot: brand, persona, awareness, angle, hook, format, which landing page). READ: _shared/results_<brand>.json, spy_<brand>, personas_<brand>, angles_<brand>, offer_<brand>, product_<brand>, funnel_<brand>. WRITE: _shared/brief_<brand>.json. $RULES" \
---skill meta-ads-playbook-2026 --skill measurement --skill offer-design
+mk "12-analyst" "20 8 * * *" \
+"ANALYST (Intelligence). Via zernio analytics, measure each brand's live ads: spend, purchases, ROAS/GPT, CPA, frequency, + CAPI parity (server vs browser purchases). $PB WRITE: _shared/results_<brand>.json — the clean data Strategy decides on tonight. $RULES" \
+--skill measurement
 
-mk "03b-head-of-growth-weekly" "0 8 * * 1" \
-"HEAD OF GROWTH (weekly deep-dive). $PB Review the week's GPT/profit/incremental, decide strategy shifts + rebalance, set the weekly theme. READ: _shared/results_<brand>, learnings_<brand>. WRITE: _shared/strategy_<brand>.json. $RULES" \
---skill meta-ads-playbook-2026 --skill measurement
-
-mk "04-offer-architect" "0 6 * * 1" \
-"OFFER ARCHITECT (weekly). $PB Craft/iterate each brand's offer (price framing, value-stack, bonus, guarantee, Hormozi value-eq). READ: _shared/product_<brand>, spy_<brand>. WRITE: _shared/offer_<brand>.json. $RULES" \
---skill offer-design --skill copywriting
-
-# ---------- LAYER 3 CREATIVE ----------
-mk "05-copywriter" "30 21 * * *" \
-"COPYWRITER. $PB For each brief slot write brand-specific MATCHED copy (hook first-3s, primary text, headline, website CTA) in BM/Manglish per brand voice; for video slots write a 10s timed script (3 beats ~20-25 words). Visual+copy = same angle. READ: _shared/brief_<brand>.json, product_<brand>, angles_<brand>, offer_<brand>. WRITE: update _shared/brief_<brand>.json with copy + image/video prompts. $RULES" \
---skill copywriting --skill creative-concepts
-
-mk "06-image-producer" "0 22 * * *" \
-"IMAGE PRODUCER. $PB Generate static creatives via peninglab (gpt-image-2 for text/layout, nano-banana for realism). Use Fire-and-Poll (check task_id in creatives -> get_status; never re-generate; batch 3-4 parallel). 3 live + ~3 reserve per brand. READ: _shared/brief_<brand>.json, prompt_lib_image.json. WRITE: _shared/creatives_<brand>.json (urls + task_id per slot). $RULES" \
---skill creative-image --skill creative-andromeda --skill creative-concepts
-
-mk "07-video-producer" "0 22 * * *" \
-"VIDEO PRODUCER. $PB Generate video creatives via peninglab gemini omni (10s, ~20-25 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). READ: _shared/brief_<brand>.json, prompt_lib_video.json. WRITE: _shared/creatives_<brand>.json. $RULES" \
---skill creative-video --skill creative-andromeda --skill creative-concepts
-
-mk "08-creative-rnd" "0 4 * * 2" \
-"CREATIVE R&D (weekly, budget-gated). Master gemini omni + gpt-image-2; run small prompt experiments; close the win->prompt loop. $PB READ: _shared/results_<brand>, learnings_<brand>, creatives_<brand>. WRITE: _shared/prompt_lib_video.json, prompt_lib_image.json + a 'make-more/stop' note. Ask before spend > RM5. $RULES" \
---skill creative-rnd
-
-# ---------- LAYER 4 EXECUTION & OPTIMIZATION ----------
-mk "09-funnel-builder" "30 6 * * 1" \
-"FUNNEL/LANDING BUILDER (weekly, advisory). $PB Ensure congruent landing pages per angle (advertorial/listicle/quiz -> the website); recommend page improvements + which page each angle points to. READ: _shared/product_<brand>, angles_<brand>, offer_<brand>. WRITE: _shared/funnel_<brand>.json. $RULES" \
---skill landing-funnel --skill website-sales-funnel
-
-mk "10-ad-builder" "0 1 * * *" \
-"AD BUILDER (01:00 DAILY — the ONLY agent that creates ads). $PB Resolve the live ad account (tiny PAUSED smoke-test for write access). Build ONE CBO per brand (OUTCOME_SALES, website conversion, pixel PeningBot 986352420917190 / PeningLab 1013990424497184 + purchase customEventType), broad Malaysia targeting, ad-set=one idea, 3 ads/set varying only the first-3s hook, using creatives_<brand>.json. ALWAYS PAUSED. Budget RM4/day. Then WhatsApp the owner (\$WHACENTER_DEFAULT_TO) the plan to approve before going live. READ: _shared/creatives_<brand>, brief_<brand>, offer_<brand>, funnel_<brand>, account_health.json. WRITE: _shared/live_ads_<brand>.json. Use zernio ads_create_standalone_ad. $RULES" \
---skill meta-ads-playbook-2026 --skill website-sales-funnel --skill creative-andromeda --skill account-safety
-
-mk "11-optimizer" "0 10,15,21 * * *" \
-"MEDIA BUYER/OPTIMIZER. $PB For each brand's live ads apply the 20% rule, min-spend trick, 4-quadrant classifier, win-ratio, frequency; kill losers, scale winners in steps (cut at half-speed); NEVER pause the supportive ad; judge on 7/30-day GPT/incremental, not 24h. Don't exceed RM4/day without owner approval. READ: _shared/live_ads_<brand>, results_<brand>. WRITE: _shared/learnings_<brand>.json (the 15-min-stare log). $RULES" \
+mk "11-optimizer" "30 8 * * *" \
+"OPTIMIZER (Intelligence — RECOMMENDS ONLY, does not touch ads). Via zernio, review each live ad with the 4-quadrant + frequency + win-ratio lens (judge on 7-day, not 24h noise) and FLAG each as CLOSE / MAINTAIN / SCALE candidate. $PB WRITE: _shared/learnings_<brand>.json (recommendations for Strategy). Never pause/edit ads — only the Ad Builder does. $RULES" \
 --skill testing-scaling --skill creative-andromeda --skill measurement
 
-mk "12-analyst" "30 23 * * *" \
-"ANALYST (23:30 — closes the ~24h cycle). $PB Compute GPT/profit, new-customer + incremental attribution, CAPI gut-check (server vs browser purchase parity), audience-segment breakdown. READ: _shared/live_ads_<brand> + zernio analytics. WRITE: _shared/results_<brand>.json. $RULES" \
---skill measurement
-
-mk "13-cro" "0 11,19 * * *" \
-"CONVERSION/CHECKOUT CRO. $PB Watch landing->checkout conversion + abandoned checkout; recommend page/checkout fixes; refresh a lean abandoned-checkout retargeting audience. READ: _shared/live_ads_<brand>, results_<brand>, funnel_<brand>. WRITE: _shared/cro_<brand>.json. $RULES" \
+mk "13-cro" "40 8 * * *" \
+"CRO (Intelligence). Via zernio conversion metrics + a playwright spot-check of the live page, watch landing->checkout->purchase conversion + abandoned checkout; note any leak. $PB WRITE: _shared/cro_<brand>.json. $RULES" \
 --skill website-sales-funnel --skill measurement
 
-mk "14-retention" "0 10 * * *" \
-"RETENTION/LIFECYCLE. $PB Post-purchase onboarding, churn-save, upsell, win-back for the subscriptions; broadcast to existing/lapsed customers via zernio messaging / whacenter. READ: zernio customers/purchases + _shared/results_<brand>. WRITE: _shared/retention_<brand>.json. $RULES" \
---skill retention-lifecycle
+# ========== 🧠 STRATEGY (00:00 — THE SPEND GATE: decide on full 24h data) ==========
+mk "03-head-of-growth" "0 0 * * *" \
+"HEAD OF GROWTH (Strategy — THE SPEND GATE; the brain). $PB Pull the live last-24h performance from zernio for each brand, plus read _shared/results, learnings, spy, personas, angles, offer. DECIDE per live ad: CLOSE or MAINTAIN. Then brief HOW MANY NEW ads to make to refill RM4/day each, and for EACH new slot specify: angle, persona, awareness, FORMAT (video=gemini omni / image=gpt-image-2), creative concept, and copy direction. WRITE _shared/brief_<brand>.json = {close:[ad_ids], maintain:[ad_ids], new:[{angle,persona,awareness,format,concept,copy_direction}]}. You are the ONLY trigger for spend — brief 0 new and Creative makes nothing. $RULES" \
+--skill meta-ads-playbook-2026 --skill measurement --skill offer-design --skill creative-concepts
 
-mk "15-account-safety" "0 5 * * *" \
-"ACCOUNT SAFETY (daily). $PB Check each brand's ad account + page status, write-locks, policy, special categories, pixel-event sanity; resolve the live working account; alert the Reporter on issues. WRITE: _shared/account_health.json. $RULES" \
---skill account-safety
+mk "04-offer-architect" "0 0 * * 1" \
+"OFFER ARCHITECT (Strategy, weekly Mon 00:00). $PB Craft/iterate each brand's offer (price framing, value-stack, bonus, guarantee, Hormozi value-eq) from the product brief + spy. WRITE _shared/offer_<brand>.json. $RULES" \
+--skill offer-design --skill copywriting
 
-# ---------- LAYER 5 COMMS ----------
-mk "16-reporter" "0 0 * * *" \
-"REPORTER (00:00 daily digest — the single owner-facing voice). $PB Send ONE concise WhatsApp digest to the owner (\$WHACENTER_DEFAULT_TO): spend, purchases, GPT, top creative, what changed, what needs approval. BM/English, no spam. READ: _shared/results_<brand>, learnings_<brand>, account_health.json. $RULES" \
+# ========== 🎨 CREATIVE (executes the brief ONLY — budget-matched, no blind spend) ==========
+mk "05-copywriter" "30 0 * * *" \
+"COPYWRITER (Creative). Read _shared/brief_<brand>.json. For EACH new slot ONLY, write the exact BM/Manglish copy per Strategy's direction: 3s hook, primary text, headline, website CTA; for video slots a 10s script (3 beats, ~20-25 words). Add the matching image/video prompt. Visual+copy = same angle. $PB Update _shared/brief_<brand>.json with copy + prompts. Make nothing Strategy didn't brief. $RULES" \
+--skill copywriting --skill creative-concepts
+
+mk "06-image-producer" "45 0 * * *" \
+"IMAGE PRODUCER (Creative). For each IMAGE slot in the brief, generate via peninglab gpt-image-2 (nano-banana only for ultra-real product shots). Fire-and-Poll (check task_id in creatives -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json (urls + task_id per slot). $RULES" \
+--skill creative-image --skill creative-andromeda --skill creative-concepts
+
+mk "07-video-producer" "45 0 * * *" \
+"VIDEO PRODUCER (Creative). For each VIDEO slot in the brief, generate via peninglab gemini omni (10s, ~20-25 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json. $RULES" \
+--skill creative-video --skill creative-andromeda --skill creative-concepts
+
+# ========== 🚀 EXECUTION (the ONLY hand on the ads — launches LIVE, capped RM4/day) ==========
+mk "10-ad-builder" "15 1 * * *" \
+"AD BUILDER (Execution — the ONLY agent that touches ads). $PB Verify write access (read campaigns first). STEP 1 CLOSE: pause the ad_ids in brief.close (zernio update_ad_campaign_status -> PAUSED). STEP 2 LAUNCH LIVE: for the new creatives build one CBO per brand — goal=conversions (OUTCOME_SALES), website conversion, promoted_object.pixelId = PeningBot 986352420917190 / PeningLab 1013990424497184 + customEventType=PURCHASE, CAPI tracking, broad Malaysia, ad-set=one idea, 3 ads/set varying only the first-3s hook, budget RM4/day, status ACTIVE (LIVE-DIRECT — no PAUSE, no approval; the RM4/day cap is the safety). READ _shared/creatives_<brand>, brief_<brand>, offer_<brand>. WRITE _shared/live_ads_<brand>.json. Tool: zernio ads_create_standalone_ad on account act_943036532064443 ('Pening', MYR — resolve live each run). $RULES" \
+--skill meta-ads-playbook-2026 --skill website-sales-funnel --skill creative-andromeda --skill account-safety
+
+# ========== 📨 COMMS ==========
+mk "16-reporter" "45 1 * * *" \
+"REPORTER (Comms — the single voice to the owner). Send ONE WhatsApp digest to \$WHACENTER_DEFAULT_TO for this cycle: what CLOSED, what LAUNCHED live, spend, purchases, ROAS/GPT, top creative. BM/English, concise, no spam. $PB READ _shared/results_<brand>, learnings_<brand>, live_ads_<brand>. Send via whacenter: curl -X POST https://api.whacenter.com/api/send -d \"device_id=\$WHACENTER_DEVICE\" --data-urlencode \"number=\$WHACENTER_DEFAULT_TO\" --data-urlencode \"message=...\". $RULES" \
 --skill measurement
 
-mk "16b-reporter-weekly" "0 9 * * 1" \
-"REPORTER (weekly report, Mon 09:00). $PB WhatsApp the owner (\$WHACENTER_DEFAULT_TO) the week's performance per brand, winners, learnings, next-week plan. READ: _shared/results_<brand>, learnings_<brand>, strategy_<brand>. $RULES" \
---skill measurement
-
-# Re-tag my crons to the MARKETER profile (the CLI may file new crons under 'default' -> the
-# Model Routing tab + office then show 0 under marketer). Forces the profile field on jobs.json.
+# Re-tag my crons to the MARKETER profile (the CLI may file new crons under 'default').
 if [ -n "$PYBIN" ]; then
   "$PYBIN" - "$H" <<'PY' || true
 import json,glob,os,re,sys
-H=sys.argv[1]; mine=re.compile(r'^\d')  # my cron names start with a digit (00-..16b-)
+H=sys.argv[1]; mine=re.compile(r'^\d')  # my cron names start with a digit (01..16)
 n=0
 for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
     try: d=json.load(open(jf,encoding="utf-8"))
@@ -149,4 +120,4 @@ for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
 print("== cron retag: %d job(s) -> profile marketer ==" % n)
 PY
 fi
-echo "== seed_crons: done =="
+echo "== seed_crons: done (12 agents, 5 departments) =="
