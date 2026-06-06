@@ -47,7 +47,7 @@ mk() {
 }
 
 PB="Do this for BOTH brands SEPARATELY (PeningBot + PeningLab) — never mix; read _products/<brand>.md."
-RULES="Marketer profile. Malaysia only (BM/Manglish, MYT, MYR). Objective=SALES->website->paid subscription (pixel+CAPI, customEventType PURCHASE). Only the Ad Builder touches ads. Post a one-line progress note."
+RULES="Marketer profile. Malaysia only (BM/Manglish, MYT, MYR). Objective=SALES->website->paid subscription (pixel+CAPI, customEventType PURCHASE). Only the Ad Builder touches ads. Post a one-line progress note. AT THE END: append a dated (## YYYY-MM-DD), human-readable report to _shared/reports/<your agent name>.md (create the folder/file if missing) — what you researched, the info/data you collected, what you did/decided, key findings, and what you recommend — so the owner can review your daily work in the Files panel."
 
 # ========== 🔎 INTELLIGENCE (08:00 — watch the current day, feed tonight's Strategy) ==========
 mk "Aiman (Spy)" "0 8 * * *" \
