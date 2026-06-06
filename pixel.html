@@ -210,6 +210,7 @@
     <button data-view="skills" onclick="show('skills')">Skills</button>
     <button data-view="play" onclick="show('play')">Playbook</button>
     <button data-view="gallery" onclick="show('gallery')">Creatives</button>
+    <button data-view="reports" onclick="show('reports')">Reports</button>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
@@ -266,6 +267,14 @@
     <div id="gallerybody" style="padding:4px 14px 24px"><div class="empty">Open to load…</div></div>
   </section>
 
+  <!-- AGENT REPORTS -->
+  <section id="reports" class="view">
+    <div class="panel" style="padding:14px">
+      <div class="ptitle">📒 Agent Reports <small style="margin-left:auto;color:var(--dim)">each agent's daily journal — what it researched, collected & decided</small></div>
+    </div>
+    <div id="reportsbody" style="padding:6px 14px 26px"><div class="empty">Open to load…</div></div>
+  </section>
+
   <!-- PLAYBOOK -->
   <section id="play" class="view">
     <div class="panel guide">Pick a role in the chat bar, pick the project folder, then <b style="color:var(--ink)">Copy</b> a prompt → paste into chat → send.</div>
@@ -315,7 +324,7 @@ const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;","
 async function j(p){const r=await fetch(p,{credentials:"include"});if(!r.ok)throw new Error(p+" "+r.status);return r.json();}
 function positionThumb(){const b=document.querySelector('.seg button.active'),t=$('#thumb');if(b&&t){t.style.left=b.offsetLeft+'px';t.style.width=b.offsetWidth+'px';}}
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));$('#'+v).classList.add('active');
-  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();if(v==='gallery')loadGallery();}
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));positionThumb();if(v==='skills')loadSkills();if(v==='gallery')loadGallery();if(v==='reports')loadReports();}
 window.addEventListener('resize',()=>{positionThumb();renderStage();});
 let toastT;function showToast(){const e=$('#toast');e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),1900);}
 function copy(t){navigator.clipboard.writeText(t).then(()=>{$('#toast .tx').textContent="Copied — paste into chat";showToast();});}
@@ -655,6 +664,32 @@ async function loadGallery(){
   wrap.innerHTML=`<div style="margin-bottom:16px"><div class="ptitle" style="padding:8px 0">🎬 Producer status</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">${statusHTML}</div></div>
     <div><div class="ptitle" style="padding:8px 0">🖼️ Generated creatives ${media.length?("· "+media.length):""}</div>${grid}</div>`;}
+/* ---- AGENT REPORTS: read each agent's daily journal from _shared/reports/<name>.md ---- */
+const REPORT_AGENTS=[
+  {dept:"🔎 Intelligence", c:"#ffcf63", names:["Aiman (Spy)","Nadia (Market Researcher)","Faiz (Analyst)","Hafiz (Optimizer)","Liyana (CRO)"]},
+  {dept:"🧠 Strategy",     c:"#9a86ff", names:["Danish (Head of Growth)","Sofea (Offer Architect)"]},
+  {dept:"🎨 Creative",     c:"#37e7cf", names:["Iman (Copywriter)","Aisyah (Image Producer)","Zikri (Video Producer)"]},
+  {dept:"🚀 Execution",    c:"#b8ff5b", names:["Adam (Ad Builder)"]},
+  {dept:"📨 Comms",        c:"#62c9ff", names:["Mia (Reporter)"]},
+];
+async function loadReports(){
+  const wrap=$("#reportsbody"); if(!wrap)return;
+  wrap.innerHTML='<div class="empty">Loading reports…</div>';
+  let html="", any=false;
+  for(const d of REPORT_AGENTS){
+    html+=`<div style="font-weight:800;color:${d.c};margin:14px 0 8px;font-size:14px">${d.dept}</div>`;
+    for(const name of d.names){
+      const txt=await galFetchText("_shared/reports/"+name+".md");
+      if(txt) any=true;
+      const body = txt ? esc(txt) : '<span style="color:#667">— no report yet (writes on its next scheduled run)</span>';
+      html+=`<details ${txt?"open":""} style="background:#0e1322;border:1px solid #20283f;border-left:3px solid ${d.c};border-radius:10px;padding:9px 13px;margin:0 0 8px">
+        <summary style="cursor:pointer;font-weight:700;color:#dfe9ff;list-style:none">${esc(name)}</summary>
+        <div style="margin-top:8px;color:#c3cee0;font-size:12.5px;white-space:pre-wrap;line-height:1.5;max-height:360px;overflow:auto">${body}</div></details>`;
+    }
+  }
+  if(!any) html='<div class="empty">No agent reports yet. Each agent writes a dated report to <code>_shared/reports/&lt;name&gt;.md</code> on its next run — they\'ll appear here. (If files exist but stay empty, the workspace file API path differs on this build — tell me and I\'ll point it at the right endpoint. You can always read them in Workspace → Files → _shared/reports.)</div>'+html;
+  wrap.innerHTML=html;
+}
 async function loadSkills(){try{const d=await j("/api/skills");const sk=d.skills||[];window._skills=sk;
   $("#skillprofile").textContent=(SEL||window._active||"")+" · "+sk.length+" skills";renderSkills(sk,$("#skillsearch").value||"");}
   catch(e){$("#skillgrid").innerHTML="<div class='empty'>Can't load skills — open <a href='/'>Hermes</a> and log in.</div>";}}
