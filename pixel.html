@@ -22,7 +22,7 @@
   .bg .b1{width:44vmax;height:44vmax;left:56%;top:-12%;background:radial-gradient(circle,#1f6f6a,transparent 62%)}
   .bg .b2{width:38vmax;height:38vmax;left:-8%;top:40%;background:radial-gradient(circle,#3a2a7e,transparent 62%);animation-delay:-10s}
   @keyframes drift{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(5%,4%) scale(1.1)}}
-  .wrap{position:relative;z-index:2;max-width:1280px;margin:0 auto;padding:22px 18px 60px}
+  .wrap{position:relative;z-index:2;max-width:1480px;margin:0 auto;padding:22px 18px 60px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
   .brand{display:flex;align-items:center;gap:13px}
   .mark{position:relative;width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:12px;background:conic-gradient(from 140deg,var(--teal),var(--violet),var(--sky),var(--teal))}
@@ -51,7 +51,7 @@
   .titlebar .wtitle{flex:1;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.34em;color:var(--faint);text-transform:uppercase}
   .titlebar .pills{display:flex;gap:7px}
   .wpill{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--dim);background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:6px;padding:3px 8px}
-  .office{display:grid;grid-template-columns:1.85fr 1fr;gap:0}
+  .office{display:grid;grid-template-columns:2.4fr 1fr;gap:0}
   @media(max-width:840px){.office{grid-template-columns:1fr}}
   .stage{padding:10px;background:#0a0e1a}
   /* slack-style channel */
@@ -479,11 +479,13 @@ const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
    bed PER agent — so every agent is visible and they never stack. Grids scale with FLOOR.length. */
 /* FIVE desk PODS — 4 corners + 1 center — each pod = 5 PCs (back-to-back), 25 desks total.
    Agents fill them in order (17 agents -> 17 PCs busy, 8 spare). */
-const POD_CENTERS=[{ox:28,oy:44},{ox:60,oy:44},{ox:22,oy:66},{ox:66,oy:60},{ox:44,oy:55}]; // 4 corners + center
-const POD_REL=[ // 5 desks per pod (2 back-to-back pairs + 1)
-  {dx:-2.4,dy:0,  rl:true},{dx:2.4,dy:0,  rl:false},
-  {dx:-2.4,dy:3.0,rl:true},{dx:2.4,dy:3.0,rl:false},
-  {dx:0,   dy:6.0,rl:true}];
+// The wooden floor is a DIAMOND. Pods sit at its real corners (top/back, bottom/front, left, right) + center,
+// inset so a pod never spills into the window/wall. Tune these if a pod still clips a wall.
+const POD_CENTERS=[{ox:47,oy:44},{ox:49,oy:84},{ox:26,oy:66},{ox:71,oy:62},{ox:48,oy:63}]; // T(back), B(front), L, R, C — placed per the floor reference marks
+const POD_REL=[ // 5 PCs per pod — widely spaced so each avatar stands CLEAR in front of its own PC
+  {dx:-5.0,dy:0,  rl:true},{dx:5.0,dy:2.2,rl:false},
+  {dx:-4.4,dy:5.4,rl:true},{dx:5.6,dy:7.6,rl:false},
+  {dx:0.4, dy:10.4,rl:true}];
 function genDesks(){const out=[];
   for(const p of POD_CENTERS){for(const d of POD_REL){
     out.push({x:p.ox+d.dx, y:p.oy+d.dy, spr:d.rl?"desk-lr":"desk-rr", cf:d.rl?"rear-left":"rear-right"});}}
@@ -526,17 +528,16 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   const DESKS=genDesks();                                  // fixed 25 PCs (5 pods x 5), always shown
   // An agent sits at a PC ONLY while actually DOING ITS JOB (running now / ran in the last few min).
   // Otherwise it sleeps in the bed pile (outside the floor) — even if it's enabled.
-  const sleepers=FLOOR.filter(a=>a.kind!=="hermes"&&a.mode!=="work");
+  // ONLY two states: WORKING at a PC (running now / ran in the last few min), or SLEEPING in the bed pile.
+  // No standby. Applies to Hermes too. The bed pile is always populated (most agents nap between runs).
+  const sleepers=FLOOR.filter(a=>a.mode!=="work");
   const BEDS=genBeds(Math.max(sleepers.length,1));
   let di=0,bi=0;
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
-    if(a.kind==="hermes"){
-      if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp="work";}
-      else{a._home={x:74,y:40,face:"front-left",standby:true};a._disp="duty";}}
-    else if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp="work";}
+    if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-4.6,face:d.cf,desk:d};a._disp="work";}
     else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}});
-  // desk furniture — all 25 PCs always shown (5 pods)
-  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:9%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
+  // desk furniture — all 25 PCs always shown (5 pods), bigger
+  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:13%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
   const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:5.5%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
   const charHTML=FLOOR.map((a,i)=>`<div class="char ${a.status}" data-i="${i}" data-id="${esc(a.id)}"
        title="${esc(a.name)} — ${esc(a.role)}" onclick="if(!event.target.classList.contains('nm'))openModal(${i})">
@@ -545,7 +546,7 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
       <div class="ring"></div>
       <img class="sprite" src="${spriteSrc(a._sprite,a._home.face)}" alt="" draggable="false"
            onerror="this.onerror=null;this.src='${spriteSrc("employee-2",a._home.face)}'">
-      <div class="tag"><span class="nm" ${a.kind==="cron"?`onclick="event.stopPropagation();startRename('${esc(a.id)}',this)" title="click to rename"`:""}>${esc(a.name)}</span><span class="rl">${esc(a.kind==="hermes"?"standby":a.role)}</span></div>
+      <div class="tag"><span class="nm" ${a.kind==="cron"?`onclick="event.stopPropagation();startRename('${esc(a.id)}',this)" title="click to rename"`:""}>${esc(a.name)}</span><span class="rl">${esc(a.kind==="hermes"?(a._disp==="work"?"working":"sleep"):a.role)}</span></div>
     </div>`).join("");
   wrap.innerHTML=deskHTML+bedHTML+charHTML;
   // wire runtime + element refs
@@ -557,7 +558,7 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   Object.keys(AG).forEach(id=>{if(!FLOOR.some(a=>a.id===id))delete AG[id];});
 }
 function renderStage(){const wrap=$("#chars");if(!wrap)return;
-  const sz=Math.max(34,Math.round(($("#stagewrap").clientHeight||340)*0.13));
+  const sz=Math.max(32,Math.round(($("#stagewrap").clientHeight||340)*0.115));
   wrap.style.setProperty("--csz",sz+"px");
   const key=FLOOR.map(a=>a.id+":"+a.mode+":"+a.name+":"+a.color+":"+(a.busy?1:0)).join("|")||"empty";
   if(key!==_stageKey){_stageKey=key;buildStage();}

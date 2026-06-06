@@ -7,6 +7,7 @@ HB=/app/venv/bin/hermes
 [ -x "$HB" ] || HB="$(command -v hermes 2>/dev/null)"
 [ -n "$HB" ] || { echo "== seed_crons: hermes CLI not found, skip =="; exit 0; }
 export TZ=Asia/Kuala_Lumpur
+export HERMES_PROFILE=marketer   # new crons default to the marketer profile
 
 LIST="$("$HB" cron list --profile marketer 2>/dev/null || "$HB" cron list 2>/dev/null || true)"
 
@@ -126,4 +127,26 @@ mk "16b-reporter-weekly" "0 9 * * 1" \
 "REPORTER (weekly report, Mon 09:00). $PB WhatsApp the owner (\$WHACENTER_DEFAULT_TO) the week's performance per brand, winners, learnings, next-week plan. READ: _shared/results_<brand>, learnings_<brand>, strategy_<brand>. $RULES" \
 --skill measurement
 
+# Re-tag my crons to the MARKETER profile (the CLI may file new crons under 'default' -> the
+# Model Routing tab + office then show 0 under marketer). Forces the profile field on jobs.json.
+if [ -n "$PYBIN" ]; then
+  "$PYBIN" - "$H" <<'PY' || true
+import json,glob,os,re,sys
+H=sys.argv[1]; mine=re.compile(r'^\d')  # my cron names start with a digit (00-..16b-)
+n=0
+for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
+    try: d=json.load(open(jf,encoding="utf-8"))
+    except Exception: continue
+    jobs=d.get("jobs") if isinstance(d,dict) else d
+    if not isinstance(jobs,list): continue
+    ch=False
+    for j in jobs:
+        if isinstance(j,dict) and mine.match(str(j.get("name",""))) and j.get("profile")!="marketer":
+            j["profile"]="marketer"; ch=True; n+=1
+    if ch:
+        try: json.dump(d, open(jf,"w",encoding="utf-8"), indent=2)
+        except Exception: pass
+print("== cron retag: %d job(s) -> profile marketer ==" % n)
+PY
+fi
 echo "== seed_crons: done =="
