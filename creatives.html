@@ -18,8 +18,9 @@
   .count{margin-left:auto;font-size:12px;color:var(--dim)}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
   figure{margin:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column}
-  .media{position:relative;aspect-ratio:1/1;background:#070a12}
-  .media img,.media video{width:100%;height:100%;display:block;object-fit:cover}
+  .media{position:relative;aspect-ratio:1/1;background:#070a12;overflow:hidden}
+  .media img,.media video{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover}
+  select{background:#0e1322;color:var(--ink);border:1px solid var(--line2);border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
   .chip{position:absolute;top:8px;left:8px;z-index:2;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;background:#000b;color:#fff;backdrop-filter:blur(4px)}
   .chip.peningbot{box-shadow:inset 0 0 0 1px var(--pb)} .chip.peninglab{box-shadow:inset 0 0 0 1px var(--pl)}
   .slot{position:absolute;top:8px;right:8px;z-index:2;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:#000b;color:#cfe0ff;font-family:ui-monospace,monospace}
@@ -40,6 +41,11 @@
     <span class="filt on" data-b="all" onclick="setF(this)">All</span>
     <span class="filt" data-b="peningbot" onclick="setF(this)">PeningBot</span>
     <span class="filt" data-b="peninglab" onclick="setF(this)">PeningLab</span>
+    <select id="typef" onchange="setT(this.value)" title="Filter by type">
+      <option value="all">All types</option>
+      <option value="image">🖼️ Images</option>
+      <option value="video">▶ Videos</option>
+    </select>
     <button class="rf" onclick="load()">↻ Refresh</button>
     <span class="count" id="count"></span>
   </div>
@@ -49,8 +55,9 @@
 const API="https://api.github.com/repos/aqilrvsb/hermes-inbox/contents/creatives.json";
 const RAW="https://raw.githubusercontent.com/aqilrvsb/hermes-inbox/main/creatives.json";
 const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let FILTER="all", ITEMS=[];
+let FILTER="all", TYPEF="all", ITEMS=[];
 const isVid=u=>/\.(?:mp4|mov|webm)(?:\?|$)/i.test(u||"");
+const typeOf=m=>(m.type||"").toLowerCase()|| (isVid(m.url)?"video":"image");
 async function fetchJson(){
   try{const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
     if(r.ok){const m=await r.json(); if(m&&m.content){return JSON.parse(decodeURIComponent(escape(atob(m.content.replace(/\s/g,"")))));}}
@@ -68,9 +75,10 @@ function normalize(d){
   return out;
 }
 function setF(el){FILTER=el.dataset.b;document.querySelectorAll(".filt").forEach(f=>f.classList.toggle("on",f.dataset.b===FILTER));render();}
+function setT(v){TYPEF=v;render();}
 function render(){
   const g=$("#grid");
-  const list=ITEMS.filter(m=>FILTER==="all"||(m.brand||"").toLowerCase()===FILTER);
+  const list=ITEMS.filter(m=>(FILTER==="all"||(m.brand||"").toLowerCase()===FILTER)&&(TYPEF==="all"||typeOf(m)===TYPEF));
   $("#count").textContent=ITEMS.length?(list.length+" of "+ITEMS.length+" creatives"):"";
   if(!list.length){g.innerHTML='<div class="empty">No creatives published yet.<br>The producers (and the master-launch runbook) write them to <code>creatives.json</code> in the hermes-inbox repo. As soon as they do, they appear here.</div>';return;}
   g.innerHTML=list.map(m=>{
