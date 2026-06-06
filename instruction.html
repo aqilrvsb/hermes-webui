@@ -34,7 +34,15 @@
 </div>
 <div class="toast" id="toast"></div>
 <script>
-const INBOX="https://raw.githubusercontent.com/aqilrvsb/hermes-inbox/main/inbox.json";
+// Read via the GitHub Contents API = INSTANT (not CDN-cached, unlike raw). Public repo, unauth (60/hr — we poll slow). Falls back to raw if rate-limited.
+const INBOX_API="https://api.github.com/repos/aqilrvsb/hermes-inbox/contents/inbox.json";
+const INBOX_RAW="https://raw.githubusercontent.com/aqilrvsb/hermes-inbox/main/inbox.json";
+async function fetchInbox(){
+  try{const r=await fetch(INBOX_API+"?t="+Date.now(),{cache:"no-store"});
+    if(r.ok){const m=await r.json(); if(m&&m.content){return JSON.parse(decodeURIComponent(escape(atob(m.content.replace(/\s/g,"")))));}}
+  }catch(e){}
+  const r2=await fetch(INBOX_RAW+"?t="+Date.now(),{cache:"no-store"}); return await r2.json();
+}
 const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let CSRF=""; let handled=[];
 try{handled=JSON.parse(localStorage.getItem("hermes_handled_instructions")||"[]")}catch(e){handled=[]}
@@ -44,8 +52,7 @@ async function getCsrf(){ if(CSRF)return CSRF; try{const r=await fetch("/",{cred
 async function post(path,obj){ await getCsrf(); const r=await fetch(path,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","X-Hermes-CSRF-Token":CSRF},body:JSON.stringify(obj)}); const d=await r.json().catch(()=>({})); if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status)); return d; }
 async function load(){
   try{
-    const r=await fetch(INBOX+"?t="+Date.now(),{cache:"no-store"});
-    const d=await r.json(); const items=(d.instructions||[]).filter(x=>x&&x.id&&handled.indexOf(x.id)<0);
+    const d=await fetchInbox(); const items=(d.instructions||[]).filter(x=>x&&x.id&&handled.indexOf(x.id)<0);
     $("#status").textContent="live · "+items.length+" pending";
     const el=$("#list");
     if(!items.length){el.innerHTML='<div class="empty">No pending instructions. When you finish planning a task with Claude, it appears here.</div>';return;}
@@ -84,6 +91,6 @@ async function proceed(btn){
   }catch(e){ toast("⚠ "+e.message); btn.disabled=false; btn.textContent="▶ Proceed — run on Hermes now"; }
 }
 function reject(btn){ const id=btn.closest(".card").dataset.id; handled.push(id); saveHandled(); toast("Rejected — dismissed."); load(); }
-load(); setInterval(load,20000);
+load(); setInterval(load,90000);  // poll 90s (stays under GitHub's 60/hr unauth API limit)
 </script>
 </body></html>
