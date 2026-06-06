@@ -62,6 +62,9 @@ RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" hr
 # Agent Reports tab — each agent's latest run output.
 COPY reports.html /apptoo/static/reports.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/reports.html" target="_blank" rel="noopener" data-tooltip="Agent Reports" aria-label="Agent Reports"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2h9l5 5v15H6z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# Creatives tab — standalone gallery; reads creatives.json from the hermes-inbox repo (GitHub), so it never needs the server file API.
+COPY creatives.html /apptoo/static/creatives.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/creatives.html" target="_blank" rel="noopener" data-tooltip="Creatives" aria-label="Creatives"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-5-4-4 4-2-2-7 5"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Enable Ctrl+V paste of images into the chat (hooks the existing global addFiles()). drag-drop already works.
 COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true

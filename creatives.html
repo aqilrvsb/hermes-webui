@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Creatives — Hermes</title>
+<style>
+  :root{--bg:#0a0e18;--panel:#0e1322;--line:#20283f;--line2:#2a3350;--dim:#8a98b8;--ink:#dfe9ff;--lime:#b8ff5b;--accent:#7c8cff;--pb:#25D366;--pl:#f97316}
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  h1{font-size:20px;margin:0} .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .src{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim)}
+  a{color:#8aa0ff}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .filt{border:1px solid var(--line2);background:#0e1322;color:var(--dim);border-radius:99px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .filt.on{background:#13203a;color:#fff;border-color:var(--accent)}
+  .filt.on[data-b="peningbot"]{border-color:var(--pb);color:#bdf7d4}
+  .filt.on[data-b="peninglab"]{border-color:var(--pl);color:#ffd9b8}
+  .count{margin-left:auto;font-size:12px;color:var(--dim)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  figure{margin:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column}
+  .media{position:relative;aspect-ratio:1/1;background:#070a12}
+  .media img,.media video{width:100%;height:100%;display:block;object-fit:cover}
+  .chip{position:absolute;top:8px;left:8px;z-index:2;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;background:#000b;color:#fff;backdrop-filter:blur(4px)}
+  .chip.peningbot{box-shadow:inset 0 0 0 1px var(--pb)} .chip.peninglab{box-shadow:inset 0 0 0 1px var(--pl)}
+  .slot{position:absolute;top:8px;right:8px;z-index:2;font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:#000b;color:#cfe0ff;font-family:ui-monospace,monospace}
+  .vtag{position:absolute;bottom:8px;right:8px;z-index:2;font-size:10px;padding:2px 7px;border-radius:6px;background:#000b;color:#b8ff5b}
+  .cap{padding:10px 12px}
+  .cap .hl{font-size:13px;font-weight:700;color:#fff;margin:0 0 4px;line-height:1.3}
+  .cap .pr{font-size:12px;color:var(--dim);margin:0;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .empty{grid-column:1/-1;color:var(--dim);text-align:center;padding:54px 16px;border:1px dashed var(--line2);border-radius:14px;line-height:1.6}
+  button.rf{border:0;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;background:#13203a;color:#cfe0ff}
+  code{font-family:ui-monospace,monospace;font-size:11px;color:#9fb0d0}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>🎬 Creatives</h1>
+    <span style="margin-left:auto" class="src">source: <a href="https://github.com/aqilrvsb/hermes-inbox" target="_blank">hermes-inbox/creatives.json</a> · <span id="status">loading…</span></span></div>
+  <div class="sub">Every image &amp; video the producers generate. Published to GitHub by the agents, so this tab always loads (no server-file API needed).</div>
+  <div class="bar">
+    <span class="filt on" data-b="all" onclick="setF(this)">All</span>
+    <span class="filt" data-b="peningbot" onclick="setF(this)">PeningBot</span>
+    <span class="filt" data-b="peninglab" onclick="setF(this)">PeningLab</span>
+    <button class="rf" onclick="load()">↻ Refresh</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+</div>
+<script>
+const API="https://api.github.com/repos/aqilrvsb/hermes-inbox/contents/creatives.json";
+const RAW="https://raw.githubusercontent.com/aqilrvsb/hermes-inbox/main/creatives.json";
+const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let FILTER="all", ITEMS=[];
+const isVid=u=>/\.(?:mp4|mov|webm)(?:\?|$)/i.test(u||"");
+async function fetchJson(){
+  try{const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
+    if(r.ok){const m=await r.json(); if(m&&m.content){return JSON.parse(decodeURIComponent(escape(atob(m.content.replace(/\s/g,"")))));}}
+  }catch(e){}
+  try{const r2=await fetch(RAW+"?t="+Date.now(),{cache:"no-store"}); if(r2.ok)return await r2.json();}catch(e){}
+  return null;
+}
+// Accept either {items:[{brand,slot,type,url,headline,primary}]} OR any blob of text with media URLs.
+function normalize(d){
+  if(!d) return [];
+  if(Array.isArray(d.items)) return d.items.filter(x=>x&&x.url);
+  if(Array.isArray(d)) return d.filter(x=>x&&x.url);
+  const txt=JSON.stringify(d); const set=new Set(); const out=[];
+  (txt.match(/https?:\/\/[^\s"'<>)\]]+\.(?:png|jpe?g|webp|gif|mp4|mov|webm)(?:\?[^\s"'<>)\]]*)?/gi)||[]).forEach(u=>{if(!set.has(u)){set.add(u);out.push({url:u,brand:/peninglab/i.test(u)?"peninglab":"peningbot"});}});
+  return out;
+}
+function setF(el){FILTER=el.dataset.b;document.querySelectorAll(".filt").forEach(f=>f.classList.toggle("on",f.dataset.b===FILTER));render();}
+function render(){
+  const g=$("#grid");
+  const list=ITEMS.filter(m=>FILTER==="all"||(m.brand||"").toLowerCase()===FILTER);
+  $("#count").textContent=ITEMS.length?(list.length+" of "+ITEMS.length+" creatives"):"";
+  if(!list.length){g.innerHTML='<div class="empty">No creatives published yet.<br>The producers (and the master-launch runbook) write them to <code>creatives.json</code> in the hermes-inbox repo. As soon as they do, they appear here.</div>';return;}
+  g.innerHTML=list.map(m=>{
+    const b=(m.brand||"").toLowerCase();
+    const media=isVid(m.url)
+      ?`<video src="${esc(m.url)}" controls muted loop playsinline preload="metadata"></video><span class="vtag">▶ video</span>`
+      :`<img src="${esc(m.url)}" loading="lazy" onerror="this.closest('figure').style.opacity=.35;this.alt='unreachable'">`;
+    return `<figure>
+      <div class="media">
+        <span class="chip ${b}">${esc(m.brand||"?")}</span>
+        ${m.slot?`<span class="slot">${esc(m.slot)}</span>`:""}
+        ${media}
+      </div>
+      ${(m.headline||m.primary)?`<figcaption class="cap">${m.headline?`<p class="hl">${esc(m.headline)}</p>`:""}${m.primary?`<p class="pr">${esc(m.primary)}</p>`:""}</figcaption>`:""}
+    </figure>`;}).join("");
+}
+async function load(){
+  $("#status").textContent="loading…";
+  const d=await fetchJson(); ITEMS=normalize(d);
+  $("#status").textContent=d?("live · "+ITEMS.length+(d.updated?(" · "+esc(d.updated)):"")):"could not load";
+  render();
+}
+load(); setInterval(load,60000);
+</script>
+</body></html>
