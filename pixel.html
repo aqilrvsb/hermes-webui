@@ -523,14 +523,18 @@ async function renameAgent(id,name){
 function buildStage(){const wrap=$("#chars");if(!wrap)return;
   if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
-  const DESKS=genDesks();                                  // fixed 25 (5 pods x 5 PCs)
-  const offs=FLOOR.filter(a=>a.status==="off");
-  const BEDS=genBeds(Math.max(offs.length,1));
+  const DESKS=genDesks();                                  // fixed 25 PCs (5 pods x 5), always shown
+  // An agent sits at a PC ONLY while actually DOING ITS JOB (running now / ran in the last few min).
+  // Otherwise it sleeps in the bed pile (outside the floor) — even if it's enabled.
+  const sleepers=FLOOR.filter(a=>a.kind!=="hermes"&&a.mode!=="work");
+  const BEDS=genBeds(Math.max(sleepers.length,1));
   let di=0,bi=0;
-  // Every agent (incl Hermes) STANDS at a PC; only DISABLED agents go to the bed pile (outside the floor).
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
-    if(a.status==="off"){const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}
-    else{const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp=a.busy?"work":"duty";}});
+    if(a.kind==="hermes"){
+      if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp="work";}
+      else{a._home={x:74,y:40,face:"front-left",standby:true};a._disp="duty";}}
+    else if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp="work";}
+    else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}});
   // desk furniture — all 25 PCs always shown (5 pods)
   const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:9%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
   const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:5.5%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
