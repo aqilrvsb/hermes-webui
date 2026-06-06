@@ -526,16 +526,14 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
   const DESKS=genDesks();                                  // fixed 25 PCs (5 pods x 5), always shown
-  // An agent sits at a PC ONLY while actually DOING ITS JOB (running now / ran in the last few min).
-  // Otherwise it sleeps in the bed pile (outside the floor) — even if it's enabled.
-  // ONLY two states: WORKING at a PC (running now / ran in the last few min), or SLEEPING in the bed pile.
-  // No standby. Applies to Hermes too. The bed pile is always populated (most agents nap between runs).
-  const sleepers=FLOOR.filter(a=>a.mode!=="work");
-  const BEDS=genBeds(Math.max(sleepers.length,1));
+  // Office is ALIVE: every ON-DUTY agent stands at its PC; a currently-running one is highlighted ("work").
+  // Only DISABLED agents sleep in the bed pile (outside the floor).
+  const offs=FLOOR.filter(a=>a.status==="off");
+  const BEDS=genBeds(Math.max(offs.length,1));
   let di=0,bi=0;
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
-    if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-4.6,face:d.cf,desk:d};a._disp="work";}
-    else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}});
+    if(a.status==="off"){const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}
+    else{const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-4.6,face:d.cf,desk:d};a._disp=(a.mode==="work"||a.busy)?"work":"duty";}});
   // desk furniture — all 25 PCs always shown (5 pods), bigger
   const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:13%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
   const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:5.5%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");

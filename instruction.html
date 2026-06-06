@@ -86,10 +86,9 @@ async function proceed(btn){
     try{ c=await post("/api/crons/create",Object.assign({schedule:"2099-12-31T23:59:00"},base)); }   // valid far-future one-shot (we run it now)
     catch(e1){ c=await post("/api/crons/create",Object.assign({schedule:"0 0 1 1 *"},base)); }        // fallback: valid yearly cron
     const jid=(c.job&&(c.job.id||c.job.job_id))||c.id; if(!jid) throw new Error("no job id");
-    await post("/api/crons/run",{job_id:jid});                         // executes NOW (spawns the agent immediately)
-    try{ await post("/api/crons/delete",{job_id:jid}); }catch(e){}     // remove the one-shot so NO scheduled job lingers (the run already started in its own thread)
+    await post("/api/crons/run",{job_id:jid});   // executes NOW. Keep the job so you can WATCH it: Tasks -> click the job -> live run output + conversation.
     handled.push(id); saveHandled();
-    toast("✓ Running on Hermes NOW (one-shot, no schedule left). Watch the office / WhatsApp.");
+    toast("✓ Running on Hermes NOW. Watch it in Tasks -> open the job -> its run output (the live conversation).");
     load();
   }catch(e){ toast("⚠ "+e.message); btn.disabled=false; btn.textContent="▶ Proceed — run on Hermes now"; }
 }
