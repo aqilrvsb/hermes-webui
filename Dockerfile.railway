@@ -98,7 +98,7 @@ RUN sed -i 's#dirs.extend(Path(p) for p in get_external_skills_dirs())#import ya
 # Patch the upstream init: (1) line-164 env-reload crash guard,
 # (2) auto-create workspaces + write MCP config + launch the gateway daemon before the server.
 RUN sed -i '/read -r key value; do/a\      [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue' /hermeswebui_init.bash \
- && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; sh /opt/seed_roles.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/start_gateways.sh || true ; sh /opt/seed_crons.sh || true ; echo "== mcp config + gateway + crons launched =="' /hermeswebui_init.bash
+ && sed -i '/cd \/app; python server.py/i\sh /opt/init_workspaces.sh || true ; sh /opt/seed_roles.sh || true ; /app/venv/bin/python /opt/mcp_setup.py || true ; sh /opt/seed_crons.sh || true ; sh /opt/start_gateways.sh || true ; echo "== mcp config + crons + gateway launched =="' /hermeswebui_init.bash
 
 USER root
 # CMD is inherited from the base image (/hermeswebui_init.bash), now patched.

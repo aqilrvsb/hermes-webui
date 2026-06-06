@@ -13,26 +13,29 @@ export HERMES_PROFILE=marketer   # new crons default to the marketer profile
 
 LIST="$("$HB" cron list --profile marketer 2>/dev/null || "$HB" cron list 2>/dev/null || true)"
 
-# --- Remove legacy agent1..4 + the 5 deprecated agents (parse real ids from jobs.json, remove via CLI) ---
+# --- Delete deprecated / legacy / weekly crons DIRECTLY from jobs.json. We run BEFORE the gateway starts,
+#     so the file edit sticks (the gateway then loads the correct final 12). The old CLI-remove approach
+#     failed because the gateway re-wrote jobs.json from memory after seed_crons ran. ---
 PYBIN=/app/venv/bin/python; [ -x "$PYBIN" ] || PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
 if [ -n "$PYBIN" ]; then
-  OLDIDS="$("$PYBIN" - "$H" <<'PY'
+  "$PYBIN" - "$H" <<'PY' || true
 import json, glob, os, re, sys
-H = sys.argv[1]; pat = re.compile(r'^agent[1-9]|^(?:00-product-analyst|08-creative-rnd|09-funnel-builder|14-retention|15-account-safety)', re.I); ids = []
+H = sys.argv[1]
+kill = re.compile(r'^(agent[1-9]|00-product-analyst|03b-|08-creative-rnd|09-funnel-builder|14-retention|15-account-safety|16b-)|-weekly$', re.I)
 for jf in glob.glob(os.path.join(H, "**", "cron", "jobs.json"), recursive=True):
     try: d = json.load(open(jf, encoding="utf-8"))
     except Exception: continue
     jobs = d.get("jobs") if isinstance(d, dict) else d
     if not isinstance(jobs, list): continue
-    for j in jobs:
-        if isinstance(j, dict) and pat.search(str(j.get("name", ""))):
-            ids.append(str(j.get("id") or j.get("job_id") or j.get("name")))
-print("\n".join(i for i in ids if i))
+    keep = [j for j in jobs if not (isinstance(j, dict) and kill.search(str(j.get("name", ""))))]
+    if len(keep) != len(jobs):
+        if isinstance(d, dict): d["jobs"] = keep
+        else: d = keep
+        try:
+            json.dump(d, open(jf, "w", encoding="utf-8"), indent=2)
+            print("== deleted %d deprecated/legacy cron(s) from %s ==" % (len(jobs)-len(keep), jf))
+        except Exception: pass
 PY
-)"
-  for ID in $OLDIDS; do
-    "$HB" cron remove "$ID" >/dev/null 2>&1 && echo "== removed deprecated cron: $ID ==" || true
-  done
 fi
 
 # mk <name> <cron> <prompt> [--skill X ...]
