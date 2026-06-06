@@ -80,9 +80,11 @@ async function proceed(btn){
   if(!prompt){toast("Empty instruction");return;}
   btn.disabled=true; btn.textContent="Sending…";
   try{
-    const body={prompt:prompt,schedule:"0 0 31 2 *",name:"[Claude] "+title.slice(0,48),profile:"marketer"};
-    if(model) body.model=model;
-    const c=await post("/api/crons/create",body);
+    const base={prompt:prompt,name:"[Claude] "+title.slice(0,48),profile:"marketer"};
+    if(model) base.model=model;
+    let c;
+    try{ c=await post("/api/crons/create",Object.assign({schedule:"2099-12-31T23:59:00"},base)); }   // valid far-future one-shot (we run it now)
+    catch(e1){ c=await post("/api/crons/create",Object.assign({schedule:"0 0 1 1 *"},base)); }        // fallback: valid yearly cron
     const jid=(c.job&&(c.job.id||c.job.job_id))||c.id; if(!jid) throw new Error("no job id");
     await post("/api/crons/run",{job_id:jid});
     handled.push(id); saveHandled();
