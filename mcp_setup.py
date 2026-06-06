@@ -50,7 +50,7 @@ servers = {
     # vercel: NO MCP server. The vercel-mcp npm package exits on launch (failed every boot).
     # Developer role deploys via the Vercel CLI instead (baked into image, VERCEL_TOKEN in env) -> fully headless, reliable.
     "peninglab": {"command": BIN+"peninglab-mcp",        "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; default 120s MCP timeout cut them off + charged credits
-    "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}},
+    "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}, "timeout": 900, "connect_timeout": 60},  # ads_create_standalone_ad BLOCKS 90-120s; default 120s MCP timeout returned a phantom TIMEOUT even though Meta DID create the ad -> agent thought it failed -> re-fired -> DUPLICATE ads. 900s lets one fire finish cleanly.
     "playwright":{"command": BIN+"playwright-mcp", "args": ["--headless","--browser","chromium","--no-sandbox"], "env": dict(E(), PLAYWRIGHT_BROWSERS_PATH="/opt/pw-browsers")},
 }
 # Per-profile skill scoping: each role sees ONLY its relevant skills (cleaner Skills tab).
