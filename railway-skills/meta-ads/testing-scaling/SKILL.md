@@ -60,5 +60,5 @@ fix offer/creative/consolidation, don't panic-spend. Consolidate ad sets or opti
 you genuinely can't hit volume.
 
 ## Break-even gate (always compute first — Andy)
-Max allowable CPA = margin per sale (or for CTWA: **lead value = close-rate × margin** → max cost-per-qualified-
-lead). Judge every ad against this, not vanity ROAS.
+Max allowable CPA = margin per sale (for a subscription: the per-sub margin / LTV gate). Judge every ad
+against this, not vanity ROAS.

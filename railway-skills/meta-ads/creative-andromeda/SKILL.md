@@ -47,7 +47,7 @@ ads. So creative is the #1 lever — and *diversity* matters more than raw count
 - **Editing:** scene change every **2–3s** (1s for young, slower for older); **native-style captions**
   (CapCut/IG look, "like a friend posted"); talking-head ≈ **50/50 A-roll / B-roll**. (Jordan, Nick)
 - **B-roll kills hidden objections** without copy: show the product/flow held, used, in its real setting —
-  pre-answers "is it real / fast / legit?" (Tiana). For CTWA: show the WhatsApp chat, a real consultant replying.
+  pre-answers "is it real / fast / legit?" (Tiana). For SaaS: show the product working live — the bot auto-replying / the 10-video batch generating.
 - **AI-look is now an objection.** Mix in some real footage / real local creators; don't ship obviously-fake
   AI UGC at scale (Tiana, Andy, Jordan). Use AI to find the winning angle cheaply, then have a real creator scale it.
 

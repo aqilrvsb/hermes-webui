@@ -1,6 +1,6 @@
 ---
 name: meta-ads-playbook-2026
-description: The master Meta/Facebook ads strategy brain for 2026 — the consensus of 9 top media buyers (Ben Heath, Sam Piliero, North Digital, Tiana Asperjan, Andy Stauring, Jordan Hayes, CT the Disrupter, Media Ninja, Nick Theriot), ~110 videos. Use for EVERY ad decision: account structure, targeting, funnel, the non-negotiable rules. Product = PeningBot + PeningLab (WhatsApp-automation SaaS, Malaysia), run as click-to-WhatsApp (CTWA).
+description: The master Meta/Facebook ads strategy brain for 2026 — the consensus of 9 top media buyers (Ben Heath, Sam Piliero, North Digital, Tiana Asperjan, Andy Stauring, Jordan Hayes, CT the Disrupter, Media Ninja, Nick Theriot), ~110 videos. Use for EVERY ad decision: account structure, targeting, funnel, the non-negotiable rules. Products = PeningBot + PeningLab (Malaysian SaaS), sold via website → Purchase (objective = SALES).
 ---
 
 # Meta Ads Playbook 2026 — the marketing brain
@@ -39,8 +39,8 @@ Sister skills: `creative-andromeda`, `copywriting`, `creative-image`, `creative-
    matchmaker on the visual/copy. Diversity > volume, but you still need real volume. (ALL — see `creative-andromeda`)
 
 7. **Optimize for the DEEPEST real event, never a cheap proxy.** Always optimize for the true outcome
-   (Purchase / qualified Lead), never traffic/ATC/"messaging started". For CTWA: optimize for a **qualified
-   WhatsApp conversation** and send it back via CAPI as the conversion. (Sam, CT, Nick, Media Ninja — see `measurement`)
+   (Purchase), never traffic/ATC/"messaging started". For website sales: optimize for the **Purchase**
+   (Pixel + CAPI) and send it server-side via CAPI. (Sam, CT, Nick, Media Ninja — see `measurement`)
 
 8. **Judge by PROFIT and INCREMENTALITY, not reported ROAS.** Track GPT (gross profit per transaction) /
    new-customer CAC, not blended ROAS. A 2x-ROAS ad can out-earn a 4x one. (CT, Jordan, Sam — see `measurement`)

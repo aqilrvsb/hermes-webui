@@ -25,7 +25,7 @@ Bans and write-locks are routine even for good advertisers (Heath's agency loses
 ## Pixel / tracking traps (these look like "Meta hates me" but are self-inflicted)
 - A purchase/lead event firing on **page load** tells Meta everyone converts → it floods bots/spam. "Better a
   pixel that doesn't know how to convert than one that thinks it does when it doesn't." Verify with **Meta
-  Pixel Helper**; gate the event to the real action (see `measurement`, `ctwa-funnel`).
+  Pixel Helper**; gate the event to the real action (see `measurement`, `website-sales-funnel`).
 - Optimize for the real event from day one (don't believe the "warm up the pixel with traffic first" myth).
 
 ## Disabled-account recovery — Ben Heath's 4-step method

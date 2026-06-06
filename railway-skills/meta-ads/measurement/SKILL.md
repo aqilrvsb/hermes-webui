@@ -14,8 +14,8 @@ Meta the highest-quality signal you can.
   out-earn a 4x / RM40 one. "You can't pay bills with fractions."
 - **New-customer CAC, not blended ROAS** (Jordan). Blended hides bad acquisition (returning buyers who'd buy
   anyway). Only scale when *new-customer* economics are on target.
-- **For SaaS/CTWA:** cost-per-**qualified** WhatsApp lead, and lead→paid value. Max allowable = close-rate ×
-  margin (the break-even gate). LTV needs a window (30/60/90-day).
+- **For SaaS (website subscription):** cost-per-**Purchase** (paid sub) + its LTV. Max allowable CAC = the
+  margin/LTV break-even gate. LTV needs a window (30/60/90-day) — fire a re-bill event so Meta sees high-LTV cohorts.
 
 ## Incremental attribution (the 2026 tool — Sam)
 Columns → Compare attribution settings → **Incremental attribution** = conversions that happened *because of*
@@ -30,8 +30,8 @@ reaching people *before* they shop (CT's GEM: buy a bike → push helmet ads bef
 - Effect: **reported conversions DROP with no real change** (video ads hit hardest). Reconcile against
   back-end/CRM. **Stop comparing pre/post-change campaigns** (measured differently). Check rollout: Ad Set →
   Attribution model → "Show more" → "engage-through".
-- **For CTWA:** the click into WhatsApp now counts as a proper click-through conversion — your numbers should
-  report cleaner, but still reconcile vs your WhatsApp/CRM truth.
+- **For website sales:** the Purchase fires via Pixel + CAPI on the site — reconcile Meta's reported numbers
+  vs the site's real subscriptions (Supabase/CRM truth).
 
 ## Event quality > ad volume (CT) — the signal lever
 "Scale the QUALITY of events you track, not the volume of ads." Fire a custom event for the specific outcome
@@ -40,8 +40,8 @@ and optimize to it:
 - **New-customer event:** create a custom "new customer" conversion (Zapier/Elevar) and set the ad-set
   optimization event to it → new-customer share rises to 85–95%, CAC falls (CT, Teekus case $463k→$1M/mo with
   LESS spend by optimizing the right event).
-- **CTWA qualified-lead event:** send the qualified WhatsApp conversation back via CAPI valued at your average
-  lead value (see `ctwa-funnel`) so Meta runs a real purchase-optimized campaign.
+- **Purchase event:** fire the server-side **Purchase** via CAPI (deduped by payment id) valued at the real
+  subscription price (see `website-sales-funnel`) so Meta runs a true purchase-optimized campaign.
 - **Subscriptions:** fire an event on **re-bill** so Meta builds a high-LTV cohort.
 
 ## CAPI / pixel gut-check (Sam)

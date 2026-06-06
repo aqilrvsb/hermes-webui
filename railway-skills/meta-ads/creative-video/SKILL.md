@@ -45,9 +45,9 @@ look, soft window light, slight grain") to kill the AI sheen.
 - Use AI to find the **winning angle cheaply**, then hand the proven concept to a **real local creator** to
   scale (AI-look is now an objection — mix in real footage). AI does ~85%, human polishes the last 15%.
 
-## Video concepts to produce (for PeningBot/PeningLab, CTWA)
+## Video concepts to produce (for PeningBot/PeningLab — website sales)
 - Phone-screen recording: WhatsApp inbox flooding at 3am → PeningBot auto-replies in 2s.
-- Founder/owner talking-head: problem → solution → "jom cuba free 7 hari".
+- Founder/owner talking-head: problem → solution → "cuba sekarang di peningbot.com".
 - Before/after: messy inbox → handled; stressed owner → calm.
 - Live screen-record of the bot replying / qualifying a lead.
 - Local UGC testimonial (real face, BM/Manglish).

@@ -1,6 +1,6 @@
 ---
 name: copywriting
-description: Ad copy + angle + hook system for 2026 (Tiana Asperjan, Jordan Hayes, Nick Theriot, CT the Disrupter) plus Malaysian bahasa-pasar rules. Covers awareness stages, sophistication, hook formulas, the 8 trigger words, the 6 levels of proof, the Value Bridge / 3 P's offer, script frameworks, and CTWA-greeting congruence. Use to write any hook, primary text, headline, script, or WhatsApp opening message.
+description: Ad copy + angle + hook system for 2026 (Tiana Asperjan, Jordan Hayes, Nick Theriot, CT the Disrupter) plus Malaysian bahasa-pasar rules. Covers awareness stages, sophistication, hook formulas, the 8 trigger words, the 6 levels of proof, the Value Bridge / 3 P's offer, script frameworks, and ad↔landing-page congruence. Use to write any hook, primary text, headline, script, or website CTA.
 ---
 
 # Copywriting — angles, hooks, scripts (2026) + Malaysian copy

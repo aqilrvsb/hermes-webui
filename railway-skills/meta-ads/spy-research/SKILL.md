@@ -46,4 +46,4 @@ and you never learn *why* it worked. Use competitors for inspiration; never copy
 A research pack the strategist/copywriter consumes: **personas, awareness/sophistication per persona, ranked
 angles (with the customer's exact words), competitor offers/hooks to beat, and validated demand.** For
 PeningBot/PeningLab: mine MY SME owners' real WhatsApp-overwhelm language; check Malaysian Ad Library for
-WhatsApp-automation / chatbot / "auto reply" competitors and their CTWA hooks.
+WhatsApp-automation / chatbot / "auto reply" competitors and their winning hooks, offers & funnels.
