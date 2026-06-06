@@ -123,6 +123,19 @@ const CHOICES=[
   "minimax/minimax-m3","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","openrouter/auto", // OpenRouter (alt/fallback)
   "gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gpt-5.5"  // GRSAI (image/PDF + extra)
 ];
+// Provider -> its selectable models. Per-agent picker = choose provider, then model populates from this.
+const PROVIDERS={
+  opencode:["minimax-m3","minimax-m2.7","minimax-m2.5","kimi-k2.6","kimi-k2.5","glm-5.1","glm-5","deepseek-v4-pro","deepseek-v4-flash","mimo-v2.5-pro","qwen3.7-plus","qwen3.7-max"],
+  openrouter:["minimax/minimax-m3","openrouter/auto","anthropic/claude-sonnet-4.5","google/gemini-2.5-flash","openai/gpt-5.4"],
+  grsai:["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gemini-2.5-pro","gpt-image-2","gpt-5.5"]
+};
+const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI"};
+function providerOf(m){for(const p in PROVIDERS){if(PROVIDERS[p].indexOf(m)>=0)return p;}return "";}
+function fillModels(psel,pre){const row=psel.closest(".it");if(!row)return;const msel=row.querySelector(".msel");
+  const p=psel.value;
+  if(!p){msel.innerHTML='<option value="">(global default)</option>';msel.disabled=true;return;}
+  msel.disabled=false;const cur=(pre!==undefined&&pre!==null)?pre:msel.value;
+  msel.innerHTML=(PROVIDERS[p]||[]).map(m=>`<option value="${esc(m)}" ${m===cur?"selected":""}>${esc(m)}</option>`).join("");}
 async function loadAll(){
   if(!CSRF)getCsrf();   // prefetch CSRF for Save
   try{
@@ -166,18 +179,21 @@ function renderAgents(){const el=$("#agents");
   const list=CRONS.filter(c=>(c.profile||"default")===SEL);
   $("#agcount").textContent="· "+list.length+" in "+SEL;
   if(!list.length){el.innerHTML='<div class="empty">no scheduled agents in this profile</div>';return;}
-  el.innerHTML=list.map((c,i)=>{const cur=c.model||"(default)";
-    const opts=['<option value="">(use global default)</option>'].concat(MODELS.map(m=>`<option value="${esc(m)}" ${m===c.model?"selected":""}>${esc(m)}</option>`)).join("");
-    return `<div class="it" data-id="${esc(c.id)}">
+  el.innerHTML=list.map((c,i)=>{const cur=c.model||"(default)";const cp=providerOf(c.model)||(c.provider||"");
+    const provOpts=['<option value="">(use global default)</option>'].concat(Object.keys(PROVIDERS).map(p=>`<option value="${p}" ${p===cp?"selected":""}>${PLABEL[p]}</option>`)).join("");
+    return `<div class="it" data-id="${esc(c.id)}" data-model="${esc(c.model||"")}">
       <div class="nm">${esc(c.name||"agent")}<span class="role">${esc(roleOf(c.name))} · now: ${esc(cur)}</span></div>
-      <select class="msel">${opts}</select>
+      <select class="psel" title="provider" onchange="fillModels(this)" style="min-width:122px">${provOpts}</select>
+      <select class="msel" title="model" style="min-width:150px"></select>
       <button class="save" onclick="saveAgent('${esc(c.id)}',this)">Save</button></div>`;}).join("");
+  el.querySelectorAll(".it").forEach(row=>{fillModels(row.querySelector(".psel"),row.dataset.model||"");});
 }
-async function saveAgent(id,btn){const row=btn.closest(".it");const model=row.querySelector(".msel").value;
+async function saveAgent(id,btn){const row=btn.closest(".it");
+  const provider=row.querySelector(".psel").value;const model=provider?row.querySelector(".msel").value:"";
   btn.disabled=true;btn.textContent="…";
-  try{await j("/api/crons/update",{method:"POST",body:JSON.stringify({job_id:id,model:model})});
-    toast("✓ saved — "+(model||"global default"));
-    const c=CRONS.find(x=>String(x.id)===String(id));if(c)c.model=model;renderAgents();}
+  try{await j("/api/crons/update",{method:"POST",body:JSON.stringify({job_id:id,model:model,provider:provider||null})});
+    toast("✓ saved — "+(model?(PLABEL[provider]+" / "+model):"global default"));
+    const c=CRONS.find(x=>String(x.id)===String(id));if(c){c.model=model;c.provider=provider;}renderAgents();}
   catch(e){toast("⚠ "+e.message);btn.disabled=false;btn.textContent="Save";}}
 loadAll();setInterval(loadAll,15000);
 </script>

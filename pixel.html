@@ -477,17 +477,21 @@ const spriteSrc=(name,face)=>FXB+"ch/"+name+"-"+face+".png";
 /* monitor desks = fixed furniture (always shown, like the real office). char stands behind, facing the screen. */
 /* Desks (computers) + beds are GENERATED to match the agent count — one workstation and one
    bed PER agent — so every agent is visible and they never stack. Grids scale with FLOOR.length. */
-/* Two desk PODS (left + right clusters of back-to-back workstations), like the reference office.
-   Each pod = 2 columns (facing outward) x rows; pods grow with the number of WORKING agents. */
-function genDesks(n){const out=[];const per=Math.max(1,Math.ceil(n/2));
-  const clusters=[{ox:33,oy:47},{ox:52,oy:45}];const cx=5.6,cy=2.6,rx=-4.0,ry=3.0;let i=0;
-  for(const cl of clusters){for(let k=0;k<per&&i<n;k++,i++){const c=k%2,r=Math.floor(k/2),rl=c===0;
-    out.push({x:cl.ox+c*cx+r*rx, y:cl.oy+c*cy+r*ry, spr:rl?"desk-lr":"desk-rr", cf:rl?"rear-left":"rear-right"});}}
-  return out;}
-/* Bed pile (bottom rest area) — idle agents that AREN'T doing their job sleep here. */
-function genBeds(n){const out=[],cols=6,x0=15,dx=7,y0=66,dy=5.0,sh=1.0;
+/* FIVE desk PODS — 4 corners + 1 center — each pod = 5 PCs (back-to-back), 25 desks total.
+   Agents fill them in order (17 agents -> 17 PCs busy, 8 spare). */
+const POD_CENTERS=[{ox:28,oy:44},{ox:60,oy:44},{ox:22,oy:66},{ox:66,oy:60},{ox:44,oy:55}]; // 4 corners + center
+const POD_REL=[ // 5 desks per pod (2 back-to-back pairs + 1)
+  {dx:-2.4,dy:0,  rl:true},{dx:2.4,dy:0,  rl:false},
+  {dx:-2.4,dy:3.0,rl:true},{dx:2.4,dy:3.0,rl:false},
+  {dx:0,   dy:6.0,rl:true}];
+function genDesks(){const out=[];
+  for(const p of POD_CENTERS){for(const d of POD_REL){
+    out.push({x:p.ox+d.dx, y:p.oy+d.dy, spr:d.rl?"desk-lr":"desk-rr", cf:d.rl?"rear-left":"rear-right"});}}
+  return out;}  // 25 desks
+/* Bed pile — OUTSIDE the office floor (below the front edge). Only disabled agents sleep here. */
+function genBeds(n){const out=[],cols=7,x0=24,dx=6.5,y0=92,dy=4.0,sh=0.8;
   for(let i=0;i<n;i++){const c=i%cols,r=Math.floor(i/cols);
-    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*0.6});}
+    out.push({x:x0+c*dx+r*sh,y:y0+r*dy+c*0.4});}
   return out;}
 const POIS=[{x:80,y:49},{x:55,y:43},{x:30,y:55},{x:70,y:46}]; // coffee / water / wander spots
 const DOOR={x:80,y:36};
@@ -519,19 +523,17 @@ async function renameAgent(id,name){
 function buildStage(){const wrap=$("#chars");if(!wrap)return;
   if(!FLOOR.length){wrap.innerHTML='<div class="stageempty">— empty office · dynamic & per-profile —</div>';_stageKey="empty";return;}
   const sprites=assignSprites();
-  // Working agents (doing their job) stand at the desk PODS; idle / not-working agents go to the bed pile.
-  const workers=FLOOR.filter(a=>a.kind!=="hermes"&&a.mode==="work");
-  const idle=FLOOR.filter(a=>a.kind!=="hermes"&&a.mode!=="work"&&a.mode!=="standby");
-  const DESKS=genDesks(Math.max(workers.length,8));   // always show ~8 desks (2 pods) as furniture
-  const BEDS=genBeds(Math.max(idle.length,1));
+  const DESKS=genDesks();                                  // fixed 25 (5 pods x 5 PCs)
+  const offs=FLOOR.filter(a=>a.status==="off");
+  const BEDS=genBeds(Math.max(offs.length,1));
   let di=0,bi=0;
+  // Every agent (incl Hermes) STANDS at a PC; only DISABLED agents go to the bed pile (outside the floor).
   FLOOR.forEach(a=>{a._sprite=sprites[a.id];
-    if(a.kind==="hermes"||a.mode==="standby"){a._home={x:74,y:40,face:"front-left",standby:true};}
-    else if(a.mode==="work"){const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.2,face:d.cf,desk:d};}
-    else{const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};}});
-  // desk furniture (the two pods, always shown)
-  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:11%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
-  const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:6%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
+    if(a.status==="off"){const b=BEDS[bi++%BEDS.length];a._home={x:b.x,y:b.y,face:"front-right",bed:b};a._disp="sleep";}
+    else{const d=DESKS[di++%DESKS.length];a._home={x:d.x,y:d.y-3.0,face:d.cf,desk:d};a._disp=a.busy?"work":"duty";}});
+  // desk furniture — all 25 PCs always shown (5 pods)
+  const deskHTML=DESKS.map(d=>`<img class="furn" src="${FXB}fx/${d.spr}.png" style="left:${d.x}%;top:${d.y}%;height:9%;z-index:${Math.round(d.y*10)+5}" alt="">`).join("");
+  const bedHTML=FLOOR.filter(a=>a._home.bed).map(a=>`<div class="bed" data-bed="${esc(a.id)}" style="left:${a._home.bed.x}%;top:${a._home.bed.y}%;--bw:5.5%;z-index:${Math.round(a._home.bed.y*10)}"><div class="frame"></div><div class="sheet"></div><div class="pillow"></div><div class="blanket"></div></div>`).join("");
   const charHTML=FLOOR.map((a,i)=>`<div class="char ${a.status}" data-i="${i}" data-id="${esc(a.id)}"
        title="${esc(a.name)} — ${esc(a.role)}" onclick="if(!event.target.classList.contains('nm'))openModal(${i})">
       <div class="bubble"><i></i><i></i><i></i></div>
@@ -545,8 +547,8 @@ function buildStage(){const wrap=$("#chars");if(!wrap)return;
   // wire runtime + element refs
   wrap.querySelectorAll(".char").forEach(el=>{const id=el.dataset.id,a=FLOOR[+el.dataset.i];
     el.style.setProperty("--c",a.color);
-    let r=AG[id];if(!r){r={x:DOOR.x,y:DOOR.y,face:a._home.face,bob:0,phase:Math.random()*6,wTarget:null,nextWander:performance.now()+3000+Math.random()*6000};AG[id]=r;}
-    r.el=el;r.sprite=el.querySelector(".sprite");r.home=a._home;r.mode=a.mode;r.color=a.color;r.spriteName=a._sprite;r.busy=!!a.busy;r.curFace="";});
+    let r=AG[id];if(!r){r={x:a._home.x,y:a._home.y,face:a._home.face,bob:0,phase:Math.random()*6,wTarget:null,nextWander:0};AG[id]=r;}
+    r.el=el;r.sprite=el.querySelector(".sprite");r.home=a._home;r.mode=a._disp||a.mode;r.color=a.color;r.spriteName=a._sprite;r.busy=!!a.busy;r.curFace="";});
   // prune stale runtimes
   Object.keys(AG).forEach(id=>{if(!FLOOR.some(a=>a.id===id))delete AG[id];});
 }
@@ -561,11 +563,7 @@ function engine(t){const dt=Math.min(0.05,((t-_lastT)||16)/1000);_lastT=t;
   const csz=parseFloat(getComputedStyle($("#chars")).getPropertyValue("--csz"))||50;
   for(const id in AG){const r=AG[id];if(!r.el)continue;const home=r.home||{x:50,y:60,face:"front-left"};
     // pick target: wandering POI (awake only) else home
-    let tgt=home,wandering=false;
-    if(r.mode!=="sleep"){
-      if(r.wTarget){tgt=r.wTarget;wandering=true;}
-      else if(t>r.nextWander){r.wTarget=POIS[(Math.random()*POIS.length)|0];tgt=r.wTarget;wandering=true;}
-    }
+    let tgt=home,wandering=false;   // agents STAND at their PC — no wandering / walking around
     const dx=tgt.x-r.x,dy=tgt.y-r.y,dist=Math.hypot(dx,dy);
     const sleeping=r.mode==="sleep";
     if(dist>1.2){const sp=(sleeping?9:15)*dt;const ux=dx/dist,uy=dy/dist;
@@ -577,8 +575,8 @@ function engine(t){const dt=Math.min(0.05,((t-_lastT)||16)/1000);_lastT=t;
       else{setFace(r,home.face);r.phase+=dt*1.4;r.bob=sleeping?0:Math.sin(r.phase)*0.8;}
     }
     // dom write
-    const el=r.el,atDesk=!r.walking&&home.desk&&r.mode==="work";
-    el.classList.toggle("sleeping",sleeping&&!r.walking);  // idle agents lie in the bed pile
+    const el=r.el,atDesk=!r.walking&&home.desk;   // any agent at a PC sits at the desk
+    el.classList.toggle("sleeping",sleeping&&!r.walking);  // only disabled agents lie in the bed pile
     el.classList.toggle("work",r.mode==="work");
     const bub=el.querySelector(".bubble");if(bub)bub.style.display=(r.busy&&!r.walking)?"flex":"none";
     const anchor=(sleeping&&!r.walking)?-52:-87;
