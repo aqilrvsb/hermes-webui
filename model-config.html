@@ -30,6 +30,9 @@
   .def .l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
   .def .v{font-family:var(--mono);font-weight:700;font-size:14px;margin-top:6px;color:var(--teal)}
   .def .v small{color:var(--dim);font-weight:400}
+  .defrow{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
+  .defrow select{font-size:11px;padding:6px 8px;flex:1;min-width:88px}
+  .defrow .save{padding:7px 11px;font-size:10px}
   .list{display:flex;flex-direction:column;gap:8px}
   .it{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.02);padding:12px 14px;flex-wrap:wrap}
   .it .nm{font-weight:700;font-size:14px;min-width:160px;flex:1}
@@ -64,11 +67,14 @@
   <!-- DEFAULTS -->
   <div class="card">
     <h2>🎯 Global defaults</h2>
-    <p class="hint">Managed in config (ask to change). Chat & image/PDF are switchable live in the chat model dropdown.</p>
+    <p class="hint">Set live below — writes config.yaml + reloads instantly (no deploy). Per-conversation override is still the chat dropdown.</p>
     <div class="defs">
-      <div class="def"><div class="l">Chat (main)</div><div class="v" id="d_chat">claude-sonnet-4.5 <small>· AIMurah</small></div></div>
-      <div class="def"><div class="l">Image / PDF</div><div class="v" id="d_vision">claude-sonnet-4.5 <small>· AIMurah (multimodal)</small></div></div>
-      <div class="def"><div class="l">Fallback (on error)</div><div class="v" id="d_fallback">minimax-m3 <small>· OpenCode → OpenRouter → GRSAI</small></div></div>
+      <div class="def"><div class="l">Chat (main)</div><div class="v" id="d_chat">…</div>
+        <div class="defrow"><select id="cp_main" class="dps" onchange="fillDefModels('main')"></select><select id="cm_main" class="dms"></select><button class="save" onclick="saveDefault('main')">Set</button></div></div>
+      <div class="def"><div class="l">Image / PDF (vision)</div><div class="v" id="d_vision">…</div>
+        <div class="defrow"><select id="cp_vision" class="dps" onchange="fillDefModels('vision')"></select><select id="cm_vision" class="dms"></select><button class="save" onclick="saveDefault('vision')">Set</button></div></div>
+      <div class="def"><div class="l">Fallback (on error)</div><div class="v" id="d_fallback">minimax-m3 <small>· OpenCode → OpenRouter → GRSAI</small></div>
+        <div class="hint" style="margin-top:9px">auto safety chain · edit in config</div></div>
     </div>
   </div>
 
@@ -128,7 +134,7 @@ const PROVIDERS={
   opencode:["minimax-m3","minimax-m2.7","minimax-m2.5","kimi-k2.6","kimi-k2.5","glm-5.1","glm-5","deepseek-v4-pro","deepseek-v4-flash","mimo-v2.5-pro","qwen3.7-plus","qwen3.7-max"],
   openrouter:["minimax/minimax-m3","openrouter/auto","anthropic/claude-sonnet-4.5","google/gemini-2.5-flash","openai/gpt-5.4"],
   grsai:["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gemini-2.5-pro","gpt-image-2","gpt-5.5"],
-  aimurah:["claude-sonnet-4.5","claude-sonnet-4.5-1m","claude-sonnet-4","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.7","claude-opus-4.7-thinking","claude-opus-4.6","claude-opus-4.6-thinking","gpt-5.5","gpt-5.4","gemini-3.1-pro-preview"]
+  aimurah:["claude-sonnet-4.5","claude-sonnet-4.6","claude-sonnet-4.5-1m","claude-sonnet-4","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.7","claude-opus-4.7-thinking","claude-opus-4.6","claude-opus-4.6-thinking","gpt-5.5","gpt-5.4","gemini-3.1-pro-preview"]
 };
 const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI",aimurah:"AIMurah (free Claude)"};
 function providerOf(m){for(const p in PROVIDERS){if(PROVIDERS[p].indexOf(m)>=0)return p;}return "";}
@@ -137,6 +143,28 @@ function fillModels(psel,pre){const row=psel.closest(".it");if(!row)return;const
   if(!p){msel.innerHTML='<option value="">(global default)</option>';msel.disabled=true;return;}
   msel.disabled=false;const cur=(pre!==undefined&&pre!==null)?pre:msel.value;
   msel.innerHTML=(PROVIDERS[p]||[]).map(m=>`<option value="${esc(m)}" ${m===cur?"selected":""}>${esc(m)}</option>`).join("");}
+// ── Editable Global defaults (Chat main + Image/PDF vision) ──
+function defProviderOpts(){return Object.keys(PROVIDERS).map(p=>`<option value="${p}">${esc(PLABEL[p])}</option>`).join("");}
+function fillDefModels(which,pre){const ps=$("#cp_"+which),ms=$("#cm_"+which);if(!ps||!ms)return;
+  const p=ps.value;ms.innerHTML=(PROVIDERS[p]||[]).map(m=>`<option value="${esc(m)}" ${m===pre?"selected":""}>${esc(m)}</option>`).join("");}
+async function loadDefaults(){
+  try{
+    const d=await j("/api/model/auxiliary");const main=(d&&d.main)||{};const tasks=(d&&d.tasks)||[];
+    const vision=tasks.find(t=>t&&t.task==="vision")||{};
+    ["main","vision"].forEach(w=>{const ps=$("#cp_"+w);if(ps&&!ps.dataset.init){ps.innerHTML=defProviderOpts();ps.dataset.init="1";}});
+    const mp=providerOf(main.model)||main.provider||"aimurah";$("#cp_main").value=(mp in PROVIDERS)?mp:"aimurah";fillDefModels("main",main.model);
+    $("#d_chat").innerHTML=esc(main.model||"—")+" <small>· "+esc(PLABEL[$("#cp_main").value]||main.provider||"")+"</small>";
+    const vp=vision.provider||providerOf(vision.model)||$("#cp_main").value;$("#cp_vision").value=(vp in PROVIDERS)?vp:"aimurah";fillDefModels("vision",vision.model);
+    $("#d_vision").innerHTML=(vision.model?esc(vision.model):"(inherits main)")+" <small>· "+esc(PLABEL[$("#cp_vision").value]||vp||"")+"</small>";
+  }catch(e){$("#d_chat").textContent="(open Hermes + log in)";}
+}
+async function saveDefault(which){const ps=$("#cp_"+which),ms=$("#cm_"+which);const p=ps.value,m=ms.value;if(!m){toast("pick a model");return;}
+  try{
+    if(which==="main"){await j("/api/default-model",{method:"POST",body:JSON.stringify({model:m})});}
+    else{await j("/api/model/set",{method:"POST",body:JSON.stringify({scope:"auxiliary",task:"vision",provider:p,model:m})});}
+    toast("✓ "+(which==="main"?"Chat (main)":"Image/PDF")+" → "+m);loadDefaults();
+  }catch(e){toast("⚠ "+e.message);}
+}
 async function loadAll(){
   if(!CSRF)getCsrf();   // prefetch CSRF for Save
   try{
@@ -145,7 +173,7 @@ async function loadAll(){
     // always offer the GRSAI set + the OpenRouter fallback in the dropdown (deduped)
     CHOICES.forEach(m=>{if(MODELS.indexOf(m)<0)MODELS.push(m);});
     $("#dot").className="dot on";$("#status").textContent="live";$("#err").style.display="none";
-    await buildProfiles();renderProviders();renderAgents();
+    await buildProfiles();renderProviders();renderAgents();loadDefaults();
   }catch(e){
     $("#dot").className="dot";$("#status").textContent="error";
     $("#err").style.display="block";$("#err").innerHTML="⚠ Can't read Hermes data ("+esc(e.message)+"). Open <a href='/'>Hermes</a>, log in, reload.";

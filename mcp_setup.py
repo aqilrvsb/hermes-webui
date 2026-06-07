@@ -135,7 +135,7 @@ for home in homes():
         GRSAI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-2.5-flash",
                         "gemini-2.5-pro", "gpt-image-2", "gpt-5.5"]
         AM_BASE = "https://aimurah.my.id/api/v1"   # AIMurah — OpenAI-compatible (/chat/completions + /messages). IDs verified live from /v1/models.
-        AM_MODELS = ["claude-sonnet-4.5", "claude-sonnet-4.5-1m",        # FREE - strong Claude (1M ctx variant)
+        AM_MODELS = ["claude-sonnet-4.5", "claude-sonnet-4.6", "claude-sonnet-4.5-1m",   # claude-sonnet-4.5 FREE; 4.6 PRO; 1M ctx variant
                      "oa-DeepSeek-V4-Pro", "oa-Kimi-K2.6", "oa-Qwen3.7-Max", "oa-MiniMax-M2.7",  # FREE strong reasoners
                      "minimax-m3", "glm-5", "open-agentic",             # FREE
                      "claude-opus-4.8", "claude-opus-4.8-thinking", "claude-opus-4.7",  # PRO - Opus
