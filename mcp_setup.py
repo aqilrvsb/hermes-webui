@@ -122,7 +122,8 @@ for home in homes():
     HAS_OC = bool(os.environ.get("OPENCODE_API_KEY", "").strip())
     HAS_OR = bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
     HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
-    if HAS_OC or HAS_OR:
+    HAS_AM = bool(os.environ.get("AIMURAH_API_KEY", "").strip())   # AIMurah (aimurah.my.id) — OpenAI-compatible; FREE claude-sonnet-4.5/haiku-4.5
+    if HAS_OC or HAS_OR or HAS_AM:
         OC_BASE = "https://opencode.ai/zen/go/v1"
         OR_BASE = "https://openrouter.ai/api/v1"
         GRSAI_BASE = "https://grsaiapi.com/v1"
@@ -133,6 +134,10 @@ for home in homes():
                      "google/gemini-2.5-flash", "openai/gpt-5.4"]
         GRSAI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-2.5-flash",
                         "gemini-2.5-pro", "gpt-image-2", "gpt-5.5"]
+        AM_BASE = "https://aimurah.my.id/api/v1"   # AIMurah — OpenAI-compatible (/chat/completions + /messages)
+        AM_MODELS = ["claude-sonnet-4.5", "claude-haiku-4.5", "claude-opus-4.6", "gpt-5.5",
+                     "gpt-5.4", "gemini-3.1-pro", "gemini-3.0-flash", "deepseek-3.2",
+                     "deepseek-v3", "minimax-m2.5", "kimi-k2.5"]
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
@@ -146,6 +151,9 @@ for home in homes():
         if HAS_GR and "grsai" not in have:
             cps.append({"name": "grsai", "base_url": GRSAI_BASE,
                         "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
+        if HAS_AM and "aimurah" not in have:
+            cps.append({"name": "aimurah", "base_url": AM_BASE,
+                        "api_key": "${AIMURAH_API_KEY}", "models": AM_MODELS})
         cfg["custom_providers"] = cps
         # MAIN (chat + agents default) = OpenCode Go minimax-m3 (else OpenRouter if no OC key).
         if HAS_OC:
