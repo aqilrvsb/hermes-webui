@@ -137,6 +137,14 @@ const PROVIDERS={
   aimurah:["claude-sonnet-4.5","claude-sonnet-4.6","claude-sonnet-4.5-1m","claude-sonnet-4","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.7","claude-opus-4.7-thinking","claude-opus-4.6","claude-opus-4.6-thinking","gpt-5.5","gpt-5.4","gemini-3.1-pro-preview"]
 };
 const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI",aimurah:"AIMurah (free Claude)"};
+const BASE_AIMURAH=PROVIDERS.aimurah.slice();  // hardcoded fallback (keeps 4.6/opus-4.7/4.8 even if catalog flickers)
+// Pull AIMurah's LIVE models out of /api/models groups, so the dropdown auto-updates from the catalog.
+function aimurahFromGroups(md){const out=[];const grps=(md&&(md.groups||md.providers))||[];if(!Array.isArray(grps))return out;
+  for(const g of grps){const key=String((g&&(g.provider||g.key||g.id||g.label||g.name))||"").toLowerCase();
+    if(key.indexOf("aimurah")<0)continue;
+    const ms=(g&&(g.models||g.items||g.entries))||[];
+    if(Array.isArray(ms))for(const m of ms){const id=typeof m==="string"?m:(m&&(m.id||m.model||m.value||m.name));if(id)out.push(String(id));}}
+  return out;}
 function providerOf(m){for(const p in PROVIDERS){if(PROVIDERS[p].indexOf(m)>=0)return p;}return "";}
 function fillModels(psel,pre){const row=psel.closest(".it");if(!row)return;const msel=row.querySelector(".msel");
   const p=psel.value;
@@ -170,6 +178,7 @@ async function loadAll(){
   try{
     const [cr,md]=await Promise.all([j("/api/crons"),j("/api/models").catch(()=>({models:[]}))]);
     CRONS=cr.jobs||[];MODELS=modelIds(md);
+    try{const liveAM=aimurahFromGroups(md);PROVIDERS.aimurah=Array.from(new Set([...liveAM,...BASE_AIMURAH]));}catch(e){}  // live catalog first, hardcoded as fallback
     // always offer the GRSAI set + the OpenRouter fallback in the dropdown (deduped)
     CHOICES.forEach(m=>{if(MODELS.indexOf(m)<0)MODELS.push(m);});
     $("#dot").className="dot on";$("#status").textContent="live";$("#err").style.display="none";
