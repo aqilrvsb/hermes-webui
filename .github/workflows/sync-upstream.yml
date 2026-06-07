@@ -27,9 +27,18 @@ jobs:
           git remote add upstream https://github.com/nesquena/hermes-webui.git
           git fetch upstream
           UB=$(git remote show upstream | sed -n 's/.*HEAD branch: //p')
-          git merge "upstream/${UB}" --no-edit -m "Daily sync: merge upstream ${UB}" || { git merge --abort; echo "merge skipped (diverged/none)"; }
+          # SQUASH-merge upstream into ONE commit we fully control. A normal merge commit that touches
+          # .github/workflows/* is rejected on push: the default GITHUB_TOKEN may not create/update
+          # workflow files. So we squash, then strip ALL workflow-file changes (keep OUR workflows).
+          if ! git merge --squash "upstream/${UB}"; then
+            echo "merge conflicts — resetting, will retry next run"; git reset --hard HEAD
+          fi
+          # Keep our .github/workflows exactly as-is (revert modifications, drop upstream-added ones)
+          git reset -q HEAD .github/workflows/ 2>/dev/null || true
+          git checkout -- .github/workflows/ 2>/dev/null || true
+          git clean -fdq .github/workflows/ 2>/dev/null || true
           # Cache-bust so the rebuild re-clones hermes-agent + skills fresh (always latest)
           date -u +"%Y-%m-%dT%H:%M:%SZ" > buildstamp.txt
-          git add buildstamp.txt
-          git commit -m "Daily refresh $(date -u +%F): re-clone hermes-agent + skills" || echo "nothing to commit"
+          git add -A
+          git commit -m "Daily sync $(date -u +%F): merge upstream (workflows kept local) + refresh" || echo "nothing to commit"
           git push origin HEAD:master
