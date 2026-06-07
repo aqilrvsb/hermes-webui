@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -686,6 +687,19 @@ def _ignored_agent_update_info() -> dict:
     return {'name': 'agent', 'behind': 0, 'ignored': True}
 
 
+def cached_update_status(*, include_agent=True):
+    """Return cached update status without performing network or git mutations."""
+    include_agent = bool(include_agent)
+    with _cache_lock:
+        cached = dict(_update_cache)
+    if cached.get('include_agent') != include_agent:
+        cached['include_agent'] = include_agent
+        if not include_agent:
+            cached['agent'] = _ignored_agent_update_info()
+    cached['cached'] = True
+    return cached
+
+
 def check_for_updates(force=False, *, include_agent=True):
     """Return cached update status for webui and agent repos."""
     global _check_in_progress
@@ -1012,6 +1026,34 @@ def summarize_update_payload(updates: dict, llm_callback=None, *, target: str | 
 # ── Self-update application ───────────────────────────────────────────────────
 
 
+def _purge_agent_pycache(repo_dir: Path) -> None:
+    """Delete all __pycache__ dirs under *repo_dir* so the next import
+    recompiles from source, avoiding stale-bytecode errors after git pull.
+
+    ``os.execv()`` replaces the process image but does not touch the
+    on-disk bytecode cache.  When a ``git pull`` writes new ``.py`` files
+    whose mtime lands within the same second as the pre-existing ``.pyc``
+    files, CPython may trust the stale cache and serve an old class
+    definition.  The mismatch between cached class symbols and newly-imported
+    supporting modules causes ``AttributeError`` (e.g. a method added in
+    the same update is missing from the cached ``AIAgent`` class).
+
+    This is safe to call right before ``os.execv()`` because the current
+    process is about to be replaced — losing the bytecode cache is harmless
+    and forces a clean recompilation on the next startup.
+    """
+    if repo_dir is None or not repo_dir.exists():
+        return
+    try:
+        for pycache in repo_dir.rglob("__pycache__"):
+            try:
+                shutil.rmtree(pycache, ignore_errors=True)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
 def _schedule_restart(delay: float = 2.0) -> None:
     """Re-exec this process after *delay* seconds.
 
@@ -1048,6 +1090,14 @@ def _schedule_restart(delay: float = 2.0) -> None:
         # released atomically by the kernel.
         with _apply_lock:
             _wait_until_restart_safe()
+            # Purge bytecode caches so the new process imports from
+            # current source.  Without this, Python may serve stale .pyc
+            # files whose mtime matches the just-pulled .py files,
+            # causing AttributeError when new methods are missing from
+            # cached class definitions.
+            if _AGENT_DIR is not None:
+                _purge_agent_pycache(Path(_AGENT_DIR))
+            _purge_agent_pycache(REPO_ROOT)
             try:
                 # Re-exec into the just-pulled image.
                 #
@@ -1073,10 +1123,37 @@ def _schedule_restart(delay: float = 2.0) -> None:
                 # `[sys.executable] + sys.argv` form is the canonical CPython
                 # re-exec idiom (same shape Flask/Django reloaders use) and
                 # is the correct path.
-                if getattr(sys, "frozen", False):
-                    os.execv(sys.executable, sys.argv)
+                #
+                # IMPORTANT: On Windows, os.execv() does NOT replace the
+                # current process — it spawns a new process while the old
+                # one keeps running.  This causes "address already in use"
+                # because the old process still holds the port.  On Windows
+                # we use subprocess.Popen() + os._exit() instead.
+                if sys.platform == 'win32':
+                    import subprocess
+                    if getattr(sys, "frozen", False):
+                        args = sys.argv
+                    else:
+                        args = [sys.executable] + sys.argv
+                    # Start new process detached, redirect all stdio to
+                    # avoid broken-pipe errors when the parent exits.
+                    subprocess.Popen(
+                        args,
+                        cwd=os.getcwd(),
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                        close_fds=True,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    # Exit immediately — the port is released as soon as
+                    # this process dies, allowing the new process to bind.
+                    os._exit(0)
                 else:
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                    if getattr(sys, "frozen", False):
+                        os.execv(sys.executable, sys.argv)
+                    else:
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
             except Exception:
                 # Last-resort: if execv fails for any reason, just exit so the
                 # process supervisor (start.sh / Docker) restarts us.

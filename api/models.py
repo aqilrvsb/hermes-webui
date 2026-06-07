@@ -2369,11 +2369,11 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         s.save()
     return s
 
-def _hide_from_default_sidebar(session: dict) -> bool:
+def _hide_from_default_sidebar(session: dict, *, show_cron: bool = False) -> bool:
     """Return True for internal/background sessions hidden from the default list."""
     sid = str(session.get('session_id') or '')
     source = session.get('source_tag') or session.get('source')
-    if source == 'cron' or sid.startswith('cron_'):
+    if not show_cron and (source == 'cron' or sid.startswith('cron_')):
         return True
     if bool(session.get('pre_compression_snapshot')):
         return not bool(session.get('_show_pre_compression_snapshot'))
@@ -2550,13 +2550,19 @@ def _prefer_fuller_snapshots_for_sidebar(sessions: list[dict]) -> list[dict]:
 
         newest_visible_ts = max(_session_sort_timestamp(session) for session in visible)
         snapshot_ts = _session_sort_timestamp(best_snapshot)
-        # Keep the active continuation visible when it has newer activity than
-        # the archived snapshot. A fuller snapshot can still be older than a
-        # continuation that contains the latest turns after compression.
+        snapshot_id = str(best_snapshot.get('session_id') or '')
+        if not snapshot_id:
+            continue
+
+        snapshot_ids_to_show.add(snapshot_id)
+        # If the continuation is newer, keep it visible too. That means the
+        # lineage is split-brain-ish: the snapshot has more transcript rows, but
+        # the continuation may still contain the newest post-compression turn.
+        # Showing both is less tidy than hiding one, but it preserves every
+        # reachable message. Tidy and wrong is how users start doubting reality.
         if newest_visible_ts > snapshot_ts:
             continue
 
-        snapshot_ids_to_show.add(str(best_snapshot.get('session_id')))
         continuation_ids_to_hide.update(
             str(session.get('session_id'))
             for session in visible
@@ -2583,28 +2589,104 @@ def _strip_sidebar_internal_flags(sessions: list[dict]) -> None:
         session.pop('_show_pre_compression_snapshot', None)
 
 
-def _row_may_need_sidecar_metadata_refresh(session: dict) -> bool:
+def _row_may_need_sidecar_metadata_refresh(
+    session: dict,
+    *,
+    stale_snapshot_ids: set[str] | None = None,
+) -> bool:
     """Return True when a row needs canonical sidecar runtime/snapshot metadata.
 
     Compression lineage fields are enriched from state.db in one batched query
     later in all_sessions(). Loading hundreds of lineage sidecars on every
     /api/sessions poll turns the sidebar into molasses, so keep this refresh
-    limited to the few rows whose transient runtime or snapshot state is not
-    cheaply available from state.db.
+    limited to rows with transient runtime state, missing snapshot sidebar
+    metadata, or a stale snapshot candidate that can affect the visibility
+    decision for its lineage.
     """
     is_runtime_row = bool(
         session.get('active_stream_id')
         or session.get('has_pending_user_message')
         or session.get('pending_user_message')
     )
-    snapshot_missing_sidebar_metadata = bool(
-        session.get('pre_compression_snapshot')
-        and (
-            session.get('message_count') is None
-            or session.get('last_message_at') is None
+    if is_runtime_row:
+        return True
+    sid = str(session.get('session_id') or '')
+    if not session.get('pre_compression_snapshot'):
+        # Refresh a stale-indexed COMPRESSION CONTINUATION row from its sidecar.
+        # Gate tightly: a plain /branch fork also carries parent_session_id
+        # (#1342) but has no compression sidecar drift to correct, and its file
+        # mtime routinely exceeds the indexed logical last_message_at — so
+        # including forks here would call load_metadata_only() on every fork row
+        # on every /api/sessions poll (the molasses #3770 guards against, per the
+        # #3789 release gate). Exclude session_source == 'fork'
+        # (the marker /api/session/branch stamps; see _is_continuation_session)
+        # so only true continuations are eligible.
+        if str(session.get('session_source') or '').strip().lower() == 'fork':
+            return False
+        lineage_shaped = bool(
+            session.get('parent_session_id')
+            or session.get('_lineage_root_id')
+            or session.get('_compression_segment_count')
         )
-    )
-    return is_runtime_row or snapshot_missing_sidebar_metadata
+        return bool(lineage_shaped and sid and _sidecar_mtime_after_index_timestamp(session))
+    if session.get('message_count') is None or session.get('last_message_at') is None:
+        return True
+    return bool(sid and stale_snapshot_ids and sid in stale_snapshot_ids)
+
+
+def _sidecar_mtime_after_index_timestamp(session: dict) -> bool:
+    sid = str(session.get('session_id') or '')
+    if not sid or not is_safe_session_id(sid):
+        return False
+    try:
+        sidecar_mtime = (SESSION_DIR / f'{sid}.json').stat().st_mtime
+    except OSError:
+        return False
+    indexed_ts = _session_sort_timestamp(session)
+    return sidecar_mtime > indexed_ts + 0.001
+
+
+def _stale_snapshot_metadata_refresh_ids(sessions: list[dict]) -> set[str]:
+    """Return pre-compression snapshots worth a sidecar metadata refresh.
+
+    Most snapshot rows can be decided from the index: either their indexed count
+    already beats the visible continuation, or they are normal older snapshots
+    that should remain hidden. Only stat candidate sidecars when a hidden
+    snapshot has a visible continuation in the same lineage and its indexed
+    metadata would otherwise fail to expose it.
+    """
+    sessions_by_id = {
+        str(session.get('session_id')): session
+        for session in sessions
+        if session.get('session_id')
+    }
+    groups: dict[str, list[dict]] = {}
+    for session in sessions:
+        sid = str(session.get('session_id') or '')
+        source = session.get('source_tag') or session.get('source')
+        if source == 'cron' or sid.startswith('cron_'):
+            continue
+        root = _sidebar_lineage_root_id(session, sessions_by_id)
+        groups.setdefault(root, []).append(session)
+
+    refresh_ids: set[str] = set()
+    for group in groups.values():
+        visible = [session for session in group if not session.get('pre_compression_snapshot')]
+        snapshots = [session for session in group if session.get('pre_compression_snapshot')]
+        if not visible or not snapshots:
+            continue
+        if any(_has_live_sidebar_state(session) for session in visible):
+            continue
+        best_visible_count = max(_sidebar_message_count(session) for session in visible)
+        for snapshot in snapshots:
+            sid = str(snapshot.get('session_id') or '')
+            if not sid:
+                continue
+            if _sidebar_message_count(snapshot) > best_visible_count:
+                continue
+            if _sidecar_mtime_after_index_timestamp(snapshot):
+                refresh_ids.add(sid)
+    return refresh_ids
 
 
 def _refresh_index_rows_from_sidecar_metadata(sessions: list[dict]) -> list[dict]:
@@ -2616,8 +2698,12 @@ def _refresh_index_rows_from_sidecar_metadata(sessions: list[dict]) -> list[dict
     historical transcript.
     """
     out: list[dict] = []
+    stale_snapshot_ids = _stale_snapshot_metadata_refresh_ids(sessions)
     for session in sessions:
-        if not _row_may_need_sidecar_metadata_refresh(session):
+        if not _row_may_need_sidecar_metadata_refresh(
+            session,
+            stale_snapshot_ids=stale_snapshot_ids,
+        ):
             out.append(session)
             continue
         sid = session.get('session_id')
@@ -3953,6 +4039,14 @@ def _session_message_merge_key(msg: dict):
     message_identity = msg.get("id") or msg.get("message_id")
     if message_identity:
         return ("message_id", str(message_identity))
+    # Include tool_calls so assistant messages that invoke different tools
+    # (but share identical empty content and same-second timestamp) are not
+    # collapsed by the merge-key guard at line ~4216.  Without this,
+    # all tool-calling messages map to the same legacy key and the
+    # timestamp<=max_sidecar_timestamp blanket-skip at line ~4218 drops
+    # every state.db tool-call after the first one registered by the sidecar.
+    _tc = msg.get("tool_calls")
+    _tc_key = json.dumps(_tc, sort_keys=True, default=str) if _tc else ""
     return (
         "legacy",
         str(msg.get("role") or ""),
@@ -3960,6 +4054,7 @@ def _session_message_merge_key(msg: dict):
         _normalized_message_timestamp_for_key(msg.get("timestamp")),
         str(msg.get("tool_call_id") or ""),
         str(msg.get("tool_name") or msg.get("name") or ""),
+        _tc_key,
     )
 
 
@@ -3976,6 +4071,11 @@ def _session_message_dedup_key(msg: dict):
     message_identity = msg.get("id") or msg.get("message_id")
     if message_identity:
         return ("message_id", str(message_identity))
+    # Include tool_calls in the key so assistant messages that carry
+    # different tool invocations (but identical empty content/timestamp)
+    # are never collapsed into one.  (#3346 regression)
+    _tc = msg.get("tool_calls")
+    _tc_key = json.dumps(_tc, sort_keys=True, default=str) if _tc else ""
     return (
         "legacy",
         str(msg.get("role") or ""),
@@ -3983,6 +4083,7 @@ def _session_message_dedup_key(msg: dict):
         str(msg.get("timestamp") or ""),
         str(msg.get("tool_call_id") or ""),
         str(msg.get("tool_name") or msg.get("name") or ""),
+        _tc_key,
     )
 
 
@@ -4010,48 +4111,72 @@ def _session_message_content_key(msg: dict):
 def _session_message_visible_key(msg: dict):
     if not isinstance(msg, dict):
         return ("non_dict", repr(msg))
+    # Include tool_calls so assistant messages that invoke different tools
+    # (but share identical empty content) are not collapsed by sidecar
+    # prefix matching.  Without this, all tool-calling messages map to
+    # ("assistant", "") and the merge treats state.db rows as replays.
+    _tc = msg.get("tool_calls")
+    _tc_key = json.dumps(_tc, sort_keys=True, default=str) if _tc else ""
     return (
         str(msg.get("role") or ""),
         _normalized_session_message_content(msg),
+        _tc_key,
     )
 
 
 def _build_visible_duplicate_lookup(visible_keys: set[tuple]) -> dict:
     by_role = {}
-    loose_by_key = {}
     for key in visible_keys:
         try:
-            role, content = key
-        except (TypeError, ValueError):
+            role = key[0]
+            content = key[1]
+        except (TypeError, IndexError):
             continue
         if not content:
             continue
         by_role.setdefault(role, []).append(key)
-        loose_by_key[key] = _loose_session_message_content(content)
-    return {"keys": visible_keys, "by_role": by_role, "loose_by_key": loose_by_key}
+    # Keep loose_by_key lazy.  Some transcripts contain multi-megabyte tool
+    # outputs; eagerly casefolding + regex-tokenizing every visible key on every
+    # duplicate probe made /api/session take 10s+ and blocked /api/sessions.
+    return {"keys": visible_keys, "by_role": by_role, "loose_by_key": {}}
 
 
 def _matching_visible_duplicate(visible_key: tuple, visible_keys: set[tuple], lookup: dict | None = None):
     if visible_key in visible_keys:
         return visible_key
-    role, content = visible_key
+    role = visible_key[0]
+    content = visible_key[1] if len(visible_key) > 1 else ""
     if not content:
         return None
     if lookup is None:
         lookup = _build_visible_duplicate_lookup(visible_keys)
     loose_content = None
-    for existing_role, existing_content in lookup.get("by_role", {}).get(role, []):
+    loose_by_key = lookup.setdefault("loose_by_key", {})
+    for existing_key in lookup.get("by_role", {}).get(role, []):
+        existing_role = existing_key[0]
+        existing_content = existing_key[1] if len(existing_key) > 1 else ""
         if role != existing_role or not existing_content:
             continue
+        # Exact visible-key equality was checked above. For very large payloads
+        # (tool logs / request dumps), Python-in substring and fuzzy-token
+        # comparisons are both expensive and low-value; doing them repeatedly
+        # made session loading block the whole WebUI for many seconds. Keep
+        # fuzzy matching for normal chat-sized text, but do exact-only matching
+        # for giant payloads.
+        if max(len(content), len(existing_content)) > 200_000:
+            continue
         if content in existing_content or existing_content in content:
-            return (existing_role, existing_content)
+            return existing_key
         if loose_content is None:
             loose_content = _loose_session_message_content(content)
-        loose_existing = lookup.get("loose_by_key", {}).get((existing_role, existing_content), "")
+        loose_existing = loose_by_key.get(existing_key)
+        if loose_existing is None:
+            loose_existing = _loose_session_message_content(existing_content)
+            loose_by_key[existing_key] = loose_existing
         if loose_content and loose_existing and (
             loose_content in loose_existing or loose_existing in loose_content
         ):
-            return (existing_role, existing_content)
+            return existing_key
     return None
 
 
@@ -4253,7 +4378,13 @@ def merge_session_messages_append_only(
             if key in seen_message_keys and key[0] == "message_id":
                 continue
             if not (isinstance(key, tuple) and key[:1] == ("message_id",)):
-                continue
+                # Legacy key within sidecar timestamp range — only skip if
+                # this exact merge_key was already registered by the sidecar.
+                # Different tool_calls produce different merge_keys even with
+                # identical content/timestamp, so an unchecked continue here
+                # would drop legitimately distinct turns.  (#3346 / PR #3665)
+                if key in seen_message_keys:
+                    continue
         if key in seen_message_keys and key[0] == "message_id":
             continue
         matched_visible_key = _matching_visible_duplicate(
@@ -4283,7 +4414,20 @@ def merge_session_messages_append_only(
             and timestamp is not None
             and timestamp <= max_sidecar_timestamp
         ):
-            continue
+            # Legacy key within sidecar timestamp range.  Normally skip — the
+            # sidecar already has this message.  Exception: if the state.db
+            # message has tool_calls that DIFFER from the sidecar version
+            # (same content_key but different dedup_key because tool_calls
+            # differ), preserve it — distinct tool_calls must not be collapsed.
+            _tc = msg.get("tool_calls")
+            if _tc:
+                _ck = _session_message_content_key(msg)
+                if _ck in seen_content_keys and dedup_key not in seen_dedup_keys:
+                    pass  # different tool_calls from sidecar — preserve
+                else:
+                    continue
+            else:
+                continue
         seen_message_keys.add(key)
         seen_dedup_keys.add(dedup_key)
         seen_content_keys.add(_session_message_content_key(msg))
