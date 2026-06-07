@@ -64,7 +64,7 @@ async function load(){
             <optgroup label="OpenCode Go (main)">${["minimax-m3","minimax-m2.7","kimi-k2.6","kimi-k2.5","glm-5.1","deepseek-v4-pro","deepseek-v4-flash","qwen3.7-plus"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
             <optgroup label="OpenRouter">${["openrouter/auto","anthropic/claude-sonnet-4.5","openai/gpt-5.4","google/gemini-2.5-flash","minimax/minimax-m3"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
             <optgroup label="GRSAI">${["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gpt-5.5"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
-            <optgroup label="AIMurah (free Claude + Opus)">${["claude-sonnet-4.5","claude-sonnet-4.5-1m","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","minimax-m3","glm-5","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.6","gpt-5.5","gemini-3.1-pro-preview"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
+            <optgroup label="AIMurah (free Claude + Opus)">${["claude-sonnet-4.5","claude-sonnet-4.5-1m","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","minimax-m3","glm-5","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.7","claude-opus-4.7-thinking","claude-opus-4.6","gpt-5.5","gpt-5.4","gemini-3.1-pro-preview"].map(m=>`<option ${m===it.model?"selected":""}>${m}</option>`).join("")}</optgroup>
           </select></span></div>
       <textarea class="body">${esc(it.instruction||"")}</textarea>
       <div class="row">

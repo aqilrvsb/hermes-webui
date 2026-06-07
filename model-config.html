@@ -128,7 +128,7 @@ const PROVIDERS={
   opencode:["minimax-m3","minimax-m2.7","minimax-m2.5","kimi-k2.6","kimi-k2.5","glm-5.1","glm-5","deepseek-v4-pro","deepseek-v4-flash","mimo-v2.5-pro","qwen3.7-plus","qwen3.7-max"],
   openrouter:["minimax/minimax-m3","openrouter/auto","anthropic/claude-sonnet-4.5","google/gemini-2.5-flash","openai/gpt-5.4"],
   grsai:["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gemini-2.5-pro","gpt-image-2","gpt-5.5"],
-  aimurah:["claude-sonnet-4.5","claude-sonnet-4.5-1m","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.6","gpt-5.5","gemini-3.1-pro-preview"]
+  aimurah:["claude-sonnet-4.5","claude-sonnet-4.5-1m","claude-sonnet-4","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.7","claude-opus-4.7-thinking","claude-opus-4.6","claude-opus-4.6-thinking","gpt-5.5","gpt-5.4","gemini-3.1-pro-preview"]
 };
 const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI",aimurah:"AIMurah (free Claude)"};
 function providerOf(m){for(const p in PROVIDERS){if(PROVIDERS[p].indexOf(m)>=0)return p;}return "";}

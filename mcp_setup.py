@@ -138,8 +138,9 @@ for home in homes():
         AM_MODELS = ["claude-sonnet-4.5", "claude-sonnet-4.5-1m",        # FREE - strong Claude (1M ctx variant)
                      "oa-DeepSeek-V4-Pro", "oa-Kimi-K2.6", "oa-Qwen3.7-Max", "oa-MiniMax-M2.7",  # FREE strong reasoners
                      "minimax-m3", "glm-5", "open-agentic",             # FREE
-                     "claude-opus-4.8", "claude-opus-4.8-thinking", "claude-opus-4.6",  # PRO - Opus
-                     "gpt-5.5", "gemini-3.1-pro-preview"]               # PRO
+                     "claude-opus-4.8", "claude-opus-4.8-thinking", "claude-opus-4.7",  # PRO - Opus
+                     "claude-opus-4.7-thinking", "claude-opus-4.6", "claude-opus-4.6-thinking",
+                     "claude-sonnet-4", "gpt-5.5", "gpt-5.4", "gemini-3.1-pro-preview", "gemini-2.5-pro"]  # PRO
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
