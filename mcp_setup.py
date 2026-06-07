@@ -157,15 +157,22 @@ for home in homes():
             cps.append({"name": "aimurah", "base_url": AM_BASE,
                         "api_key": "${AIMURAH_API_KEY}", "models": AM_MODELS})
         cfg["custom_providers"] = cps
-        # MAIN (chat + agents default) = OpenCode Go minimax-m3 (else OpenRouter if no OC key).
-        if HAS_OC:
+        # MAIN (chat + agents default). Prefer AIMurah claude-sonnet-4.5 (multimodal -> covers chat AND image/PDF),
+        # then OpenCode minimax-m3, then OpenRouter. (Switchable live in the chat dropdown + per-agent.)
+        if HAS_AM:
+            cfg["model"] = {"provider": "aimurah", "base_url": AM_BASE,
+                            "api_key": "${AIMURAH_API_KEY}", "default": "claude-sonnet-4.5"}
+        elif HAS_OC:
             cfg["model"] = {"provider": "opencode", "base_url": OC_BASE,
                             "api_key": "${OPENCODE_API_KEY}", "default": "minimax-m3"}
         else:
             cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
                             "api_key": "${OPENROUTER_API_KEY}", "default": "minimax/minimax-m3"}
-        # FALLBACK on error -> OpenRouter auto, then GRSAI gemini (vision/backup).
+        # FALLBACK on error -> OpenCode minimax-m3 (cheap/reliable), then OpenRouter auto, then GRSAI gemini.
         fb = []
+        if HAS_OC:
+            fb.append({"provider": "opencode", "model": "minimax-m3",
+                       "base_url": OC_BASE, "api_key": "${OPENCODE_API_KEY}"})
         if HAS_OR:
             fb.append({"provider": "openrouter", "model": "openrouter/auto",
                        "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
