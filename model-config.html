@@ -127,9 +127,10 @@ const CHOICES=[
 const PROVIDERS={
   opencode:["minimax-m3","minimax-m2.7","minimax-m2.5","kimi-k2.6","kimi-k2.5","glm-5.1","glm-5","deepseek-v4-pro","deepseek-v4-flash","mimo-v2.5-pro","qwen3.7-plus","qwen3.7-max"],
   openrouter:["minimax/minimax-m3","openrouter/auto","anthropic/claude-sonnet-4.5","google/gemini-2.5-flash","openai/gpt-5.4"],
-  grsai:["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gemini-2.5-pro","gpt-image-2","gpt-5.5"]
+  grsai:["gemini-3.1-flash-lite","gemini-3.1-pro","gemini-2.5-flash","gemini-2.5-pro","gpt-image-2","gpt-5.5"],
+  aimurah:["claude-sonnet-4.5","claude-sonnet-4.5-1m","oa-DeepSeek-V4-Pro","oa-Kimi-K2.6","oa-Qwen3.7-Max","oa-MiniMax-M2.7","minimax-m3","glm-5","gemini-2.5-flash","gemini-2.5-pro","claude-opus-4.8","claude-opus-4.8-thinking","claude-opus-4.6","gpt-5.5","gemini-3.1-pro-preview"]
 };
-const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI"};
+const PLABEL={opencode:"OpenCode Go",openrouter:"OpenRouter",grsai:"GRSAI",aimurah:"AIMurah (free Claude)"};
 function providerOf(m){for(const p in PROVIDERS){if(PROVIDERS[p].indexOf(m)>=0)return p;}return "";}
 function fillModels(psel,pre){const row=psel.closest(".it");if(!row)return;const msel=row.querySelector(".msel");
   const p=psel.value;
@@ -166,6 +167,7 @@ async function renderProviders(){const el=$("#providers");
     {name:"opencode",label:"OpenCode Go (MAIN)",models:"minimax-m3, minimax-m2.7, kimi-k2.6/k2.5, glm-5.1/5, deepseek-v4-pro/flash, qwen3.7-plus/max, mimo-v2.5-pro",env:"OPENCODE_API_KEY"},
     {name:"openrouter",label:"OpenRouter (alt + fallback)",models:"openrouter/auto + 300+",env:"OPENROUTER_API_KEY"},
     {name:"grsai",label:"GRSAI (image/PDF)",models:"gpt-5.5, gemini-3.1-pro, gemini-3.1-flash-lite, gemini-3/2.5-pro/flash",env:"GRSAI_API_KEY"},
+    {name:"aimurah",label:"AIMurah (free Claude + Opus)",models:"claude-sonnet-4.5 (FREE), oa-DeepSeek-V4-Pro/oa-Kimi-K2.6 (FREE), minimax-m3/glm-5 (FREE), claude-opus-4.8, gpt-5.5, gemini-2.5-flash/pro",env:"AIMURAH_API_KEY"},
   ];
   const live=await loadProviders();
   el.innerHTML=known.map(p=>{
