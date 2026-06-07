@@ -155,8 +155,11 @@ for home in homes():
             cps.append({"name": "grsai", "base_url": GRSAI_BASE,
                         "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
         if HAS_AM and "aimurah" not in have:
+            # models MUST be a DICT (model_id -> {}) — resolve_model_provider only reads custom_providers'
+            # models when it's a dict (api/config.py ~L1846). As a list it's ignored -> Hermes can't route
+            # ids that aren't in AIMurah's live /v1/models (e.g. claude-sonnet-4.6) and falls back to minimax.
             cps.append({"name": "aimurah", "base_url": AM_BASE,
-                        "api_key": "${AIMURAH_API_KEY}", "models": AM_MODELS})
+                        "api_key": "${AIMURAH_API_KEY}", "models": {m: {} for m in AM_MODELS}})
         cfg["custom_providers"] = cps
         # MAIN (chat + agents default). Prefer AIMurah claude-sonnet-4.5 (multimodal -> covers chat AND image/PDF),
         # then OpenCode minimax-m3, then OpenRouter. (Switchable live in the chat dropdown + per-agent.)
