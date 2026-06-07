@@ -49,12 +49,12 @@ mk() {
 PB="Do this for BOTH brands SEPARATELY (PeningBot + PeningLab) — never mix; read _products/<brand>.md."
 RULES="Marketer profile. Malaysia only (BM/Manglish, MYT, MYR). Objective=SALES->website->paid subscription (pixel+CAPI, customEventType PURCHASE). Only the Ad Builder touches ads. Post a one-line progress note. AT THE END: append a dated (## YYYY-MM-DD), human-readable report to _shared/reports/<your agent name>.md (create the folder/file if missing) — what you researched, the info/data you collected, what you did/decided, key findings, and what you recommend — so the owner can review your daily work in the Files panel."
 
-# Learning-phase guardrail (Strategy + Optimizer) — stops premature kills on sparse RM4/day data.
-GUARD="LEARNING-PHASE GUARDRAIL: NEVER close a campaign/ad in its first 3 days, or before it has >=50 link clicks OR >=RM12 spend. Days 1-3 = MAINTAIN only; judge ONLY leading metrics (CTR, CPC, LP views, thumbstop) — NOT purchases (too sparse at RM4/day to be significant). After day 3 AND the data floor is met, cut the worst by leading metrics and shift budget to the best. Close on CPA/ROAS ONLY once an ad has >=3 purchases. Pause (not delete) broken ads anytime only if: disapproved, zero delivery, or CPC >=3x the set average. At RM4/day CBO Meta serves only 1-2 of the ads in a set — that is normal, do NOT treat low-impression ads as failures."
+# Learning-phase guardrail (Strategy + Optimizer) — stops premature kills AND budget creep (one campaign per brand).
+GUARD="LEARNING-PHASE GUARDRAIL: NEVER close a campaign/ad in its first 3 days, or before it has >=50 link clicks OR >=RM12 spend. Days 1-3 = MAINTAIN only; judge ONLY leading metrics (CTR, CPC, LP views, thumbstop) — NOT purchases (too sparse at RM4/day to be significant). After day 3 AND the data floor is met, cut the worst by leading metrics and shift budget to the best. Close on CPA/ROAS ONLY once an ad has >=3 purchases. Pause (not delete) broken ads anytime only if: disapproved, zero delivery, or CPC >=3x the set average. At RM4/day CBO Meta serves only 1-2 of the ads in a set — that is normal, do NOT treat low-impression ads as failures. BUDGET LOCK (CRITICAL): each brand must run EXACTLY ONE active campaign at RM4/day total — never two. Do NOT brief new ads that would spin up a second campaign. While ANY ad is still in its 3-day learning window, OR whenever you are closing 0 ads, set new=[] (brief ZERO new) so nothing new launches. Only brief new creatives to REPLACE ads you are closing in the SAME run, so the brand always stays at one RM4/day campaign. If you already see 2+ active campaigns for a brand, brief 0 new and recommend consolidating to one."
 # Auto-publish creatives to the Creatives gallery (producers).
 PUB="AFTER generating, PUBLISH each new asset to the Creatives gallery: append an item {brand,slot,type,url,headline,primary} to creatives.json in the github repo aqilrvsb/hermes-inbox (github MCP: get_file_contents creatives.json for its sha -> create_or_update_file on branch main, MERGING with the existing items array, message 'publish creatives'). Keep all prior items."
-# Idempotent ad creation (Ad Builder) — zernio create is slow; never blind-retry on timeout (it dupes).
-IDEMP="IDEMPOTENT CREATE: create each ad ONCE. zernio ads_create can be slow and may time out even though Meta DID create the ad, so on ANY error/timeout do NOT blind-retry — first call ads_list_ads to check whether that creative's ad already exists, and create only if it is genuinely missing. End each ad set at exactly the briefed ad count, delete any duplicates, then STOP."
+# Idempotent ad creation (Ad Builder) — zernio create is slow; never blind-retry (dupes) + ONE campaign per brand (no budget creep).
+IDEMP="IDEMPOTENT CREATE: create each ad ONCE. zernio ads_create can be slow and may time out even though Meta DID create the ad, so on ANY error/timeout do NOT blind-retry — first call ads_list_ads to check whether that creative already has an ad, and create only if genuinely missing. ONE CAMPAIGN PER BRAND (CRITICAL — prevents RM8/day): BEFORE creating anything, list the brand's campaigns; if an ACTIVE campaign already exists for that brand, do NOT create a new campaign — add the briefed new ads as a new ad set INSIDE that existing campaign; if brief.new is empty, create NOTHING. NEVER run two concurrent campaigns for one brand — total must stay RM4/day per brand. End each ad set at exactly the briefed ad count, delete duplicates, then STOP."
 
 # ========== 🔎 INTELLIGENCE (08:00 — watch the current day, feed tonight's Strategy) ==========
 mk "Aiman (Spy)" "0 8 * * *" \
@@ -70,7 +70,7 @@ mk "Faiz (Analyst)" "20 8 * * *" \
 --skill measurement
 
 mk "Hafiz (Optimizer)" "30 8 * * *" \
-"OPTIMIZER (Intelligence — RECOMMENDS ONLY, does not touch ads). Via zernio, review each live ad with the 4-quadrant + frequency + win-ratio lens (judge on 7-day, not 24h noise) and FLAG each as CLOSE / MAINTAIN / SCALE candidate. $PB WRITE: _shared/learnings_<brand>.json (recommendations for Strategy). Never pause/edit ads — only the Ad Builder does. $GUARD $RULES" \
+"OPTIMIZER (Intelligence — RECOMMENDS ONLY, does not touch ads). Via zernio, review each live ad with the 4-quadrant + frequency + win-ratio lens (judge on 7-day, not 24h noise) and FLAG each as CLOSE / MAINTAIN / SCALE candidate. $PB WRITE: _shared/learnings_<brand>.json (recommendations for Strategy). Never pause/edit ads — only the Ad Builder does. $RULES" \
 --skill testing-scaling --skill creative-andromeda --skill measurement
 
 mk "Liyana (CRO)" "40 8 * * *" \
@@ -79,7 +79,7 @@ mk "Liyana (CRO)" "40 8 * * *" \
 
 # ========== 🧠 STRATEGY (00:00 — THE SPEND GATE: decide on full 24h data) ==========
 mk "Danish (Head of Growth)" "0 0 * * *" \
-"HEAD OF GROWTH (Strategy — THE SPEND GATE; the brain). $PB Pull the live last-24h performance from zernio for each brand, plus read _shared/results, learnings, spy, personas, angles, offer. DECIDE per live ad: CLOSE or MAINTAIN. Then brief HOW MANY NEW ads to make to refill RM4/day each, and for EACH new slot specify: angle, persona, awareness, FORMAT (video=gemini omni / image=gpt-image-2), creative concept, and copy direction. WRITE _shared/brief_<brand>.json = {close:[ad_ids], maintain:[ad_ids], new:[{angle,persona,awareness,format,concept,copy_direction}]}. You are the ONLY trigger for spend — brief 0 new and Creative makes nothing. $GUARD $RULES" \
+"HEAD OF GROWTH (Strategy — THE SPEND GATE; the brain). $PB Pull the live last-24h performance from zernio for each brand, plus read _shared/results, learnings, spy, personas, angles, offer. DECIDE per live ad: CLOSE or MAINTAIN. Then brief HOW MANY NEW ads to make to refill RM4/day each, and for EACH new slot specify: angle, persona, awareness, FORMAT (video=gemini omni / image=gpt-image-2), creative concept, and copy direction. WRITE _shared/brief_<brand>.json = {close:[ad_ids], maintain:[ad_ids], new:[{angle,persona,awareness,format,concept,copy_direction}]}. You are the ONLY trigger for spend — brief 0 new and Creative makes nothing. $RULES" \
 --skill meta-ads-playbook-2026 --skill measurement --skill offer-design --skill creative-concepts
 
 mk "Sofea (Offer Architect)" "0 0 * * 1" \
@@ -92,16 +92,16 @@ mk "Iman (Copywriter)" "30 0 * * *" \
 --skill copywriting --skill creative-concepts
 
 mk "Aisyah (Image Producer)" "45 0 * * *" \
-"IMAGE PRODUCER (Creative). For each IMAGE slot in the brief, generate via peninglab gpt-image-2 (nano-banana only for ultra-real product shots). Fire-and-Poll (check task_id in creatives -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json (urls + task_id per slot). $PUB $RULES" \
+"IMAGE PRODUCER (Creative). For each IMAGE slot in the brief, generate via peninglab gpt-image-2 (nano-banana only for ultra-real product shots). Fire-and-Poll (check task_id in creatives -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json (urls + task_id per slot). $RULES" \
 --skill creative-image --skill creative-andromeda --skill creative-concepts
 
 mk "Zikri (Video Producer)" "45 0 * * *" \
-"VIDEO PRODUCER (Creative). For each VIDEO slot in the brief, generate via peninglab gemini omni (10s, ~20-25 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json. $PUB $RULES" \
+"VIDEO PRODUCER (Creative). For each VIDEO slot in the brief, generate via peninglab gemini omni (10s, ~20-25 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json. $RULES" \
 --skill creative-video --skill creative-andromeda --skill creative-concepts
 
 # ========== 🚀 EXECUTION (the ONLY hand on the ads — launches LIVE, capped RM4/day) ==========
 mk "Adam (Ad Builder)" "15 1 * * *" \
-"AD BUILDER (Execution — the ONLY agent that touches ads). $PB Verify write access (read campaigns first). STEP 1 CLOSE: pause the ad_ids in brief.close (zernio update_ad_campaign_status -> PAUSED). STEP 2 LAUNCH LIVE: for the new creatives build one CBO per brand — goal=conversions (OUTCOME_SALES), website conversion, promoted_object.pixelId = PeningBot 986352420917190 / PeningLab 1013990424497184 + customEventType=PURCHASE, CAPI tracking, broad Malaysia, ad-set=one idea, 3 ads/set varying only the first-3s hook, budget RM4/day, status ACTIVE (LIVE-DIRECT — no PAUSE, no approval; the RM4/day cap is the safety). READ _shared/creatives_<brand>, brief_<brand>, offer_<brand>. WRITE _shared/live_ads_<brand>.json. Tool: zernio ads_create_standalone_ad on account act_943036532064443 ('Pening', MYR — resolve live each run). $IDEMP $RULES" \
+"AD BUILDER (Execution — the ONLY agent that touches ads). $PB Verify write access (read campaigns first). STEP 1 CLOSE: pause the ad_ids in brief.close (zernio update_ad_campaign_status -> PAUSED). STEP 2 LAUNCH LIVE: for the new creatives build one CBO per brand — goal=conversions (OUTCOME_SALES), website conversion, promoted_object.pixelId = PeningBot 986352420917190 / PeningLab 1013990424497184 + customEventType=PURCHASE, CAPI tracking, broad Malaysia, ad-set=one idea, 3 ads/set varying only the first-3s hook, budget RM4/day, status ACTIVE (LIVE-DIRECT — no PAUSE, no approval; the RM4/day cap is the safety). READ _shared/creatives_<brand>, brief_<brand>, offer_<brand>. WRITE _shared/live_ads_<brand>.json. Tool: zernio ads_create_standalone_ad on account act_943036532064443 ('Pening', MYR — resolve live each run). $RULES" \
 --skill meta-ads-playbook-2026 --skill website-sales-funnel --skill creative-andromeda --skill account-safety
 
 # ========== 📨 COMMS ==========
@@ -153,12 +153,14 @@ for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
         if not isinstance(j,dict): continue
         extra=extra_for(str(j.get("name","")))
         if not extra: continue
-        marker=extra[:28]
+        marker=extra[:28]  # stable prefix, constant across rule versions -> lets us find+replace the old text
         for key in ("prompt","task","message","instruction","text"):
             v=j.get(key)
             if isinstance(v,str) and v.strip():
-                if marker not in v:
-                    j[key]=v.rstrip()+" "+extra; ch=True; n+=1
+                idx=v.find(marker)
+                if idx>=0: j[key]=v[:idx].rstrip()+" "+extra   # replace prior (possibly older) rule text
+                else: j[key]=v.rstrip()+" "+extra              # append if not present
+                ch=True; n+=1
                 break
     if ch:
         try: json.dump(d, open(jf,"w",encoding="utf-8"), indent=2)
