@@ -113,7 +113,7 @@ mk "Mia (Reporter)" "45 1 * * *" \
 if [ -n "$PYBIN" ]; then
   "$PYBIN" - "$H" <<'PY' || true
 import json,glob,os,re,sys
-H=sys.argv[1]; mine=re.compile(r'\((Spy|Market|Analyst|Optimizer|CRO|Head|Offer|Copywriter|Image|Video|Ad Builder|Reporter)\)', re.I)  # my agents are "Firstname (Role)"
+H=sys.argv[1]; mine=re.compile(r'^\S+ \((Spy|Market|Analyst|Optimizer|CRO|Head|Offer|Copywriter|Image|Video|Ad Builder|Reporter)', re.I)  # my agents are "Firstname (Role...)" — NO trailing \) so multi-word roles (Market Researcher, Head of Growth, Offer/Image/Video ...) also match
 n=0
 for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
     try: d=json.load(open(jf,encoding="utf-8"))

@@ -378,7 +378,8 @@ async function loadFloor(){
     const cAge=cts?(nowS-cts):1e12;
     const chatBusy=!!chat && (sessRunning(chat) || window._activeAgents>0 || cAge<180);  // processing now
     const chatRecent=!!chat && (cts===0 || cAge<7200);                                   // in chat (≤2h or unknown ts)
-    const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase());  // CLIENT-SIDE per-profile filter
+    const MKTRE=/\((spy|market|analyst|optimizer|cro|head|offer|copywriter|image|video|ad builder|reporter)/i;  // the 12 person-named marketing agents
+    const jobs=allJobs.filter(jb=>(jb.profile||"default").toLowerCase()===prof.toLowerCase() || MKTRE.test(jb.name||""));  // per-profile + ALWAYS include the named marketing agents (robust to profile mistags -> floor stays dynamic/complete)
     const list=[];
     jobs.forEach(jb=>{const r=roleOf(jb.name);
       const off=(jb.enabled===false||!!jb.paused_at);
@@ -488,7 +489,7 @@ const POD_REL=[ // 5 PCs per pod — widely spaced so each avatar stands CLEAR i
   {dx:0.4, dy:10.4,rl:true}];
 function genDesks(){const out=[];
   for(const p of POD_CENTERS){for(const d of POD_REL){
-    out.push({x:p.ox+d.dx, y:p.oy+d.dy, spr:d.rl?"desk-lr":"desk-rr", cf:d.rl?"rear-left":"rear-right"});}}
+    out.push({x:p.ox+d.dx, y:p.oy+d.dy, spr:d.rl?"desk-lr":"desk-rr", cf:d.rl?"front-left":"front-right"});}}  // char stands BEHIND desk (y-4.6) so it faces FRONT/down = toward its PC/monitor (working posture)
   return out;}  // 25 desks
 /* Bed pile — OUTSIDE the office floor (below the front edge). Only disabled agents sleep here. */
 function genBeds(n){const out=[],cols=7,x0=24,dx=6.5,y0=92,dy=4.0,sh=0.8;
