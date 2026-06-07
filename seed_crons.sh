@@ -88,7 +88,7 @@ mk "Sofea (Offer Architect)" "0 0 * * 1" \
 
 # ========== 🎨 CREATIVE (executes the brief ONLY — budget-matched, no blind spend) ==========
 mk "Iman (Copywriter)" "30 0 * * *" \
-"COPYWRITER (Creative). Read _shared/brief_<brand>.json. For EACH new slot ONLY, write the exact BM/Manglish copy per Strategy's direction: 3s hook, primary text, headline, website CTA; for video slots a 10s script (3 beats, ~20-25 words). Add the matching image/video prompt. Visual+copy = same angle. $PB Update _shared/brief_<brand>.json with copy + prompts. Make nothing Strategy didn't brief. $RULES" \
+"COPYWRITER (Creative). Read _shared/brief_<brand>.json. For EACH new slot ONLY, write the exact BM/Manglish copy per Strategy's direction: 3s hook, primary text, headline, website CTA; for video slots a 10s script (3 beats, ~24-28 words). Add the matching image/video prompt. Visual+copy = same angle. $PB Update _shared/brief_<brand>.json with copy + prompts. Make nothing Strategy didn't brief. $RULES" \
 --skill copywriting --skill creative-concepts
 
 mk "Aisyah (Image Producer)" "45 0 * * *" \
@@ -96,7 +96,7 @@ mk "Aisyah (Image Producer)" "45 0 * * *" \
 --skill creative-image --skill creative-andromeda --skill creative-concepts
 
 mk "Zikri (Video Producer)" "45 0 * * *" \
-"VIDEO PRODUCER (Creative). For each VIDEO slot in the brief, generate via peninglab gemini omni (10s, ~20-25 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json. $RULES" \
+"VIDEO PRODUCER (Creative). For each VIDEO slot in the brief, generate via peninglab gemini omni (10s, ~24-28 words, 3 beats) + AI-UGC. Fire-and-Poll (task_id -> get_status; never re-generate; batch parallel). Generate ONLY the briefed count. $PB WRITE _shared/creatives_<brand>.json. $RULES" \
 --skill creative-video --skill creative-andromeda --skill creative-concepts
 
 # ========== 🚀 EXECUTION (the ONLY hand on the ads — launches LIVE, capped RM4/day) ==========
@@ -142,6 +142,8 @@ def extra_for(name):
     if re.search(r'Image Producer|Video Producer', name, re.I): return PUB
     if re.search(r'Ad Builder', name, re.I): return IDEMP
     return None
+# Plain substring replacements applied to EVERY agent's prompt (e.g. tuning the video word count).
+REPL=[("~20-25 words","~24-28 words"),("20-25 words","24-28 words")]
 n=0
 for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
     try: d=json.load(open(jf,encoding="utf-8"))
@@ -151,17 +153,18 @@ for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
     ch=False
     for j in jobs:
         if not isinstance(j,dict): continue
-        extra=extra_for(str(j.get("name","")))
-        if not extra: continue
-        marker=extra[:28]  # stable prefix, constant across rule versions -> lets us find+replace the old text
+        pk=None
         for key in ("prompt","task","message","instruction","text"):
-            v=j.get(key)
-            if isinstance(v,str) and v.strip():
-                idx=v.find(marker)
-                if idx>=0: j[key]=v[:idx].rstrip()+" "+extra   # replace prior (possibly older) rule text
-                else: j[key]=v.rstrip()+" "+extra              # append if not present
-                ch=True; n+=1
-                break
+            if isinstance(j.get(key),str) and j.get(key).strip(): pk=key; break
+        if not pk: continue
+        v=j[pk]; orig=v
+        for a,b in REPL: v=v.replace(a,b)            # global text tweaks (all agents)
+        extra=extra_for(str(j.get("name","")))       # rule injection (specific agents)
+        if extra:
+            marker=extra[:28]  # stable prefix, constant across rule versions -> find+replace the old text
+            idx=v.find(marker)
+            v=(v[:idx].rstrip()+" "+extra) if idx>=0 else (v.rstrip()+" "+extra)
+        if v!=orig: j[pk]=v; ch=True; n+=1
     if ch:
         try: json.dump(d, open(jf,"w",encoding="utf-8"), indent=2)
         except Exception: pass
