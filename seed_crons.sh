@@ -58,11 +58,11 @@ IDEMP="IDEMPOTENT CREATE: create each ad ONCE. zernio ads_create can be slow and
 
 # ========== 🔎 INTELLIGENCE (08:00 — watch the current day, feed tonight's Strategy) ==========
 mk "Aiman (Spy)" "0 8 * * *" \
-"SPY (Intelligence). Use playwright to scan the Meta Ad Library (facebook.com/ads/library, country=MY, sort by total impressions) for competitor + cross-niche WINNING ads; read their hooks/offers/funnels. $PB WRITE: _shared/spy_<brand>.json (ranked angles/offers/hooks to beat). $RULES" \
+"SPY (Intelligence). Use scrapling (its StealthyFetcher bypasses the Ad Library's anti-bot; adaptive selectors) to scan the Meta Ad Library (facebook.com/ads/library, country=MY, sort by total impressions) for competitor + cross-niche WINNING ads; read their hooks/offers/funnels. $PB WRITE: _shared/spy_<brand>.json (ranked angles/offers/hooks to beat). $RULES" \
 --skill spy-research
 
 mk "Nadia (Market Researcher)" "10 8 * * *" \
-"MARKET RESEARCHER (Intelligence). Use playwright + web search to mine Malaysian customer language (Reddit, Lowyat, Shopee/TikTok reviews, FB groups) for pains/desires/objections in real BM/Manglish. Build personas + ranked angles per awareness stage. $PB WRITE: _shared/personas_<brand>.json, _shared/angles_<brand>.json. $RULES" \
+"MARKET RESEARCHER (Intelligence). Use scrapling (StealthyFetcher) + web search to mine Malaysian customer language (Reddit, Lowyat, Shopee/TikTok reviews, FB groups) for pains/desires/objections in real BM/Manglish. Build personas + ranked angles per awareness stage. $PB WRITE: _shared/personas_<brand>.json, _shared/angles_<brand>.json. $RULES" \
 --skill spy-research --skill copywriting
 
 mk "Faiz (Analyst)" "20 8 * * *" \
@@ -143,7 +143,7 @@ def extra_for(name):
     if re.search(r'Ad Builder', name, re.I): return IDEMP
     return None
 # Plain substring replacements applied to EVERY agent's prompt (e.g. tuning the video word count).
-REPL=[("~20-25 words","~24-28 words"),("20-25 words","24-28 words")]
+REPL=[("~20-25 words","~24-28 words"),("20-25 words","24-28 words"),("Use playwright","Use scrapling"),("playwright","scrapling"),("Playwright","scrapling")]
 n=0
 for jf in glob.glob(os.path.join(H,"**","cron","jobs.json"),recursive=True):
     try: d=json.load(open(jf,encoding="utf-8"))
