@@ -23,34 +23,38 @@
 </style></head><body>
 <div class="wrap">
   <div class="top"><h1>🆕 What's New</h1><button onclick="load()" style="margin-left:auto">↻ Refresh</button></div>
-  <div class="sub">Upstream changes from <a href="https://github.com/nesquena/hermes-webui" target="_blank">nesquena/hermes-webui</a> that your <b>daily 03:00 MYT sync</b> pulls into your fork — so you can see <b>what each update actually brings</b>. <b>Releases</b> = the curated "what's new + why"; <b>commits</b> below = every individual change.</div>
+  <div class="sub"><b>🛠️ Your fork</b> = the customizations we ship to your Hermes. <b>⬆️ Upstream</b> = the original <a href="https://github.com/nesquena/hermes-webui" target="_blank">nesquena/hermes-webui</a> that your <b>daily 03:00 MYT sync</b> pulls in (Releases = curated "what's new + why"; commits = every change). So you can see both what you built AND what each update brings.</div>
   <div id="list"><div class="empty">Loading…</div></div>
 </div>
 <script>
 const $=s=>document.querySelector(s); const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const REPO="nesquena/hermes-webui";
+const UPSTREAM="nesquena/hermes-webui";   // the original project your sync pulls from
+const FORK="aqilrvsb/hermes-webui";       // your fork (your customizations + the synced commits)
 function ago(d){const s=(Date.now()-new Date(d).getTime())/1000;const D=Math.floor(s/86400);if(D>=1)return D+"d ago";const H=Math.floor(s/3600);if(H>=1)return H+"h ago";return Math.max(1,Math.floor(s/60))+"m ago";}
-async function gh(p){const r=await fetch("https://api.github.com/repos/"+REPO+p,{headers:{Accept:"application/vnd.github+json"},cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}
+async function gh(repo,p){const r=await fetch("https://api.github.com/repos/"+repo+p,{headers:{Accept:"application/vnd.github+json"},cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}
+function commitCards(commits){return (commits||[]).map(c=>{const msg=((c.commit&&c.commit.message)||"").split("\n")[0];
+  const d=c.commit&&c.commit.author&&c.commit.author.date;
+  return `<div class="card"><div class="msg">${esc(msg)}</div>
+    <div class="date">${d?esc(new Date(d).toLocaleDateString())+" · "+ago(d):""} · ${esc((c.sha||"").slice(0,7))}</div></div>`;}).join("");}
 async function load(){
   const el=$("#list"); el.innerHTML='<div class="empty">Loading…</div>';
   try{
-    let rels=[]; try{rels=await gh("/releases?per_page=5");}catch(e){}
-    const commits=await gh("/commits?per_page=40");
+    let forkC=[],rels=[],upC=[];
+    try{forkC=await gh(FORK,"/commits?per_page=25");}catch(e){}
+    try{rels=await gh(UPSTREAM,"/releases?per_page=5");}catch(e){}
+    try{upC=await gh(UPSTREAM,"/commits?per_page=30");}catch(e){}
     let html="";
+    if(forkC.length){ html+='<div class="lbl">🛠️ Your fork — recent changes (your customizations)</div>'+commitCards(forkC); }
     if(Array.isArray(rels)&&rels.length){
-      html+='<div class="lbl">Releases (what\'s new + why)</div>';
+      html+='<div class="lbl">⬆️ Upstream releases (what\'s new + why)</div>';
       html+=rels.map(r=>`<div class="card rel"><h3>${esc(r.name||r.tag_name||"release")}<span class="tag">release</span></h3>
         <div class="date">${r.published_at?esc(new Date(r.published_at).toLocaleDateString()):""}</div>
         ${r.body?`<div class="body">${esc(r.body).slice(0,1400)}</div>`:""}</div>`).join("");
     }
-    html+='<div class="lbl">Recent commits (every change)</div>';
-    html+=(commits||[]).map(c=>{const msg=((c.commit&&c.commit.message)||"").split("\n")[0];
-      const d=c.commit&&c.commit.author&&c.commit.author.date;
-      return `<div class="card"><div class="msg">${esc(msg)}</div>
-        <div class="date">${d?esc(new Date(d).toLocaleDateString())+" · "+ago(d):""} · ${esc((c.sha||"").slice(0,7))}</div></div>`;}).join("");
+    html+='<div class="lbl">⬆️ Upstream commits (what the daily sync pulls in)</div>'+commitCards(upC);
     el.innerHTML=html||'<div class="empty">No data returned.</div>';
   }catch(e){
-    el.innerHTML='<div class="empty">Could not load upstream — '+esc(e.message)+'.<br>(GitHub\'s unauthenticated API allows 60 requests/hour; try Refresh again in a bit.)</div>';
+    el.innerHTML='<div class="empty">Could not load — '+esc(e.message)+'.<br>(GitHub\'s unauthenticated API allows 60 requests/hour; try Refresh again in a bit.)</div>';
   }
 }
 load();
