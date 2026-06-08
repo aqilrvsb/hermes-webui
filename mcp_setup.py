@@ -45,7 +45,7 @@ RAILWAY_TOOLS = [
 servers = {
     "supabase":  {"command": BIN+"mcp-server-supabase", "args": [], "env": E("SUPABASE_ACCESS_TOKEN")},
     "github":    {"command": BIN+"mcp-server-github",    "args": [], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
-    "scrapling": {"command": "/app/venv/bin/scrapling", "args": ["mcp"]},  # stealth web scraping (StealthyFetcher bypasses Cloudflare/anti-bot; adaptive selectors) — REPLACES agentql + playwright
+    "scrapling": {"command": "/usr/local/bin/scrapling", "args": ["mcp"]},  # stealth web scraping (StealthyFetcher bypasses Cloudflare/anti-bot; adaptive selectors) — REPLACES agentql + playwright. Dockerfile symlinks the installed scrapling -> /usr/local/bin/scrapling.
     "railway":   {"command": BIN+"railway-mcp",          "args": [], "env": E("RAILWAY_API_TOKEN","RAILWAY_TOKEN"), "tools": {"include": RAILWAY_TOOLS}},
     # vercel: NO MCP server. The vercel-mcp npm package exits on launch (failed every boot).
     # Developer role deploys via the Vercel CLI instead (baked into image, VERCEL_TOKEN in env) -> fully headless, reliable.

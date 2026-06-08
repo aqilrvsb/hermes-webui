@@ -31,8 +31,15 @@ RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcont
 # StealthyFetcher bypasses Cloudflare/anti-bot (Meta Ad Library) + adaptive self-healing selectors. Free (BSD-3).
 # Browsers (camoufox + chromium) installed via `scrapling install`. Kept ABOVE the cache-bust so it stays cached.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
-RUN /app/venv/bin/pip install --no-cache-dir "scrapling[all]" \
- && (/app/venv/bin/scrapling install || true)
+RUN set -e; \
+    PY=""; for c in python3 python /app/venv/bin/python; do \
+      if command -v "$c" >/dev/null 2>&1; then "$c" -m ensurepip --upgrade >/dev/null 2>&1 || true; \
+        if "$c" -m pip --version >/dev/null 2>&1; then PY="$c"; break; fi; fi; done; \
+    if [ -z "$PY" ]; then apt-get update && apt-get install -y --no-install-recommends python3-pip >/dev/null 2>&1 && PY=python3; fi; \
+    echo "== scrapling: installing with $PY =="; \
+    ("$PY" -m pip install --no-cache-dir --break-system-packages "scrapling[all]" || "$PY" -m pip install --no-cache-dir "scrapling[all]"); \
+    SC="$(command -v scrapling || true)"; [ -n "$SC" ] && ln -sf "$SC" /usr/local/bin/scrapling || true; \
+    (/usr/local/bin/scrapling install || scrapling install || true)
 
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
 
