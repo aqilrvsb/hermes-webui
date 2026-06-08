@@ -23,7 +23,7 @@
 </style></head><body>
 <div class="wrap">
   <div class="top"><h1>🆕 What's New</h1><button onclick="load()" style="margin-left:auto">↻ Refresh</button></div>
-  <div class="sub"><b>🛠️ Your fork</b> = the customizations we ship to your Hermes. <b>⬆️ Upstream</b> = the original <a href="https://github.com/nesquena/hermes-webui" target="_blank">nesquena/hermes-webui</a> that your <b>daily 03:00 MYT sync</b> pulls in (Releases = curated "what's new + why"; commits = every change). So you can see both what you built AND what each update brings.</div>
+  <div class="sub">What your <b>daily 03:00 MYT sync</b> pulls from upstream <a href="https://github.com/nesquena/hermes-webui" target="_blank">nesquena/hermes-webui</a>. <b>Why update?</b> you automatically inherit upstream's new features, bug fixes &amp; security patches — for free, while keeping your customizations. <b>Releases</b> = each version's "what changed" (the benefit); <b>commits</b> = every individual change.</div>
   <div id="list"><div class="empty">Loading…</div></div>
 </div>
 <script>
@@ -39,19 +39,17 @@ function commitCards(commits){return (commits||[]).map(c=>{const msg=((c.commit&
 async function load(){
   const el=$("#list"); el.innerHTML='<div class="empty">Loading…</div>';
   try{
-    let forkC=[],rels=[],upC=[];
-    try{forkC=await gh(FORK,"/commits?per_page=25");}catch(e){}
-    try{rels=await gh(UPSTREAM,"/releases?per_page=5");}catch(e){}
-    try{upC=await gh(UPSTREAM,"/commits?per_page=30");}catch(e){}
+    let rels=[],upC=[];
+    try{rels=await gh(UPSTREAM,"/releases?per_page=10");}catch(e){}
+    try{upC=await gh(UPSTREAM,"/commits?per_page=40");}catch(e){}
     let html="";
-    if(forkC.length){ html+='<div class="lbl">🛠️ Your fork — recent changes (your customizations)</div>'+commitCards(forkC); }
     if(Array.isArray(rels)&&rels.length){
-      html+='<div class="lbl">⬆️ Upstream releases (what\'s new + why)</div>';
+      html+='<div class="lbl">Releases (what\'s new + why)</div>';
       html+=rels.map(r=>`<div class="card rel"><h3>${esc(r.name||r.tag_name||"release")}<span class="tag">release</span></h3>
         <div class="date">${r.published_at?esc(new Date(r.published_at).toLocaleDateString()):""}</div>
         ${r.body?`<div class="body">${esc(r.body).slice(0,1400)}</div>`:""}</div>`).join("");
     }
-    html+='<div class="lbl">⬆️ Upstream commits (what the daily sync pulls in)</div>'+commitCards(upC);
+    html+='<div class="lbl">Commits (every change synced in)</div>'+commitCards(upC);
     el.innerHTML=html||'<div class="empty">No data returned.</div>';
   }catch(e){
     el.innerHTML='<div class="empty">Could not load — '+esc(e.message)+'.<br>(GitHub\'s unauthenticated API allows 60 requests/hour; try Refresh again in a bit.)</div>';
