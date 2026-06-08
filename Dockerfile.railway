@@ -82,6 +82,12 @@ RUN sed -i 's#</head>#<style>button[data-panel="kanban"],button[data-panel="todo
 # Open the custom rail tabs IN-PAGE (themed iframe overlay) instead of a new browser tab.
 COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
+# Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
+COPY tab-theme.js /apptoo/static/tab-theme.js
+COPY tab-theme.css /apptoo/static/tab-theme.css
+# What's New tab — shows upstream (nesquena/hermes-webui) releases + commits the daily sync pulls in.
+COPY whatsnew.html /apptoo/static/whatsnew.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/whatsnew.html" target="_blank" rel="noopener" data-tooltip="What'"'"'s New" aria-label="What'"'"'s New"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21l2.3-7.4-6-4.6h7.6z"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman

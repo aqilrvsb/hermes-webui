@@ -1,0 +1,15 @@
+/* Light-theme overrides for the custom dashboard tabs. Applies ONLY when <html> has NO .dark class
+   (i.e. Hermes is on the light theme). Higher specificity than :root so it wins regardless of order.
+   Redefines the common CSS-variable superset used across creatives / instruction / model-config /
+   reports. Saturated accent colors (lime/teal/rose/etc.) are left to each page — they read fine on light. */
+html:not(.dark){
+  --bg:#f5f6fa; --panel:#ffffff; --line:#e3e7f0; --line2:#eef0f6;
+  --dim:#586079; --faint:#8a93a8; --ink:#1a2138;
+  --accent:#5b6cff;
+  --glass:linear-gradient(168deg,rgba(20,30,70,.045),rgba(20,30,70,.015));
+}
+html:not(.dark), html:not(.dark) body{ background:var(--bg); color:var(--ink); }
+html:not(.dark) select,
+html:not(.dark) textarea,
+html:not(.dark) input{ background:#ffffff; color:var(--ink); border-color:var(--line2); }
+html:not(.dark) select option{ background:#ffffff; color:var(--ink); }
