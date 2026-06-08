@@ -79,6 +79,9 @@ COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 # Hide the Kanban + To-Do tabs (unused in this marketing setup) — nav buttons carry data-panel="kanban"/"todos".
 RUN sed -i 's#</head>#<style>button[data-panel="kanban"],button[data-panel="todos"]{display:none!important}</style></head>#' /apptoo/static/index.html || true
+# Open the custom rail tabs IN-PAGE (themed iframe overlay) instead of a new browser tab.
+COPY custom-tabs.js /apptoo/static/custom-tabs.js
+RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 # Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
