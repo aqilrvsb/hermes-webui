@@ -25,7 +25,7 @@ ENV PATH="/opt/node/bin:${PATH}"
 # Pre-install MCP server packages so they start instantly (no boot-time npx download race)
 # NOTE: 'vercel' here is the Vercel CLI (not an MCP server). vercel-mcp was removed — it exited on launch.
 # The developer role deploys with `vercel --token $VERCEL_TOKEN` instead. Fully headless + reliable.
-RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github railway-mcp peninglab-mcp vercel || true
+RUN /opt/node/bin/npm install -g @supabase/mcp-server-supabase@latest @modelcontextprotocol/server-github railway-mcp peninglab-mcp vercel @iqai/mcp-telegram || true
 
 # Scrapling — stealth web scraping (REPLACES agentql + playwright MCP). Python lib; MCP server = `scrapling mcp` (stdio).
 # StealthyFetcher bypasses Cloudflare/anti-bot (Meta Ad Library) + adaptive self-healing selectors. Free (BSD-3).
@@ -40,11 +40,8 @@ RUN set -e; \
     ("$PY" -m pip install --no-cache-dir --break-system-packages "scrapling[all]" || "$PY" -m pip install --no-cache-dir "scrapling[all]"); \
     SC="$(command -v scrapling || true)"; [ -n "$SC" ] && ln -sf "$SC" /usr/local/bin/scrapling || true; \
     (/usr/local/bin/scrapling install || scrapling install || true)
-# Telegram MCP (chigwell/telegram-mcp) — Telethon stdio server, console script `telegram-mcp`.
-# Needs TELEGRAM_API_ID / TELEGRAM_API_HASH / TELEGRAM_SESSION_STRING set in Railway (session via telegram-mcp-generate-session).
-RUN set -e; PY="$(command -v python3 || command -v python)"; \
-    ("$PY" -m pip install --no-cache-dir --break-system-packages "git+https://github.com/chigwell/telegram-mcp.git" || "$PY" -m pip install --no-cache-dir "git+https://github.com/chigwell/telegram-mcp.git"); \
-    SC="$(command -v telegram-mcp || true)"; [ -n "$SC" ] && ln -sf "$SC" /usr/local/bin/telegram-mcp || true
+# Telegram MCP = @iqai/mcp-telegram (bot-token only, from @BotFather) — installed via npm above.
+# No my.telegram.org / api_id / session needed. Set TELEGRAM_BOT_TOKEN in Railway.
 
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
 
