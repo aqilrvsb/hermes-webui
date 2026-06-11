@@ -40,6 +40,11 @@ RUN set -e; \
     ("$PY" -m pip install --no-cache-dir --break-system-packages "scrapling[all]" || "$PY" -m pip install --no-cache-dir "scrapling[all]"); \
     SC="$(command -v scrapling || true)"; [ -n "$SC" ] && ln -sf "$SC" /usr/local/bin/scrapling || true; \
     (/usr/local/bin/scrapling install || scrapling install || true)
+# Telegram MCP (chigwell/telegram-mcp) — Telethon stdio server, console script `telegram-mcp`.
+# Needs TELEGRAM_API_ID / TELEGRAM_API_HASH / TELEGRAM_SESSION_STRING set in Railway (session via telegram-mcp-generate-session).
+RUN set -e; PY="$(command -v python3 || command -v python)"; \
+    ("$PY" -m pip install --no-cache-dir --break-system-packages "git+https://github.com/chigwell/telegram-mcp.git" || "$PY" -m pip install --no-cache-dir "git+https://github.com/chigwell/telegram-mcp.git"); \
+    SC="$(command -v telegram-mcp || true)"; [ -n "$SC" ] && ln -sf "$SC" /usr/local/bin/telegram-mcp || true
 
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
 
