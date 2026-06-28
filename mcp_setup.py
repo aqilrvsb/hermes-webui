@@ -52,9 +52,13 @@ servers = {
     # Developer role deploys via the Vercel CLI instead (baked into image, VERCEL_TOKEN in env) -> fully headless, reliable.
     "peninglab": {"command": BIN+"peninglab-mcp",        "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; default 120s MCP timeout cut them off + charged credits
     "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}, "timeout": 900, "connect_timeout": 60},  # ads_create_standalone_ad BLOCKS 90-120s; default 120s MCP timeout returned a phantom TIMEOUT even though Meta DID create the ad -> agent thought it failed -> re-fired -> DUPLICATE ads. 900s lets one fire finish cleanly.
-    # playwright + agentql REMOVED — replaced by scrapling (above). Scrapling's StealthyFetcher is stealthier on
-    # bot-protected sites (Meta Ad Library) and agentql was a paid SaaS; scrapling is free + adaptive selectors.
+    # playwright REMOVED — replaced by scrapling (above): stealthier on bot-protected sites (Meta Ad Library).
+    # agentql (TinyFish) was dropped for scrapling, but RE-ADDED below on request — runs alongside scrapling.
 }
+# TinyFish / AgentQL: AI web data-extraction MCP. Gated on the key so it never crash-loops on boot
+# before AGENTQL_API_KEY is set as a Railway variable (matches the "key exists -> safe rollback" pattern).
+if os.environ.get("AGENTQL_API_KEY", "").strip():
+    servers["agentql"] = {"command": BIN+"npx", "args": ["-y", "agentql-mcp"], "env": E("AGENTQL_API_KEY")}
 # Per-profile skill scoping: each role sees ONLY its relevant skills (cleaner Skills tab).
 # Dirs are category-preserving bundles built in Dockerfile.railway.
 # /opt/skills-common holds skills EVERY profile should have (e.g. whatsapp-whacenter messaging).
