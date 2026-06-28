@@ -92,7 +92,7 @@ COPY whatsnew.html /apptoo/static/whatsnew.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/whatsnew.html" target="_blank" rel="noopener" data-tooltip="What'"'"'s New" aria-label="What'"'"'s New"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21l2.3-7.4-6-4.6h7.6z"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
-RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/.agents/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman
+RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman || true
 # (Removed irinabuht12 marketing-skills + all operational meta-ads how-to skills + marketer/new-client.
 #  The marketer now loads ONLY meta-ads/{playbook-2026, agency-8-agents}; it acts via the zernio MCP.)
 
@@ -105,7 +105,7 @@ RUN mkdir -p /opt/skills-common && cp -r /opt/skills-extra/common/. /opt/skills-
 RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
  && cp -r /opt/skills-extra/meta-ads  /opt/skills-mkt/meta-ads \
  && cp -r /opt/skills-extra/dev       /opt/skills-dev/dev \
- && cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew
+ && (cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew || true)
 
 # Boot-time helpers
 COPY mcp_setup.py /opt/mcp_setup.py
