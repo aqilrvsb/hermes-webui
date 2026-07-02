@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Social Connections</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#0b0f14; --card:#151b23; --card2:#1b232d; --line:#26313d;
@@ -48,6 +49,15 @@
     color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
   .toast.show{opacity:1}
   .note{margin:22px 2px 0;color:var(--muted);font-size:12.5px;line-height:1.6}
+  /* ── premium polish ── */
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  h1{letter-spacing:-.02em;}
+  .row{transition:border-color .2s,background .2s,transform .16s ease,box-shadow .2s ease;}
+  .row:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.32);border-color:#2f3b48;}
+  button{background:linear-gradient(180deg,#25c168,#1fa957)!important;box-shadow:0 3px 12px rgba(37,193,104,.30);}
+  button:hover{filter:brightness(1.05);box-shadow:0 5px 16px rgba(37,193,104,.40);}
+  button.disconnect{background:transparent!important;box-shadow:none;}
+  button.disconnect:hover{background:#2a1618!important;box-shadow:none;}
 </style>
 </head>
 <body>

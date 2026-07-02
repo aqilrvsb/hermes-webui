@@ -1,9 +1,9 @@
-/* ── Cohesive modern polish — ONE responsive template, app-wide. Refines the design tokens Hermes
-   already uses (--accent, surfaces, radii) so the whole UI re-themes consistently at every screen size.
-   Additive + revertable (just unlink). Pairs with whatsapp.css (chat bubbles). ── */
+/* ── Premium cohesive theme — ONE responsive template, app-wide. Refines Hermes design tokens
+   (--accent, surfaces, radii, type) so the whole UI feels like a polished product on desktop AND
+   mobile. Additive + revertable. Pairs with whatsapp.css (chat bubbles). ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap');
 
-/* Brand accent = social green — ties the chat, Social Connect and Agents together into one identity.
-   Overrides whatever skin is active (custom properties + !important win over skin vars). */
+/* Brand accent = social green — one identity across chat, Social Connect, Agents. Beats any skin. */
 :root{
   --accent:#25c168 !important;
   --accent-hover:#1fa957 !important;
@@ -13,30 +13,39 @@
 }
 :root.dark{ --accent-text:#4ade80 !important; }
 
-/* Rounder, softer surfaces across panels/cards/lists */
-.session-item,.cron-item,.cron-card,.kanban-card,.skill-card,.workspace-item,
-.profile-card,.msg-artifact,.settings-section,.insights-card,.card{
-  border-radius:12px !important;
+/* Premium typography */
+body, button, input, select, textarea, .msg-body, .panel-head, .main-view-title{
+  font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
 
-/* Consistent radius on controls */
-button,.btn,.icon-btn,input,select,textarea,.composer-wrap,.composer-flyout{
-  border-radius:11px;
+/* Rounder, softer surfaces + gentle lift on interactive cards */
+.session-item,.cron-item,.cron-card,.kanban-card,.skill-card,.workspace-item,.profile-card,
+.msg-artifact,.settings-section,.insights-card,.card{ border-radius:14px !important; }
+.session-item,.cron-card,.kanban-card,.skill-card,.workspace-item,.profile-card{
+  transition:transform .14s ease, box-shadow .18s ease, background .16s ease;
 }
-button,.btn{ transition:filter .15s, background .15s, transform .06s; }
+.session-item:hover,.cron-card:hover,.kanban-card:hover,.skill-card:hover,
+.workspace-item:hover,.profile-card:hover{ transform:translateY(-1px); }
+
+/* Controls: consistent radius + smooth press */
+button,.btn,.icon-btn,input,select,textarea,.composer-wrap,.composer-flyout{ border-radius:12px; }
+button,.btn{ transition:transform .08s ease, box-shadow .18s ease, filter .18s ease, background .16s ease; }
 button:active,.btn:active{ transform:translateY(1px); }
 
-/* Nav: active tab as a soft accent pill (desktop rail + mobile bar) */
-.rail .rail-btn.nav-tab.active,
-.sidebar-nav .nav-tab.active{ background:var(--accent-bg) !important; border-radius:12px !important; }
-.rail .rail-btn.nav-tab{ border-radius:12px; transition:background .15s; }
+/* Primary actions: subtle gradient + soft glow (targeted, not every button) */
+.update-primary,.composer-send,.send-btn,#btnApplyUpdate,button.primary,.btn.primary{
+  background:linear-gradient(180deg,var(--accent),var(--accent-hover)) !important;
+  box-shadow:0 3px 12px rgba(37,193,104,.30) !important; color:#04140a !important; font-weight:600;
+}
+
+/* Navigation: soft accent pills + hover (desktop rail + mobile bar) */
+.rail .rail-btn.nav-tab{ border-radius:13px; transition:background .16s ease, transform .08s ease; }
 .rail .rail-btn.nav-tab:hover{ background:var(--accent-bg); }
+.rail .rail-btn.nav-tab.active,.sidebar-nav .nav-tab.active{ background:var(--accent-bg) !important; border-radius:13px !important; }
 
-/* Panel + section titles a touch stronger */
-.panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:.01em; }
-
-/* Primary buttons feel a bit more substantial */
-.btn,.update-primary,button.primary,.composer-send,.send-btn{ font-weight:600; }
+/* Headings a touch tighter/stronger */
+.panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:-.01em; }
 
 /* Refined, quiet scrollbars */
 *::-webkit-scrollbar{ width:9px; height:9px; }
