@@ -5223,8 +5223,11 @@ def _agents_refine(description, platform):
         "social-media agent. The agent is ALREADY bound to the platform '%s' — never mention any "
         "OTHER platform, and do not ask which platform. It posts through the client's own logged-in "
         "GoLogin cloud browser via a terminal helper (env GOLOGIN_HELPER, GOLOGIN_API_TOKEN, "
-        "GOLOGIN_PROFILE_ID, CLIENT_ID already set). Each run the agent needs an image + a caption, "
-        "then posts. Choose the IMAGE SOURCE intelligently from the client's direction below:\n"
+        "GOLOGIN_PROFILE_ID, CLIENT_ID already set). SELF-LEARNING: start by recalling what worked "
+        "before with `node $GOLOGIN_HELPER get-notes %s`; the post command auto-reuses learned "
+        "selectors so runs get faster, and you should `add-note %s \"...\"` whenever you discover a new "
+        "quirk. Each run the agent needs an image + a caption, then posts. Choose the IMAGE SOURCE "
+        "intelligently from the client's direction below:\n"
         "  - If they want to use THEIR OWN uploaded photos (Storage): pull the next unused one — "
         "`node $GOLOGIN_HELPER next-image %s`; if image:null, stop. Pass its mediaId when posting.\n"
         "  - If they want AI-GENERATED visuals: call the peninglab MCP generate_image tool with a "
@@ -5235,7 +5238,7 @@ def _agents_refine(description, platform):
         "self-contained, no questions; human pace — at most the requested number per run (default 1), "
         "then report the link. The agent is bound to '%s' — never name another platform. Output ONLY "
         "the refined task prompt, no preamble.\n\nClient content direction: "
-    ) % (platform, platform, platform)
+    ) % (platform, platform, platform, platform, platform, platform)
     payload = {
         "model": model,
         "messages": [

@@ -68,6 +68,44 @@ async function cmdNextImage(platform) {
   return { image: { mediaId: next.id, path: out, url: next.url, filename: next.filename } };
 }
 
+// ── Self-learning memory (per client + platform): remember the selectors/quirks that worked so
+// the agent takes the FAST PATH next run and only re-discovers (then re-saves) when something changed.
+async function loadMemory(platform) {
+  const empty = { selectors: {}, notes: '', runs: 0, _dirty: false };
+  if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return empty;
+  const r = await supa('GET', '/rest/v1/agent_memory?select=selectors,notes,runs&client_id=eq.'
+    + encodeURIComponent(CLIENT_ID) + '&platform=eq.' + encodeURIComponent(platform));
+  if (r.ok && Array.isArray(r.data) && r.data[0]) {
+    return { selectors: r.data[0].selectors || {}, notes: r.data[0].notes || '',
+             runs: r.data[0].runs || 0, _dirty: false };
+  }
+  return empty;
+}
+async function saveMemory(platform, mem) {
+  if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return;
+  await supa('POST', '/rest/v1/agent_memory',
+    { client_id: CLIENT_ID, platform, selectors: mem.selectors || {}, notes: mem.notes || '',
+      runs: (mem.runs || 0) + 1, updated_at: new Date().toISOString() },
+    { Prefer: 'resolution=merge-duplicates,return=minimal' });
+}
+// Resolve a step's element: try the LEARNED selector first (fast), else walk candidate selectors
+// (discovery); when a candidate works, LEARN it. Throws if nothing matches.
+async function resolveStep(page, mem, stepKey, candidates) {
+  const learned = mem.selectors[stepKey];
+  if (learned) {
+    const el = await page.$(learned).catch(() => null);
+    if (el) return el;                       // fast path — the remembered selector still works
+  }
+  for (const sel of candidates) {
+    const el = await page.$(sel).catch(() => null);
+    if (el) {
+      if (mem.selectors[stepKey] !== sel) { mem.selectors[stepKey] = sel; mem._dirty = true; }
+      return el;                             // discovered + learned for next time
+    }
+  }
+  throw new Error('step "' + stepKey + '" not found (no learned or candidate selector matched)');
+}
+
 // Stamp a media row as posted to a platform (by an agent), with the post link.
 async function markPosted(mediaId, platform, agent, link, at) {
   if (!SUPA_URL || !SUPA_KEY || !mediaId) return;
@@ -195,44 +233,52 @@ function logPost(rec) {
   } catch (e) {}
 }
 
-// Facebook text (+ optional single image) post — best-effort selectors, iterate against live DOM.
-async function postFacebook(page, caption, mediaPath) {
+// Facebook text (+ optional single image) post. Uses the self-learning selector memory: stable
+// steps (textbox, file input) are learned + reused; text-labelled buttons fall back to a text scan.
+async function postFacebook(page, caption, mediaPath, mem) {
   await page.goto('https://www.facebook.com/', { waitUntil: 'networkidle2', timeout: 60000 });
   await new Promise((r) => setTimeout(r, 2000));
-  // Open the composer ("What's on your mind?")
-  const opener = await page.evaluateHandle(() => {
+  // Open the composer ("What's on your mind?") — text-labelled, so text scan (records a note on miss).
+  const opened = await page.evaluate(() => {
     const els = Array.from(document.querySelectorAll('[role="button"], div, span'));
-    return els.find((e) => /what's on your mind|apa yang anda fikirkan/i.test(e.textContent || '')) || null;
+    const o = els.find((e) => /what's on your mind|apa yang anda fikirkan/i.test(e.textContent || ''));
+    if (o) { o.click(); return true; } return false;
   });
-  if (opener) { try { await opener.asElement().click(); } catch (e) {} }
+  if (!opened) { mem.notes = (mem.notes + '\n[composer opener not found by text scan — check FB locale/UI]').trim(); mem._dirty = true; }
   await new Promise((r) => setTimeout(r, 2500));
-  // Type into the composer textbox
-  const box = await page.$('[role="dialog"] [contenteditable="true"], [contenteditable="true"][role="textbox"]');
-  if (!box) throw new Error('composer textbox not found');
+  // Type into the composer textbox (STABLE selector → learnable).
+  const box = await resolveStep(page, mem, 'fb_textbox', [
+    '[role="dialog"] [contenteditable="true"][role="textbox"]',
+    '[role="dialog"] [contenteditable="true"]',
+    '[contenteditable="true"][role="textbox"]',
+  ]);
   await box.click();
   await page.keyboard.type(caption, { delay: 15 });
   await new Promise((r) => setTimeout(r, 800));
   if (mediaPath) {
-    const fileInput = await page.$('input[type="file"][accept*="image"], input[type="file"]');
+    const fileInput = await resolveStep(page, mem, 'fb_file', [
+      'input[type="file"][accept*="image"]', '[role="dialog"] input[type="file"]', 'input[type="file"]',
+    ]).catch(() => null);
     if (fileInput) { await fileInput.uploadFile(mediaPath); await new Promise((r) => setTimeout(r, 4000)); }
   }
-  // Click the Post button
+  // Click the Post button (text-labelled, multi-locale).
   const posted = await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll('[role="dialog"] [role="button"]'))
       .find((b) => /^post$|^kongsi$|^siar/i.test((b.textContent || '').trim()));
-    if (btn) { btn.click(); return true; }
-    return false;
+    if (btn) { btn.click(); return true; } return false;
   });
-  if (!posted) throw new Error('post button not found');
+  if (!posted) { mem.notes = (mem.notes + '\n[post button not found — labels tried: Post/Kongsi/Siar]').trim(); mem._dirty = true; throw new Error('post button not found'); }
   await new Promise((r) => setTimeout(r, 5000));
   return { url: page.url() };
 }
 
 async function cmdPost(browser, platform, caption, mediaPath, agent, mediaId, nowIso) {
   const page = await newPage(browser);
+  const mem = await loadMemory(platform);   // self-learning: recall what worked last time
   let res;
-  if (platform === 'facebook') res = await postFacebook(page, caption, mediaPath);
+  if (platform === 'facebook') res = await postFacebook(page, caption, mediaPath, mem);
   else throw new Error('posting for "' + platform + '" not wired yet (build against live DOM with the token)');
+  try { await saveMemory(platform, mem); } catch (e) {}  // persist learned selectors/notes + bump runs
   const rec = {
     platform, agent: agent || 'chat', caption,
     media: mediaPath ? [mediaPath] : [],
@@ -249,9 +295,15 @@ async function main() {
   const { token, profileId } = loadConfig();
   if (!token) fail('GoLogin token not configured (set GOLOGIN_API_TOKEN or gologin.json)');
   if (cmd === 'stop') { await stopProfile(token, profileId); out({ ok: true }); return; }
-  // Storage commands need NO browser (pure Supabase):
+  // Storage + self-learning commands need NO browser (pure Supabase):
   if (cmd === 'next-image') { out(await cmdNextImage(String(a1 || '').toLowerCase())); return; }
   if (cmd === 'mark-posted') { await markPosted(a1, String(a2 || '').toLowerCase(), a3 || 'agent', a4 || '', new Date().toISOString()); out({ ok: true }); return; }
+  if (cmd === 'get-notes') { const m = await loadMemory(String(a1 || '').toLowerCase()); out({ platform: a1, notes: m.notes, runs: m.runs, learned: Object.keys(m.selectors || {}) }); return; }
+  if (cmd === 'add-note') {
+    const plat = String(a1 || '').toLowerCase(); const m = await loadMemory(plat);
+    const note = (a2 || '').trim(); if (note && !(m.notes || '').includes(note)) m.notes = ((m.notes || '') + '\n' + note).trim();
+    await saveMemory(plat, m); out({ ok: true, notes: m.notes }); return;
+  }
   if (!profileId && cmd !== 'scrape' && cmd !== 'screenshot') fail('GoLogin profile not configured (set GOLOGIN_PROFILE_ID or gologin.json)');
 
   let browser;
