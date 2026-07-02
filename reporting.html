@@ -8,12 +8,12 @@
 <style>
   :root{ --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1; --text:#221C14; --muted:#6E6454; --accent:#F26B21; --radius:16px; }
   *{box-sizing:border-box} html,body{margin:0;height:100%}
-  body{background:var(--bg);color:var(--text);font:15px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding:max(16px,env(safe-area-inset-top)) 18px 50px}
+  body{background:var(--bg);color:var(--text);font:15px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding:max(16px,env(safe-area-inset-top)) 18px 60px}
   .wrap{max-width:1000px;margin:0 auto}
   header{margin:6px 2px 16px}
   h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
   header p{color:var(--muted);margin:2px 0 0;font-size:13.5px}
-  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:18px}
   .fld{display:flex;flex-direction:column;gap:4px}
   .fld label{font-size:11.5px;font-weight:600;color:var(--muted)}
   input,select{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;outline:none}
@@ -21,32 +21,43 @@
   .btn{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:11px;padding:9px 18px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);box-shadow:0 3px 12px rgba(242,107,33,.3)}
   .btn:hover{filter:brightness(1.05)} .btn:active{transform:translateY(1px)}
   .count{margin-left:auto;color:var(--muted);font-size:13px;align-self:center}
-  .grid{display:flex;flex-direction:column;gap:12px}
-  .post{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:0 1px 2px rgba(34,28,20,.05)}
-  .post .thumb{width:88px;height:88px;flex:0 0 88px;border-radius:12px;object-fit:cover;background:var(--card2);border:1px solid var(--line)}
-  .post .thumb.none{display:grid;place-items:center;color:var(--muted);font-size:11px;text-align:center}
-  .pmeta{flex:1;min-width:0}
-  .prow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-  .badge{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;text-transform:capitalize}
-  .b-facebook{background:#14273f;color:#5ea2ff}.b-instagram{background:#3a1430;color:#ff6ea8}.b-tiktok{background:#1c1c1c;color:#eee}.b-threads{background:#20242a;color:#333}
-  .pdate{color:var(--muted);font-size:12.5px}
-  .pagent{font-size:12px;color:var(--accent);font-weight:600}
-  .pstatus{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:capitalize}
-  .s-published{background:#e6f6ec;color:#1a8f4a}.s-posted{background:#e6f6ec;color:#1a8f4a}
-  .s-cancelled{background:#fdeaea;color:#c0392b}.s-failed{background:#fdeaea;color:#c0392b}
-  .s-scheduled{background:#fff1e6;color:#c9500e}.s-draft{background:#eee;color:#555}
-  .copy{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-  .plink{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none}
+
+  /* agent lane */
+  .agent{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(34,28,20,.05)}
+  .ahead{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .avatar{width:40px;height:40px;flex:0 0 40px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff;background:linear-gradient(135deg,#F8863F,#F26B21)}
+  .ainfo{flex:1;min-width:0}
+  .aname{font-weight:700;font-size:16px;letter-spacing:-.01em}
+  .asub{font-size:12.5px;color:var(--muted)}
+  .abadges{display:flex;gap:4px;flex-wrap:wrap}
+  .pbadge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:capitalize}
+  .b-facebook{background:#e7f0ff;color:#1877F2}.b-instagram{background:#fdeaf3;color:#c13584}.b-tiktok{background:#efefef;color:#111}.b-threads{background:#eee;color:#111}.b-chat,.b-{background:#FFF1E6;color:#C9500E}
+
+  /* timeline */
+  .tl{position:relative;margin:12px 0 0;padding-left:22px}
+  .tl:before{content:"";position:absolute;left:6px;top:4px;bottom:4px;width:2px;background:var(--line)}
+  .bubble{position:relative;margin:0 0 12px}
+  .bubble:last-child{margin-bottom:0}
+  .dot{position:absolute;left:-22px;top:6px;width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px #FFF1E6}
+  .bcard{display:flex;gap:12px;background:var(--card2);border:1px solid var(--line);border-radius:13px;padding:11px 13px}
+  .thumb{width:64px;height:64px;flex:0 0 64px;border-radius:9px;object-fit:cover;background:#fff;border:1px solid var(--line)}
+  .thumb.none{display:grid;place-items:center;color:var(--muted);font-size:10px;text-align:center}
+  .bmain{flex:1;min-width:0}
+  .brow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  .when{font-size:12.5px;color:var(--muted);font-weight:600}
+  .sbadge{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:99px;text-transform:capitalize}
+  .s-published,.s-posted{background:#e6f6ec;color:#1a8f4a}.s-failed,.s-cancelled{background:#fdeaea;color:#c0392b}.s-scheduled{background:#fff1e6;color:#c9500e}.s-draft{background:#eee;color:#555}
+  .cap{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .plink{display:inline-block;margin-top:5px;font-size:12.5px;font-weight:600;color:var(--accent);text-decoration:none}
   .plink:hover{text-decoration:underline}
-  .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:42px 20px;font-size:14.5px;line-height:1.6}
-  .note{margin-top:14px;color:var(--muted);font-size:12px;line-height:1.6}
+  .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:44px 20px;font-size:14.5px;line-height:1.6}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>Agent Reporting</h1>
-    <p>What your agents posted — filter by date range and platform.</p>
+    <p>Grouped by agent — every task each agent ran, when (time + date), and on which platform.</p>
   </header>
 
   <div class="filters">
@@ -65,17 +76,21 @@
     <span class="count" id="count"></span>
   </div>
 
-  <div class="grid" id="grid"><div class="empty">Loading…</div></div>
-  <p class="note" id="note"></p>
+  <div id="groups"><div class="empty">Loading…</div></div>
 </div>
 
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function fmtDate(d){ if(!d) return '—'; try{ const t=new Date(d); if(isNaN(t)) return String(d).slice(0,16).replace('T',' '); return t.toLocaleString(); }catch(e){ return String(d); } }
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtWhen(d){
+  if(!d) return '—';
+  const t=new Date(d); if(isNaN(t)) return String(d).slice(0,16).replace('T',' ');
+  let h=t.getHours(); const m=String(t.getMinutes()).padStart(2,'0'); const ap=h<12?'AM':'PM'; h=h%12||12;
+  return h+':'+m+' '+ap+' · '+t.getDate()+' '+MONTHS[t.getMonth()]+' '+t.getFullYear();
+}
 
-// default range: last 30 days
-(function(){
+(function(){ // default: last 30 days
   const end=new Date(), start=new Date(); start.setDate(start.getDate()-30);
   const iso=d=>d.toISOString().slice(0,10);
   $('#f-start').value=iso(start); $('#f-end').value=iso(end);
@@ -83,7 +98,7 @@ function fmtDate(d){ if(!d) return '—'; try{ const t=new Date(d); if(isNaN(t))
 
 async function load(){
   const start=$('#f-start').value, end=$('#f-end').value, platform=$('#f-platform').value;
-  $('#grid').innerHTML='<div class="empty">Loading…</div>'; $('#count').textContent='';
+  $('#groups').innerHTML='<div class="empty">Loading…</div>'; $('#count').textContent='';
   let posts=[];
   try{
     const qs=new URLSearchParams({start,end,platform});
@@ -91,28 +106,47 @@ async function load(){
     const d=await r.json();
     if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
     posts=d.posts||[];
-    $('#note').textContent = d.note || '';
-  }catch(e){
-    $('#grid').innerHTML='<div class="empty">Could not load reports.<br>'+esc(e.message)+'</div>';
-    return;
-  }
+  }catch(e){ $('#groups').innerHTML='<div class="empty">Could not load reports.<br>'+esc(e.message)+'</div>'; return; }
   render(posts);
 }
 
 function render(posts){
-  $('#count').textContent = posts.length ? (posts.length+' post'+(posts.length>1?'s':'')) : '';
-  if(!posts.length){ $('#grid').innerHTML='<div class="empty">No posts in this range.<br>Once your agents publish, their posts appear here.</div>'; return; }
-  $('#grid').innerHTML = posts.map(p=>{
-    const img = (p.media&&p.media[0]) ? `<img class="thumb" src="${esc(p.media[0])}" alt="">` : `<div class="thumb none">no image</div>`;
-    const link = p.link ? `<a class="plink" href="${esc(p.link)}" target="_blank" rel="noopener">View post ↗</a>` : '';
-    const agent = p.agent ? `<span class="pagent">${esc(p.agent)}</span>` : '';
-    return `<div class="post">
-      ${img}
-      <div class="pmeta">
-        <div class="prow"><span class="badge b-${esc(p.platform)}">${esc(p.platform)}</span> ${p.status?`<span class="pstatus s-${esc(p.status)}">${esc(p.status)}</span>`:''} ${agent} <span class="pdate">${esc(fmtDate(p.date))}</span></div>
-        <div class="copy">${esc(p.content)||'<span style="color:var(--muted)">(no caption)</span>'}</div>
-        ${link}
+  $('#count').textContent = posts.length ? (posts.length+' task'+(posts.length>1?'s':'')) : '';
+  if(!posts.length){ $('#groups').innerHTML='<div class="empty">No tasks in this range.<br>Once your agents publish, each one appears here with its timeline.</div>'; return; }
+  const groups={};
+  posts.forEach(p=>{ const a=(p.agent||'chat')||'chat'; (groups[a]=groups[a]||[]).push(p); });
+  const names=Object.keys(groups).sort((a,b)=>{
+    const la=Math.max.apply(null,groups[a].map(p=>+new Date(p.date)||0));
+    const lb=Math.max.apply(null,groups[b].map(p=>+new Date(p.date)||0));
+    return lb-la;
+  });
+  $('#groups').innerHTML = names.map(name=>{
+    const items=groups[name].slice().sort((a,b)=>(+new Date(b.date)||0)-(+new Date(a.date)||0));
+    const plats=[...new Set(items.map(p=>p.platform).filter(Boolean))];
+    const initial=(name==='chat'?'⚡':(name.trim()[0]||'A')).toUpperCase();
+    const badges=plats.map(p=>`<span class="pbadge b-${esc(p)}">${esc(p)}</span>`).join('');
+    const bubbles=items.map(p=>{
+      const img=(p.media&&p.media[0])?`<img class="thumb" src="${esc(p.media[0])}" alt="">`:`<div class="thumb none">no image</div>`;
+      const link=p.link?`<a class="plink" href="${esc(p.link)}" target="_blank" rel="noopener">View post ↗</a>`:'';
+      const st=p.status?`<span class="sbadge s-${esc(p.status)}">${esc(p.status)}</span>`:'';
+      return `<div class="bubble"><div class="dot"></div>
+        <div class="bcard">${img}
+          <div class="bmain">
+            <div class="brow"><span class="pbadge b-${esc(p.platform)}">${esc(p.platform||'—')}</span> ${st} <span class="when">${esc(fmtWhen(p.date))}</span></div>
+            <div class="cap">${esc(p.content)||'<span style="color:var(--muted)">(no caption)</span>'}</div>
+            ${link}
+          </div></div></div>`;
+    }).join('');
+    return `<div class="agent">
+      <div class="ahead">
+        <div class="avatar">${esc(initial)}</div>
+        <div class="ainfo">
+          <div class="aname">${name==='chat'?'Instant (Chat)':esc(name)}</div>
+          <div class="asub">${items.length} task${items.length>1?'s':''}</div>
+        </div>
+        <div class="abadges">${badges}</div>
       </div>
+      <div class="tl">${bubbles}</div>
     </div>`;
   }).join('');
 }
