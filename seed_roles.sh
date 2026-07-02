@@ -6,8 +6,8 @@ mkdir -p "$H/profiles" 2>/dev/null || true
 
 # ── ONE-TIME reset: remove the old marketing profiles and clear every previously-seeded cron.
 #    Marker-guarded so it runs exactly once; afterwards the user's own profiles/crons are never touched.
-if [ ! -f "$H/.reset_internal_v1" ]; then
-  rm -rf "$H/profiles/marketer" "$H/profiles/developer" 2>/dev/null || true
+if [ ! -f "$H/.reset_internal_v2" ]; then
+  rm -rf "$H/profiles/marketer" "$H/profiles/developer" "$H/profiles/tokmas" 2>/dev/null || true
   PYBIN=/app/venv/bin/python; [ -x "$PYBIN" ] || PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
   if [ -n "$PYBIN" ]; then
     "$PYBIN" - "$H" <<'PY' || true
@@ -26,8 +26,8 @@ for jf in glob.glob(os.path.join(H, "**", "cron", "jobs.json"), recursive=True):
         pass
 PY
   fi
-  touch "$H/.reset_internal_v1" 2>/dev/null || true
-  echo "== reset_internal_v1: removed marketer/developer profiles + cleared all crons =="
+  touch "$H/.reset_internal_v2" 2>/dev/null || true
+  echo "== reset_internal_v2: removed marketer/developer/tokmas profiles + cleared all crons =="
 fi
 
 chown -R 1024:1024 "$H/profiles" 2>/dev/null || true

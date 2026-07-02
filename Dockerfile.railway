@@ -113,6 +113,8 @@ RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
  && (cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew || true)
 
 # Boot-time helpers
+# Override backend routes with our edited source (adds /api/social/* — Zernio-backed social connect).
+COPY api/routes.py /apptoo/api/routes.py
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh

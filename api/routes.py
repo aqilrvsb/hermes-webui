@@ -5057,6 +5057,105 @@ def _serve_manifest(handler) -> bool:
     return j(handler, {"error": "not found"}, status=404)
 
 
+# ── Social Connect (Zernio-backed): connect / list / disconnect FB·Threads·TikTok·IG for posting. ──
+_SOCIAL_PLATFORMS = ("facebook", "threads", "tiktok", "instagram")
+_ZERNIO_BASE = "https://zernio.com/api/v1"
+_zernio_profile_cache = {}
+
+
+def _zernio_api(method, path, payload=None, query=None):
+    import os as _os, json as _json, urllib.request as _rq, urllib.parse as _up
+    key = (_os.environ.get("ZERNIO_API_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("ZERNIO_API_KEY not set")
+    url = _ZERNIO_BASE + path
+    if query:
+        url += "?" + _up.urlencode(query)
+    data = _json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = _rq.Request(url, data=data, method=method)
+    req.add_header("Authorization", "Bearer " + key)
+    req.add_header("Accept", "application/json")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    with _rq.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8")
+    return _json.loads(raw) if raw and raw.strip() else {}
+
+
+def _zernio_profile_id():
+    if _zernio_profile_cache.get("id"):
+        return _zernio_profile_cache["id"]
+    data = _zernio_api("GET", "/profiles")
+    profs = data.get("profiles") if isinstance(data, dict) else data
+    pid = None
+    if isinstance(profs, list) and profs:
+        pid = profs[0].get("id") or profs[0].get("_id")
+    if not pid:
+        created = _zernio_api("POST", "/profiles", {"name": "Hermes"})
+        prof = created.get("profile") if isinstance(created, dict) else created
+        pid = (prof or {}).get("id") or (prof or {}).get("_id") \
+            or (created or {}).get("id") or (created or {}).get("_id")
+    if pid:
+        _zernio_profile_cache["id"] = pid
+    return pid
+
+
+def _zernio_accounts():
+    data = _zernio_api("GET", "/accounts")
+    accts = data.get("accounts") if isinstance(data, dict) else data
+    return accts if isinstance(accts, list) else []
+
+
+def _social_status(handler):
+    try:
+        connected = {}
+        for a in _zernio_accounts():
+            plat = str(a.get("platform") or "").lower()
+            if plat in _SOCIAL_PLATFORMS and a.get("_id"):
+                connected[plat] = a.get("_id")
+        j(handler, {"connected": connected})
+    except Exception as e:  # noqa: BLE001 — surface Zernio errors to the tab
+        bad(handler, "zernio status failed: %s" % e, 502)
+
+
+def _social_connect(handler, body):
+    plat = str((body or {}).get("platform") or "").lower()
+    if plat not in _SOCIAL_PLATFORMS:
+        bad(handler, "unknown platform", 400)
+        return
+    try:
+        pid = _zernio_profile_id()
+        if not pid:
+            bad(handler, "no Zernio profile available", 502)
+            return
+        data = _zernio_api("GET", "/connect/" + plat, query={"profileId": pid})
+        url = data.get("authUrl") or data.get("url")
+        if not url:
+            bad(handler, "no authUrl returned", 502)
+            return
+        j(handler, {"authUrl": url})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "zernio connect failed: %s" % e, 502)
+
+
+def _social_disconnect(handler, body):
+    plat = str((body or {}).get("platform") or "").lower()
+    if plat not in _SOCIAL_PLATFORMS:
+        bad(handler, "unknown platform", 400)
+        return
+    try:
+        acct_id = None
+        for a in _zernio_accounts():
+            if str(a.get("platform") or "").lower() == plat:
+                acct_id = a.get("_id")
+                break
+        if acct_id:
+            _zernio_api("DELETE", "/accounts/" + str(acct_id))
+        j(handler, {"ok": True})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "zernio disconnect failed: %s" % e, 502)
+
+
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
 
@@ -5232,6 +5331,10 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/system/health":
         j(handler, build_system_health_payload())
+        return True
+
+    if parsed.path == "/api/social/status":
+        _social_status(handler)
         return True
 
     if parsed.path == "/api/models":
@@ -6822,6 +6925,14 @@ def handle_post(handler, parsed) -> bool:
             return j(handler, {"session": copied_session.compact() | {"messages": copied_session.messages}})
         except Exception as e:
             return bad(handler, str(e))
+
+    if parsed.path == "/api/social/connect":
+        _social_connect(handler, body)
+        return True
+
+    if parsed.path == "/api/social/disconnect":
+        _social_disconnect(handler, body)
+        return True
 
     if parsed.path == "/api/default-model":
         try:
