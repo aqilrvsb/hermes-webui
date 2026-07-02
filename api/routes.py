@@ -5156,6 +5156,192 @@ def _social_disconnect(handler, body):
         bad(handler, "zernio disconnect failed: %s" % e, 502)
 
 
+# ── Agents tab (Social Media Manager): client-friendly CRUD over Hermes cron jobs. Each agent =
+# one cron job (daily at a client-picked time+timezone) + sidecar metadata (icon/platform/description).
+# The client's raw task description is refined by the LLM into a precise tool-driven prompt.
+
+
+def _agents_meta_path():
+    import os as _os
+    home = _os.environ.get("HERMES_HOME") or _os.path.expanduser("~/.hermes")
+    return _os.path.join(home, "cron", "agents_meta.json")
+
+
+def _agents_meta_load():
+    import json as _json, os as _os
+    p = _agents_meta_path()
+    try:
+        with open(p, encoding="utf-8") as f:
+            d = _json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _agents_meta_save(meta):
+    import json as _json, os as _os
+    p = _agents_meta_path()
+    try:
+        _os.makedirs(_os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump(meta, f, indent=2)
+    except Exception:
+        pass
+
+
+def _agents_schedule(tz_name, hhmm):
+    """Client-picked timezone + HH:MM -> a cron string in the SERVER's local clock."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    hh, mm = [int(x) for x in str(hhmm).split(":")[:2]]
+    client_now = datetime.now(ZoneInfo(tz_name)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    server_dt = client_now.astimezone()  # server local time
+    return "%d %d * * *" % (server_dt.minute, server_dt.hour)
+
+
+def _agents_refine(description, platform):
+    """LLM-refine the client's raw description into a precise, tool-driven agent prompt."""
+    import json as _json, os as _os, urllib.request as _rq
+    key = (_os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY not set")
+    try:
+        from api.config import get_effective_default_model
+        model = (get_effective_default_model() or "").strip() or "openai/gpt-4.1"
+    except Exception:
+        model = "openai/gpt-4.1"
+    acct = ""
+    try:
+        for a in _zernio_accounts():
+            if str(a.get("platform") or "").lower() == platform:
+                acct = str(a.get("_id") or "")
+                break
+    except Exception:
+        pass
+    system = (
+        "You turn a client's casual request into a precise task prompt for an autonomous "
+        "social-media agent. The agent runs on a schedule with NO human present, and posts via the "
+        "zernio MCP tools. Rules for the prompt you write: (1) The agent posts ONLY to the %s "
+        "account%s using zernio (accounts_list to resolve the account, posts_create to publish; "
+        "media_* tools for images/video if needed). (2) Spell out exactly what content to create "
+        "each run (topic, tone, language, length, hashtags/emoji policy) based on the client's "
+        "request. (3) Deterministic and self-contained: no questions back, no waiting; make "
+        "sensible choices and post. (4) Vary content run-to-run so posts never repeat. "
+        "(5) End with: publish exactly the requested number of posts (default 1) and stop. "
+        "Output ONLY the refined task prompt, no preamble."
+    ) % (platform, (" (account id %s)" % acct) if acct else "")
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": str(description or "").strip()},
+        ],
+    }
+    req = _rq.Request("https://openrouter.ai/api/v1/chat/completions",
+                      data=_json.dumps(payload).encode("utf-8"), method="POST")
+    req.add_header("Authorization", "Bearer " + key)
+    req.add_header("Content-Type", "application/json")
+    with _rq.urlopen(req, timeout=90) as resp:
+        data = _json.loads(resp.read().decode("utf-8"))
+    text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    text = str(text or "").strip()
+    if not text:
+        raise RuntimeError("empty refine result")
+    return text
+
+
+def _agents_list(handler):
+    try:
+        from cron.jobs import list_jobs
+        from api.profiles import cron_profile_context
+        meta = _agents_meta_load()
+        agents = []
+        with cron_profile_context():
+            jobs = list_jobs(include_disabled=True)
+        for job in jobs:
+            jid = str(job.get("id") or "")
+            m = meta.get(jid)
+            if not m:
+                continue  # not created via the Agents tab
+            agents.append({
+                "agent_id": jid,
+                "name": job.get("name") or m.get("name") or "Agent",
+                "icon": m.get("icon") or "Claude-1",
+                "platform": m.get("platform") or "",
+                "timezone": m.get("timezone") or "",
+                "time": m.get("time") or "",
+                "description": m.get("description") or "",
+                "enabled": job.get("enabled", True),
+                "last_run_at": job.get("last_run_at"),
+            })
+        j(handler, {"agents": agents})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "agents list failed: %s" % e, 500)
+
+
+def _agents_save(handler, body):
+    b = body or {}
+    name = str(b.get("name") or "").strip()
+    icon = str(b.get("icon") or "Claude-1").strip()
+    platform = str(b.get("platform") or "").lower().strip()
+    tz_name = str(b.get("timezone") or "Asia/Kuala_Lumpur").strip()
+    hhmm = str(b.get("time") or "09:00").strip()
+    description = str(b.get("description") or "").strip()
+    agent_id = str(b.get("agent_id") or "").strip()
+    if not name or not description or platform not in _SOCIAL_PLATFORMS:
+        bad(handler, "name, description and a valid platform are required", 400)
+        return
+    try:
+        schedule = _agents_schedule(tz_name, hhmm)
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "bad timezone/time: %s" % e, 400)
+        return
+    try:
+        prompt = _agents_refine(description, platform)
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "AI refine failed: %s" % e, 502)
+        return
+    try:
+        from cron.jobs import create_job, update_job
+        from api.profiles import cron_profile_context
+        with cron_profile_context():
+            if agent_id:
+                job = update_job(agent_id, {"name": name, "prompt": prompt, "schedule": schedule})
+            else:
+                job = create_job(prompt=prompt, schedule=schedule, name=name,
+                                 deliver="local", skills=[], model=None)
+        if not job:
+            bad(handler, "agent not found", 404)
+            return
+        agent_id = str(job.get("id") or agent_id)
+        meta = _agents_meta_load()
+        meta[agent_id] = {"name": name, "icon": icon, "platform": platform,
+                          "timezone": tz_name, "time": hhmm, "description": description}
+        _agents_meta_save(meta)
+        j(handler, {"ok": True, "agent_id": agent_id, "prompt": prompt})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "agent save failed: %s" % e, 500)
+
+
+def _agents_delete(handler, body):
+    agent_id = str((body or {}).get("agent_id") or "").strip()
+    if not agent_id:
+        bad(handler, "agent_id required", 400)
+        return
+    try:
+        from cron.jobs import remove_job
+        from api.profiles import cron_profile_context
+        with cron_profile_context():
+            remove_job(agent_id)
+        meta = _agents_meta_load()
+        if agent_id in meta:
+            del meta[agent_id]
+            _agents_meta_save(meta)
+        j(handler, {"ok": True})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "agent delete failed: %s" % e, 500)
+
+
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
 
@@ -5335,6 +5521,10 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/social/status":
         _social_status(handler)
+        return True
+
+    if parsed.path == "/api/agents/list":
+        _agents_list(handler)
         return True
 
     if parsed.path == "/api/models":
@@ -6928,6 +7118,14 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/social/connect":
         _social_connect(handler, body)
+        return True
+
+    if parsed.path == "/api/agents/save":
+        _agents_save(handler, body)
+        return True
+
+    if parsed.path == "/api/agents/delete":
+        _agents_delete(handler, body)
         return True
 
     if parsed.path == "/api/social/disconnect":

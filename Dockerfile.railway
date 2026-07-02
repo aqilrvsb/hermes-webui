@@ -89,6 +89,9 @@ RUN sed -i 's#</body>#<script src="static/global-model.js?v=hermes"></script></b
 # Social Connect tab — connect Facebook/Threads/TikTok/Instagram for posting (Zernio-backed).
 COPY social.html /apptoo/static/social.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/social.html" target="_blank" rel="noopener" data-tooltip="Social Connect" aria-label="Social Connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# Agents tab — client-friendly create/edit/delete of scheduled social agents (wraps Hermes crons).
+COPY agents.html /apptoo/static/agents.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/agents.html" target="_blank" rel="noopener" data-tooltip="Agents" aria-label="Agents"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
 COPY tab-theme.js /apptoo/static/tab-theme.js
 COPY tab-theme.css /apptoo/static/tab-theme.css
