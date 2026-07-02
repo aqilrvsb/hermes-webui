@@ -135,9 +135,10 @@ def gologin_create_client_profile(email: str) -> str:
     if not pid:
         raise RuntimeError("gologin returned no profile id")
     country = setting("gologin_proxy_country", "MY") or "MY"
+    _cname = {"MY": "Malaysia"}.get(country.upper(), country.upper())
     st2, px = _gologin("POST", "/users-proxies/mobile-proxy", {
         "countryCode": country, "isDc": False, "isMobile": False,
-        "profileIdToLink": pid,
+        "profileIdToLink": pid, "customName": _cname,   # best-effort clean dashboard label
     })
     if st2 not in (200, 201):
         # profile exists but proxy failed — keep the profile, surface the warning
