@@ -94,6 +94,8 @@
     <label>Platform</label>
     <select id="f-platform"></select>
     <div class="hint" id="plat-hint"></div>
+    <label>Model (AI model this agent uses)</label>
+    <select id="f-model"></select>
     <label>Timezone</label>
     <select id="f-tz"></select>
     <label>Run daily at — add one or more times</label>
@@ -114,6 +116,7 @@
 const ICONS=["Claude-1","Me-1","employee-1","employee-2","employee-3","dev-1","dev-2","Frontend-dev-1","explore-1","security-audit-1"];
 const PLATFORMS=["facebook","threads","tiktok","instagram"];
 const TZS=["Asia/Kuala_Lumpur","Asia/Singapore","Asia/Jakarta","Asia/Bangkok","Asia/Manila","Asia/Hong_Kong","Asia/Tokyo","Asia/Seoul","Asia/Kolkata","Asia/Dubai","Europe/London","Europe/Paris","America/New_York","America/Chicago","America/Los_Angeles","Australia/Sydney","UTC"];
+const MODELS=["","openai/gpt-4.1","openai/gpt-4.1-mini","anthropic/claude-sonnet-4.5","openrouter/auto","google/gemini-2.5-pro","google/gemini-2.5-flash","openai/gpt-5.4","deepseek/deepseek-chat"];
 const $=s=>document.querySelector(s);
 let editing=null, selIcon=ICONS[0], connected={}, times=["09:00"], AGENTS={};
 let toastT;
@@ -123,6 +126,7 @@ const spriteUrl=n=>"/static/office/ch/"+n+"-front-left.png";
 
 function buildStatic(){
   $("#f-tz").innerHTML=TZS.map(z=>`<option value="${z}">${z.replace("_"," ")}</option>`).join("");
+  $("#f-model").innerHTML=MODELS.map(m=>`<option value="${m}">${m||"Default (chat model)"}</option>`).join("");
   $("#f-icons").innerHTML=ICONS.map(n=>`<div class="ic${n===selIcon?" sel":""}" data-ic="${n}" onclick="pickIcon('${n}')"><img src="${spriteUrl(n)}" alt="${n}"></div>`).join("");
 }
 function pickIcon(n){selIcon=n;document.querySelectorAll(".ic").forEach(e=>e.classList.toggle("sel",e.dataset.ic===n));}
@@ -171,6 +175,7 @@ async function loadAgents(){
       <div class="cmeta">
         <div class="cname">${esc(a.name)} <span class="badge b-${a.platform}">${a.platform}</span></div>
         <div class="sched">Runs daily at <b>${esc(tl)}</b> (${esc(tz)})</div>
+        <div class="sched">Model: <b>${esc(a.model||"default (chat model)")}</b></div>
         <div class="desc">${esc(a.description)}</div>
         <div class="actions">
           <button class="btn ghost small" onclick="openModal('${a.agent_id}')">Edit</button>
@@ -192,6 +197,7 @@ function openModal(id){
   times=(a&&a.times&&a.times.length)?a.times.slice():["09:00"];
   $("#f-desc").value=(a&&a.description)||"";
   buildStatic();renderTimes();
+  $("#f-model").value=(a&&a.model)||"";
   if(a&&a.platform){
     const opt=[...$("#f-platform").options].find(o=>o.value===a.platform);
     if(opt){opt.disabled=false;$("#f-platform").value=a.platform;}
@@ -208,6 +214,7 @@ async function save(){
     platform:$("#f-platform").value,
     timezone:$("#f-tz").value,
     times:times.filter(Boolean),
+    model:$("#f-model").value,
     description:$("#f-desc").value.trim(),
   };
   if(!payload.name)return toast("Give the agent a name.");

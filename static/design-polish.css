@@ -70,7 +70,17 @@ button:active,.btn:active{ transform:translateY(1px); }
   border-bottom:1px solid var(--border) !important; box-shadow:0 1px 2px rgba(34,28,20,.04);
 }
 .rail .rail-spacer{ flex:1 1 auto !important; width:auto !important; height:auto !important; }
-.rail .rail-btn{ width:42px !important; height:42px !important; border-radius:11px !important; }
+/* Labelled nav tabs (icon + text) — like the reference. Settings stays icon-only. */
+.rail .rail-btn.nav-tab{ width:auto !important; height:40px !important; padding:0 14px !important; gap:8px; border-radius:11px !important; }
+.rail .rail-btn.nav-tab svg{ flex:0 0 auto; }
+.rail .rail-btn.nav-tab::after{ content:attr(aria-label); font-size:13.5px; font-weight:600; white-space:nowrap; color:var(--text); }
+.rail .rail-btn.nav-tab.active::after{ color:var(--accent-text); }
+.rail .rail-btn.nav-tab[data-panel="settings"]{ width:40px !important; padding:0 !important; margin-left:auto; }
+.rail .rail-btn.nav-tab[data-panel="settings"]::after{ display:none; }
+@media(max-width:720px){
+  .rail .rail-btn.nav-tab{ width:42px !important; padding:0 !important; }
+  .rail .rail-btn.nav-tab::after{ display:none; }
+}
 /* the mobile top nav is redundant now — the rail top bar serves every screen size */
 .sidebar > .sidebar-nav{ display:none !important; }
 .sidebar{ margin-top:0 !important; }

@@ -5269,6 +5269,7 @@ def _agents_list(handler):
                 "timezone": m.get("timezone") or "",
                 "times": times,
                 "description": m.get("description") or "",
+                "model": m.get("model") or "",
                 "job_ids": m.get("job_ids") or ([aid] if aid else []),
             })
         j(handler, {"agents": agents})
@@ -5284,6 +5285,7 @@ def _agents_save(handler, body):
     tz_name = str(b.get("timezone") or "Asia/Kuala_Lumpur").strip()
     description = str(b.get("description") or "").strip()
     agent_id = str(b.get("agent_id") or "").strip()
+    model = str(b.get("model") or "").strip() or None  # per-agent model (None = profile default)
     # Multiple daily run times: accept a list, or fall back to a single "time".
     times = b.get("times")
     if not isinstance(times, list) or not times:
@@ -5326,12 +5328,12 @@ def _agents_save(handler, body):
             for t, sched in scheds:
                 jn = name if len(scheds) == 1 else ("%s @ %s" % (name, t))
                 job = create_job(prompt=prompt, schedule=sched, name=jn,
-                                 deliver="local", skills=[], model=None)
+                                 deliver="local", skills=[], model=model)
                 if job and job.get("id"):
                     job_ids.append(str(job["id"]))
         meta[agent_id] = {"name": name, "icon": icon, "platform": platform,
                           "timezone": tz_name, "times": times, "description": description,
-                          "job_ids": job_ids}
+                          "model": model or "", "job_ids": job_ids}
         _agents_meta_save(meta)
         j(handler, {"ok": True, "agent_id": agent_id, "prompt": prompt})
     except Exception as e:  # noqa: BLE001
