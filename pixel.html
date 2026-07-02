@@ -189,6 +189,13 @@
   a{color:var(--teal)}
   #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(60px);z-index:99;display:flex;gap:9px;align-items:center;font-family:var(--mono);font-size:13px;font-weight:600;background:rgba(20,24,38,.92);color:var(--ink);border:1px solid var(--line);padding:12px 18px;border-radius:14px;opacity:0;transition:.3s}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}#toast .ck{color:var(--lime)}
+  /* ── Clean AI Agents Floor: just the office picture, made bigger. Agents (schedule/task/
+     platform) live in the Agents tab, so hide the cards/chat/controls/tabs/footer here. ── */
+  .ctrls, .seg, .titlebar .pills, .chan, .agents, .foot { display:none !important; }
+  .office{ grid-template-columns:1fr !important; }
+  .wrap{ max-width:none !important; padding:14px 18px 24px !important; }
+  .stage{ padding:0 !important; }
+  #stagewrap{ border-radius:14px; }
 </style>
 </head>
 <body>
