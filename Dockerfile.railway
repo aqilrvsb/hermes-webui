@@ -139,6 +139,7 @@ COPY api/routes.py /apptoo/api/routes.py
 # SaaS layer: Supabase auth + per-client provisioning (Hermes profile + GoLogin MY-residential browser)
 COPY api/saas.py /apptoo/api/saas.py
 COPY admin.html /apptoo/static/admin.html
+COPY storage.html /apptoo/static/storage.html
 # GoLogin cloud-browser driver (chat + agents + social-check all use this ONE engine)
 COPY gologin_helper.js /apptoo/gologin_helper.js
 ENV HERMES_GOLOGIN_HELPER=/apptoo/gologin_helper.js \

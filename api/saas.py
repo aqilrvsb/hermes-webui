@@ -251,10 +251,13 @@ def _client_soul(email: str, gologin_pid: str) -> str:
         "first from your profile home: `set -a; . ~/.hermes/profiles/*/.env 2>/dev/null || . $HERMES_HOME/.env; set +a` "
         "(they are written in your profile's .env file).\n"
         "- Check logins:   `node $GOLOGIN_HELPER login-status`\n"
-        "- Post:           write the caption to a file, then `node $GOLOGIN_HELPER post facebook /path/caption.txt [/path/image.jpg]`\n"
+        "- Pull the next unused image from the client's Storage for your platform:\n"
+        "    `node $GOLOGIN_HELPER next-image <platform>`  -> JSON {image:{mediaId,path,url,filename}} or {image:null}\n"
+        "- Post it (auto-marks the image done for that platform + logs to Reporting):\n"
+        "    write the caption to a file, then `node $GOLOGIN_HELPER post <platform> /path/caption.txt <image.path> <mediaId>`\n"
         "- Scrape a page (logged-in view): `node $GOLOGIN_HELPER scrape <url> [css-selector]`\n"
         "- Screenshot:     `node $GOLOGIN_HELPER screenshot <url> /path/out.png`\n"
-        "Every successful post is auto-logged for the Reporting tab.\n\n"
+        "Every successful post is auto-logged for the Reporting tab and stamped on the Storage image.\n\n"
         "## Content creation\n"
         "Use the peninglab MCP tools (generate_image / generate_video) for creatives.\n\n"
         "## Rules\n"
@@ -264,13 +267,17 @@ def _client_soul(email: str, gologin_pid: str) -> str:
     ) % (email, gologin_pid)
 
 
-def _write_profile_env(profile_home: Path, gologin_pid: str) -> None:
-    """Give the client's agent its GoLogin env (helper path + ids)."""
+def _write_profile_env(profile_home: Path, gologin_pid: str, client_id: str = "") -> None:
+    """Give the client's agent its GoLogin + Storage env (helper path + ids)."""
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
+    url, service, _anon = _supa_env()
     lines = {
         "GOLOGIN_API_TOKEN": _gologin_token(),
         "GOLOGIN_PROFILE_ID": gologin_pid,
         "GOLOGIN_HELPER": helper,
+        "CLIENT_ID": client_id,               # scopes Storage image queries to this client
+        "SUPABASE_URL": url,
+        "SUPABASE_SERVICE_KEY": service,
     }
     try:
         profile_home.mkdir(parents=True, exist_ok=True)
@@ -318,7 +325,7 @@ def provision_client(user_id: str, email: str) -> dict:
     except Exception as e:  # noqa: BLE001
         gerr = str(e)
         logger.warning("gologin provisioning failed for %s: %s", email, e)
-    _write_profile_env(home, gologin_pid)
+    _write_profile_env(home, gologin_pid, user_id)
     row = {"id": user_id, "email": email, "hermes_profile": prof,
            "gologin_profile_id": gologin_pid,
            "is_admin": email.lower() in _admin_emails()}
@@ -797,6 +804,104 @@ def saas_login_page(handler) -> None:
     handler.wfile.write(body)
 
 
+# ── Storage (client image library; agents pull unused images to post) ────────
+
+def _supa_storage_upload(path: str, data: bytes, content_type: str) -> str:
+    """Upload bytes to the Supabase 'media' bucket, return the public URL."""
+    url, service, _anon = _supa_env()
+    req = urllib.request.Request(url + "/storage/v1/object/media/" + path, data=data, method="POST")
+    req.add_header("apikey", service)
+    req.add_header("Authorization", "Bearer " + service)
+    req.add_header("Content-Type", content_type or "application/octet-stream")
+    req.add_header("x-upsert", "true")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        resp.read()
+    return url + "/storage/v1/object/public/media/" + path
+
+
+def _supa_storage_delete(path: str) -> None:
+    url, service, _anon = _supa_env()
+    req = urllib.request.Request(url + "/storage/v1/object/media/" + path, method="DELETE")
+    req.add_header("apikey", service)
+    req.add_header("Authorization", "Bearer " + service)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+    except Exception:
+        pass
+
+
+def saas_storage_list(handler):
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    st, rows = _supa("GET", "/rest/v1/media?select=*&client_id=eq.%s&order=created_at.desc&limit=300"
+                     % urllib.parse.quote(info.get("id") or ""))
+    j(handler, {"media": rows if isinstance(rows, list) else [],
+                "platforms": list(_SOCIAL_PLATFORMS)})
+
+
+def saas_storage_upload(handler, body):
+    import base64
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    b = body or {}
+    filename = re.sub(r"[^A-Za-z0-9._-]+", "_", str(b.get("filename") or "image"))[:80] or "image"
+    data_url = str(b.get("dataUrl") or "")
+    m = re.match(r"^data:([^;]+);base64,(.*)$", data_url, re.S)
+    if not m:
+        bad(handler, "expected a base64 data URL", 400)
+        return
+    content_type = m.group(1)
+    try:
+        raw = base64.b64decode(m.group(2))
+    except Exception:
+        bad(handler, "bad base64", 400)
+        return
+    if len(raw) > 15 * 1024 * 1024:
+        bad(handler, "image too large (max 15MB)", 400)
+        return
+    # unique-ish path without Date/random (unavailable): counter via existing count
+    stc, cnt = _supa("GET", "/rest/v1/media?select=id&client_id=eq.%s" % urllib.parse.quote(info["id"]),
+                     prefer="count=exact")
+    seq = (len(cnt) if isinstance(cnt, list) else 0)
+    path = "%s/%d_%s" % (info["id"], seq, filename)
+    try:
+        pub = _supa_storage_upload(path, raw, content_type)
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "upload failed: %s" % e, 502)
+        return
+    st, res = _supa("POST", "/rest/v1/media",
+                    {"client_id": info["id"], "url": pub, "storage_path": path, "filename": filename},
+                    prefer="return=representation")
+    if st not in (200, 201):
+        bad(handler, "media row insert failed (%s)" % st, 502)
+        return
+    j(handler, {"ok": True, "media": (res[0] if isinstance(res, list) and res else {"url": pub})})
+
+
+def saas_storage_delete(handler, body):
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    mid = str((body or {}).get("id") or "").strip()
+    if not mid:
+        bad(handler, "id required", 400)
+        return
+    st, rows = _supa("GET", "/rest/v1/media?select=storage_path,client_id&id=eq." + urllib.parse.quote(mid))
+    row = rows[0] if isinstance(rows, list) and rows else None
+    if not row or row.get("client_id") != info.get("id"):
+        bad(handler, "not found", 404)
+        return
+    _supa_storage_delete(row.get("storage_path") or "")
+    _supa("DELETE", "/rest/v1/media?id=eq." + urllib.parse.quote(mid))
+    j(handler, {"ok": True})
+
+
 # ── Dispatch (called from api.routes) ────────────────────────────────────────
 
 def handle_saas_get(handler, parsed) -> bool:
@@ -811,6 +916,8 @@ def handle_saas_get(handler, parsed) -> bool:
         saas_admin_clients(handler)
     elif p == "/api/saas/client/openrouter":
         saas_client_openrouter_get(handler)
+    elif p == "/api/storage/list":
+        saas_storage_list(handler)
     else:
         return False
     return True
@@ -828,6 +935,10 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_admin_settings_post(handler, body)
     elif p == "/api/saas/client/openrouter":
         saas_client_openrouter_post(handler, body)
+    elif p == "/api/storage/upload":
+        saas_storage_upload(handler, body)
+    elif p == "/api/storage/delete":
+        saas_storage_delete(handler, body)
     elif p == "/api/social/check":
         saas_social_check(handler, body)
     elif p == "/api/social/stop":

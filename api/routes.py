@@ -5220,19 +5220,20 @@ def _agents_refine(description, platform):
         model = "openai/gpt-4.1"
     system = (
         "You turn a client's casual request into a precise task prompt for an autonomous "
-        "social-media agent. The agent runs on a schedule with NO human present, and posts through "
-        "the client's own logged-in GoLogin cloud browser via a terminal helper. Rules for the "
-        "prompt you write: (1) The agent posts ONLY to %s, by writing the caption to a file and "
-        "running: node $GOLOGIN_HELPER post %s /path/caption.txt [/path/image.jpg] "
-        "(env GOLOGIN_API_TOKEN, GOLOGIN_PROFILE_ID and GOLOGIN_HELPER are already set; use the "
-        "peninglab MCP generate_image tool first if the post needs a creative, save it locally, "
-        "pass its path). (2) Spell out exactly what content to create each run (topic, tone, "
-        "language, length, hashtags/emoji policy) based on the client's request. (3) Deterministic "
-        "and self-contained: no questions back, no waiting; make sensible choices and post. "
-        "(4) Vary content run-to-run so posts never repeat. (5) Human pace — never more than the "
-        "requested number of posts (default 1); then stop and report the post link printed by the "
-        "helper. Output ONLY the refined task prompt, no preamble."
-    ) % (platform, platform)
+        "social-media agent. The agent is ALREADY bound to the platform '%s' — never mention any "
+        "OTHER platform, and do not ask which platform. It posts through the client's own logged-in "
+        "GoLogin cloud browser via a terminal helper (env GOLOGIN_HELPER, GOLOGIN_API_TOKEN, "
+        "GOLOGIN_PROFILE_ID, CLIENT_ID already set). Write the prompt so the agent, each run: "
+        "(1) pulls the next unused image from the client's Storage — `node $GOLOGIN_HELPER "
+        "next-image %s`; if it returns image:null, stop (nothing to post). (2) Writes a caption for "
+        "THAT image following the client's content direction below (tone, language, length, "
+        "hashtag/emoji policy); it may use the vision model to look at the image first. (3) Posts + "
+        "auto-stamps the image: `node $GOLOGIN_HELPER post %s /path/caption.txt <image.path> "
+        "<mediaId>`. (4) Deterministic, self-contained, no questions; human pace — post at most the "
+        "requested number per run (default 1), then report the link. Do NOT restate the platform in "
+        "the body beyond the helper commands. Output ONLY the refined task prompt, no preamble.\n\n"
+        "Client content direction: "
+    ) % (platform, platform, platform)
     payload = {
         "model": model,
         "messages": [
@@ -5470,8 +5471,8 @@ def handle_get(handler, parsed) -> bool:
     try:
         from api import saas as _saas
         _saas.bind_profile(handler)
-        if (parsed.path.startswith("/api/saas/") or parsed.path == "/login") \
-                and _saas.handle_saas_get(handler, parsed):
+        if (parsed.path.startswith("/api/saas/") or parsed.path.startswith("/api/storage/")
+                or parsed.path == "/login") and _saas.handle_saas_get(handler, parsed):
             return True
     except Exception as _e:  # noqa: BLE001
         logger.warning("saas get hook failed: %s", _e)
@@ -7264,7 +7265,8 @@ def handle_post(handler, parsed) -> bool:
         _saas.saas_social_connect(handler, body)   # GoLogin: start cloud session -> live-view URL
         return True
 
-    if parsed.path.startswith("/api/saas/") or parsed.path in ("/api/social/check", "/api/social/stop"):
+    if parsed.path.startswith("/api/saas/") or parsed.path.startswith("/api/storage/") \
+            or parsed.path in ("/api/social/check", "/api/social/stop"):
         from api import saas as _saas
         if _saas.handle_saas_post(handler, parsed, body):
             return True

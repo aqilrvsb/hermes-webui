@@ -31,6 +31,54 @@ const HERMES_HOME = process.env.HERMES_HOME || path.join(os.homedir(), '.hermes'
 const CONFIG_PATH = path.join(HERMES_HOME, 'gologin.json');
 const POSTS_LOG = path.join(HERMES_HOME, 'gologin_posts.jsonl');
 
+// Supabase (for the Storage image library) — service key + client id from env/profile .env.
+const SUPA_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+const SUPA_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+const CLIENT_ID = (process.env.CLIENT_ID || '').trim();
+
+async function supa(method, pathq, payload, extraHeaders) {
+  const headers = Object.assign({
+    apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json',
+  }, extraHeaders || {});
+  const resp = await fetch(SUPA_URL + pathq, {
+    method, headers, body: payload != null ? JSON.stringify(payload) : undefined,
+  });
+  const text = await resp.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  return { ok: resp.ok, status: resp.status, data };
+}
+
+// Pull the next Storage image NOT yet posted to this platform; download it locally.
+async function cmdNextImage(platform) {
+  if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return { error: 'storage not configured (SUPABASE_*/CLIENT_ID)' };
+  const r = await supa('GET', '/rest/v1/media?select=id,url,filename,posted&client_id=eq.'
+    + encodeURIComponent(CLIENT_ID) + '&order=created_at.asc&limit=100');
+  if (!r.ok) return { error: 'media query failed: ' + r.status };
+  const rows = Array.isArray(r.data) ? r.data : [];
+  const next = rows.find((m) => !(Array.isArray(m.posted) ? m.posted : [])
+    .some((p) => String(p.platform || '').toLowerCase() === platform));
+  if (!next) return { image: null, note: 'no unused image for ' + platform };
+  // download
+  const resp = await fetch(next.url);
+  if (!resp.ok) return { error: 'image download failed: ' + resp.status };
+  const buf = Buffer.from(await resp.arrayBuffer());
+  const ext = (next.filename.match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0];
+  const out = path.join(os.tmpdir(), 'media_' + next.id + ext);
+  fs.writeFileSync(out, buf);
+  return { image: { mediaId: next.id, path: out, url: next.url, filename: next.filename } };
+}
+
+// Stamp a media row as posted to a platform (by an agent), with the post link.
+async function markPosted(mediaId, platform, agent, link, at) {
+  if (!SUPA_URL || !SUPA_KEY || !mediaId) return;
+  const r = await supa('GET', '/rest/v1/media?select=posted&id=eq.' + encodeURIComponent(mediaId));
+  const cur = (r.ok && Array.isArray(r.data) && r.data[0] && Array.isArray(r.data[0].posted)) ? r.data[0].posted : [];
+  if (cur.some((p) => String(p.platform || '').toLowerCase() === platform)) return;
+  cur.push({ platform, agent: agent || 'agent', link: link || '', at });
+  await supa('PATCH', '/rest/v1/media?id=eq.' + encodeURIComponent(mediaId), { posted: cur },
+    { Prefer: 'return=minimal' });
+}
+
 const PLATFORMS = {
   facebook:  { home: 'https://www.facebook.com/', login: /\/login|login\.php/i },
   instagram: { home: 'https://www.instagram.com/', login: /\/accounts\/login|\/accounts\/emailsignup/i },
@@ -171,7 +219,7 @@ async function postFacebook(page, caption, mediaPath) {
   return { url: page.url() };
 }
 
-async function cmdPost(browser, platform, caption, mediaPath, agent) {
+async function cmdPost(browser, platform, caption, mediaPath, agent, mediaId, nowIso) {
   const page = await newPage(browser);
   let res;
   if (platform === 'facebook') res = await postFacebook(page, caption, mediaPath);
@@ -179,18 +227,22 @@ async function cmdPost(browser, platform, caption, mediaPath, agent) {
   const rec = {
     platform, agent: agent || 'chat', caption,
     media: mediaPath ? [mediaPath] : [],
-    link: res.url || '', status: 'published', date: new Date().toISOString(),
+    link: res.url || '', status: 'published', date: nowIso,
   };
   logPost(rec);
+  if (mediaId) { try { await markPosted(mediaId, platform, rec.agent, rec.link, nowIso); } catch (e) {} }
   return Object.assign({ ok: true }, rec);
 }
 
 async function main() {
-  const [cmd, a1, a2, a3] = process.argv.slice(2);
-  if (!cmd) fail('usage: gologin_helper.js <login-status|scrape|screenshot|post|stop> ...');
+  const [cmd, a1, a2, a3, a4] = process.argv.slice(2);
+  if (!cmd) fail('usage: gologin_helper.js <login-status|scrape|screenshot|next-image|post|stop> ...');
   const { token, profileId } = loadConfig();
   if (!token) fail('GoLogin token not configured (set GOLOGIN_API_TOKEN or gologin.json)');
   if (cmd === 'stop') { await stopProfile(token, profileId); out({ ok: true }); return; }
+  // Storage commands need NO browser (pure Supabase):
+  if (cmd === 'next-image') { out(await cmdNextImage(String(a1 || '').toLowerCase())); return; }
+  if (cmd === 'mark-posted') { await markPosted(a1, String(a2 || '').toLowerCase(), a3 || 'agent', a4 || '', new Date().toISOString()); out({ ok: true }); return; }
   if (!profileId && cmd !== 'scrape' && cmd !== 'screenshot') fail('GoLogin profile not configured (set GOLOGIN_PROFILE_ID or gologin.json)');
 
   let browser;
@@ -201,8 +253,9 @@ async function main() {
     else if (cmd === 'scrape') result = await cmdScrape(browser, a1, a2);
     else if (cmd === 'screenshot') result = await cmdScreenshot(browser, a1, a2);
     else if (cmd === 'post') {
+      // post <platform> <captionFile|text> [mediaPath] [mediaId]
       const caption = fs.existsSync(a2) ? fs.readFileSync(a2, 'utf8') : String(a2 || '');
-      result = await cmdPost(browser, a1, caption, a3 || '', process.env.GOLOGIN_AGENT || '');
+      result = await cmdPost(browser, a1, caption, a3 || '', process.env.GOLOGIN_AGENT || '', a4 || '', new Date().toISOString());
     } else fail('unknown command: ' + cmd);
     try { await browser.disconnect(); } catch (e) {}
     out(result);

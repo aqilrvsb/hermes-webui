@@ -174,6 +174,15 @@ for home in homes():
         # Fallback on error -> OpenRouter auto-routing.
         cfg["fallback_providers"] = [{"provider": "openrouter", "model": "openrouter/auto",
                                       "base_url": OR_BASE, "api_key": OR_KEY}]
+        # VISION model: agents "look" at Storage images to caption them. Use CHEAP gemini flash
+        # (vision-capable) instead of the pricier main model. Also point the other light auxiliary
+        # tasks (titles/extraction) at it to keep costs down.
+        aux = cfg.get("auxiliary") if isinstance(cfg.get("auxiliary"), dict) else {}
+        _flash = {"provider": "openrouter", "model": "google/gemini-2.5-flash",
+                  "base_url": OR_BASE, "api_key": OR_KEY}
+        for _slot in ("vision", "web_extract", "title_generation"):
+            aux[_slot] = dict(_flash)
+        cfg["auxiliary"] = aux
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)

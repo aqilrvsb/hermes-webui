@@ -3547,9 +3547,9 @@ main.main > #mainWorkspaces,
 main.main > #mainProfiles,
 main.main > #mainInsights,
 main.main > #mainLogs{display:none;}
-main.main > #mainSocial, main.main > #mainAgents, main.main > #mainFloor, main.main > #mainReporting{display:none;}
-main.main.showing-social > #mainSocial, main.main.showing-agents > #mainAgents, main.main.showing-floor > #mainFloor, main.main.showing-reporting > #mainReporting{display:flex;}
-main.main:not(.showing-settings):not(.showing-skills):not(.showing-memory):not(.showing-tasks):not(.showing-kanban):not(.showing-workspaces):not(.showing-profiles):not(.showing-insights):not(.showing-logs):not(.showing-plugin):not(.showing-social):not(.showing-agents):not(.showing-floor):not(.showing-reporting) > #mainChat{display:flex;}
+main.main > #mainSocial, main.main > #mainAgents, main.main > #mainFloor, main.main > #mainReporting, main.main > #mainAdmin, main.main > #mainStorage{display:none;}
+main.main.showing-social > #mainSocial, main.main.showing-agents > #mainAgents, main.main.showing-floor > #mainFloor, main.main.showing-reporting > #mainReporting, main.main.showing-admin > #mainAdmin, main.main.showing-storage > #mainStorage{display:flex;}
+main.main:not(.showing-settings):not(.showing-skills):not(.showing-memory):not(.showing-tasks):not(.showing-kanban):not(.showing-workspaces):not(.showing-profiles):not(.showing-insights):not(.showing-logs):not(.showing-plugin):not(.showing-social):not(.showing-agents):not(.showing-floor):not(.showing-reporting):not(.showing-admin):not(.showing-storage) > #mainChat{display:flex;}
 main.main.showing-settings > #mainSettings{display:flex;overflow-y:auto;}
 main.main.showing-skills > #mainSkills{display:flex;}
 main.main.showing-memory > #mainMemory{display:flex;}
