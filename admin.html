@@ -40,15 +40,12 @@
   </header>
 
   <div class="card">
-    <h2>API Keys &amp; Settings</h2>
+    <h2>API Keys</h2>
     <div class="fld"><label>GoLogin token</label><input id="k-gologin_token" placeholder="paste a new token to change">
-      <div class="hint">Dev token from app.gologin.com → Personal Area → API Token. Powers every client browser.</div></div>
-    <div class="fld"><label>GoLogin proxy country</label><input id="k-gologin_proxy_country" placeholder="MY">
-      <div class="hint">Residential country for every new client profile (default MY = Malaysia).</div></div>
-    <div class="fld"><label>Admin emails</label><input id="k-admin_emails" placeholder="you@company.com, staff@company.com">
-      <div class="hint">Comma-separated. These accounts see this Admin tab.</div></div>
-    <div class="fld"><label>Default OpenRouter model</label><input id="k-openrouter_default_model" placeholder="openai/gpt-4.1"></div>
-    <button class="btn" id="save" onclick="save()">Save settings</button>
+      <div class="hint">Dev token from app.gologin.com → Personal Area → API Token. Powers every client's Malaysia cloud browser.</div></div>
+    <div class="fld"><label>OpenRouter key</label><input id="k-openrouter_key" placeholder="sk-or-v1-…">
+      <div class="hint">Powers the AI for every client's chat + agents.</div></div>
+    <button class="btn" id="save" onclick="save()">Save keys</button>
     <div class="msg" id="msg"></div>
   </div>
 
@@ -65,7 +62,7 @@
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const KEYS=['gologin_token','gologin_proxy_country','admin_emails','openrouter_default_model'];
+const KEYS=['gologin_token','openrouter_key'];
 
 async function load(){
   const r=await fetch('/api/saas/admin/settings',{credentials:'same-origin'});

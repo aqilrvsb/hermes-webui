@@ -39,6 +39,8 @@ def _supa_settings():
 _SUPA = _supa_settings()
 GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_TOKEN")
                  or _SUPA.get("gologin_token", "")).strip()
+# OpenRouter key: env first, else the Admin-managed key from Supabase.
+OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or _SUPA.get("openrouter_key", "")).strip()
 servers = {
     "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; keep 900s so they finish + don't double-charge
 }
@@ -116,7 +118,7 @@ for home in homes():
     #   openrouter -> https://openrouter.ai/api/v1   (key ${OPENROUTER_API_KEY}) [alternate + fallback/auto]
     #   grsai      -> https://grsaiapi.com/v1        (key ${GRSAI_API_KEY})      [image/PDF gemini + fallback]
     HAS_OC = bool(os.environ.get("OPENCODE_API_KEY", "").strip())
-    HAS_OR = bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
+    HAS_OR = bool(OPENROUTER_KEY)
     HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
     HAS_AM = bool(os.environ.get("AIMURAH_API_KEY", "").strip())   # AIMurah (aimurah.my.id) — OpenAI-compatible; FREE claude-sonnet-4.5/haiku-4.5
     if HAS_OR:
@@ -127,12 +129,15 @@ for home in homes():
                      "openrouter/auto", "google/gemini-2.5-pro", "google/gemini-2.5-flash",
                      "openai/gpt-5.4", "deepseek/deepseek-chat"]
         OR_DEFAULT = os.environ.get("OPENROUTER_DEFAULT_MODEL", "").strip() or "openai/gpt-4.1"
+        # Use the literal key so it works whether it came from env OR the Admin panel (Supabase);
+        # env-ref "${OPENROUTER_API_KEY}" would NOT resolve for an Admin-provided key.
+        OR_KEY = OPENROUTER_KEY or "${OPENROUTER_API_KEY}"
         # Drop any previously-persisted providers we no longer use (minimax/opencode/grsai/aimurah/apipod).
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
                not in ("apipod", "apipod-gpt", "opencode", "grsai", "aimurah")]
         or_entry = {"name": "openrouter", "base_url": OR_BASE,
-                    "api_key": "${OPENROUTER_API_KEY}", "models": OR_MODELS}
+                    "api_key": OR_KEY, "models": OR_MODELS}
         found = False
         for c in cps:
             if isinstance(c, dict) and str(c.get("name") or "").lower() == "openrouter":
@@ -142,10 +147,10 @@ for home in homes():
         cfg["custom_providers"] = cps
         # DEFAULT model (chat + agents). Switchable live in the dropdown; override via OPENROUTER_DEFAULT_MODEL.
         cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
-                        "api_key": "${OPENROUTER_API_KEY}", "default": OR_DEFAULT}
+                        "api_key": OR_KEY, "default": OR_DEFAULT}
         # Fallback on error -> OpenRouter auto-routing.
         cfg["fallback_providers"] = [{"provider": "openrouter", "model": "openrouter/auto",
-                                      "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"}]
+                                      "base_url": OR_BASE, "api_key": OR_KEY}]
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)

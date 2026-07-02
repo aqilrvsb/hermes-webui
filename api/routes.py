@@ -5206,7 +5206,13 @@ def _agents_refine(description, platform):
     import json as _json, os as _os, urllib.request as _rq
     key = (_os.environ.get("OPENROUTER_API_KEY") or "").strip()
     if not key:
-        raise RuntimeError("OPENROUTER_API_KEY not set")
+        try:
+            from api import saas as _saas
+            key = _saas.setting("openrouter_key")   # Admin-managed key (Supabase)
+        except Exception:
+            key = ""
+    if not key:
+        raise RuntimeError("OpenRouter key not set (Admin → API Keys)")
     try:
         from api.config import get_effective_default_model
         model = (get_effective_default_model() or "").strip() or "openai/gpt-4.1"

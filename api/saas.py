@@ -459,8 +459,9 @@ def saas_me(handler):
 
 # ── Admin endpoints ──────────────────────────────────────────────────────────
 
-_ADMIN_KEYS = ("gologin_token", "gologin_proxy_country", "admin_emails",
-               "openrouter_default_model")
+# Admin exposes ONLY the two keys the user wants to manage: GoLogin + OpenRouter.
+# (proxy country defaults to MY, admin_emails is seeded server-side — both still read by setting().)
+_ADMIN_KEYS = ("gologin_token", "openrouter_key")
 
 
 def saas_admin_settings_get(handler):
