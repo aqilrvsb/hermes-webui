@@ -43,13 +43,7 @@ RAILWAY_TOOLS = [
  "github_repo_list","github_repo_deploy","github_repo_link","database_list_types","database_deploy_from_template",
 ]
 servers = {
-    "supabase":  {"command": BIN+"mcp-server-supabase", "args": [], "env": E("SUPABASE_ACCESS_TOKEN")},
-    "github":    {"command": BIN+"mcp-server-github",    "args": [], "env": E("GITHUB_PERSONAL_ACCESS_TOKEN")},
     "scrapling": {"command": "/usr/local/bin/scrapling", "args": ["mcp"]},  # stealth web scraping (StealthyFetcher bypasses Cloudflare/anti-bot; adaptive selectors) — REPLACES agentql + playwright. Dockerfile symlinks the installed scrapling -> /usr/local/bin/scrapling.
-    "telegram":  {"command": BIN+"npx", "args": ["-y","@iqai/mcp-telegram"], "env": E("TELEGRAM_BOT_TOKEN")},  # BOT-token only (from @BotFather) — NO my.telegram.org / api_id / QR. Tools: SEND_MESSAGE, GET_CHANNEL_INFO, FORWARD/PIN, members.
-    "railway":   {"command": BIN+"railway-mcp",          "args": [], "env": E("RAILWAY_API_TOKEN","RAILWAY_TOKEN"), "tools": {"include": RAILWAY_TOOLS}},
-    # vercel: NO MCP server. The vercel-mcp npm package exits on launch (failed every boot).
-    # Developer role deploys via the Vercel CLI instead (baked into image, VERCEL_TOKEN in env) -> fully headless, reliable.
     "peninglab": {"command": BIN+"peninglab-mcp",        "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; default 120s MCP timeout cut them off + charged credits
     "zernio":    {"url": "https://mcp.zernio.com/mcp", "headers": {"Authorization": "Bearer %s" % (os.environ.get("ZERNIO_API_KEY") or "${ZERNIO_API_KEY}")}, "tools": {"include": MKT_TOOLS}, "timeout": 900, "connect_timeout": 60},  # ads_create_standalone_ad BLOCKS 90-120s; default 120s MCP timeout returned a phantom TIMEOUT even though Meta DID create the ad -> agent thought it failed -> re-fired -> DUPLICATE ads. 900s lets one fire finish cleanly.
     # playwright + agentql REMOVED — replaced by scrapling (above). Scrapling's StealthyFetcher is stealthier on
@@ -66,7 +60,7 @@ SKILLS_BY_PROFILE = {
     "marketer":  ["/opt/skills-mkt"],
     "developer": ["/opt/skills/superpowers/skills", "/opt/skills-dev"] + COMMON,   # general + dev + cavecrew + messaging
 }
-SKILLS_DEFAULT = ["/opt/skills/superpowers/skills", "/opt/skills-extra"] + COMMON  # default = everything + messaging
+SKILLS_DEFAULT = []  # CLEARED: no skills loaded (internal Social Media Manager — agent works via MCPs + its instructions)
 def homes():
     out = [HOME]
     pdir = os.path.join(HOME, "profiles")
