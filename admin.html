@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1; --text:#221C14; --muted:#6E6454; --accent:#F26B21; --radius:16px; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:15px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding:max(16px,env(safe-area-inset-top)) 18px 50px}
+  .wrap{max-width:860px;margin:0 auto}
+  header{margin:6px 2px 16px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
+  header p{color:var(--muted);margin:2px 0 0;font-size:13.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(34,28,20,.05)}
+  .card h2{font-size:15px;margin:0 0 12px}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+  .fld input{width:100%;font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;outline:none}
+  .fld input:focus{border-color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:11px;padding:10px 20px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);box-shadow:0 3px 12px rgba(242,107,33,.3)}
+  .btn:disabled{opacity:.6;cursor:wait}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line);word-break:break-all}
+  .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:#FFF1E6;color:#C9500E}
+  .ok{background:#e6f6ec;color:#1a8f4a}
+  .msg{display:none;margin-top:10px;padding:9px 12px;border-radius:10px;font-size:13px}
+  .msg.good{background:#e6f6ec;color:#1a8f4a}.msg.badd{background:#fdecec;color:#c0392b}
+  .denied{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:48px 20px}
+</style>
+</head>
+<body>
+<div class="wrap" id="root" style="display:none">
+  <header>
+    <h1>Admin</h1>
+    <p>API keys and client accounts — keys live in Supabase, never in the code.</p>
+  </header>
+
+  <div class="card">
+    <h2>API Keys &amp; Settings</h2>
+    <div class="fld"><label>GoLogin token</label><input id="k-gologin_token" placeholder="paste a new token to change">
+      <div class="hint">Dev token from app.gologin.com → Personal Area → API Token. Powers every client browser.</div></div>
+    <div class="fld"><label>GoLogin proxy country</label><input id="k-gologin_proxy_country" placeholder="MY">
+      <div class="hint">Residential country for every new client profile (default MY = Malaysia).</div></div>
+    <div class="fld"><label>Admin emails</label><input id="k-admin_emails" placeholder="you@company.com, staff@company.com">
+      <div class="hint">Comma-separated. These accounts see this Admin tab.</div></div>
+    <div class="fld"><label>Default OpenRouter model</label><input id="k-openrouter_default_model" placeholder="openai/gpt-4.1"></div>
+    <button class="btn" id="save" onclick="save()">Save settings</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Clients</h2>
+    <table>
+      <thead><tr><th>Email</th><th>Hermes profile</th><th>GoLogin browser</th><th>Role</th><th>Since</th></tr></thead>
+      <tbody id="clients"><tr><td colspan="5" style="color:var(--muted)">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div class="wrap denied" id="denied" style="display:none">Admin access only.</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KEYS=['gologin_token','gologin_proxy_country','admin_emails','openrouter_default_model'];
+
+async function load(){
+  const r=await fetch('/api/saas/admin/settings',{credentials:'same-origin'});
+  if(r.status===403){ $('#denied').style.display='block'; return; }
+  const d=await r.json();
+  $('#root').style.display='block';
+  for(const k of KEYS){ const el=$('#k-'+k); if(el) el.value=(d.settings||{})[k]||''; }
+  const cr=await fetch('/api/saas/admin/clients',{credentials:'same-origin'});
+  const cd=await cr.json();
+  const rows=(cd.clients||[]).map(c=>`<tr>
+    <td>${esc(c.email)}</td><td>${esc(c.hermes_profile)}</td>
+    <td>${c.gologin_profile_id?('<span class="pill ok">'+esc(c.gologin_profile_id.slice(-8))+'</span>'):'<span class="pill">none</span>'}</td>
+    <td>${c.is_admin?'<span class="pill">admin</span>':'client'}</td>
+    <td>${esc(String(c.created_at||'').slice(0,10))}</td></tr>`).join('');
+  $('#clients').innerHTML=rows||'<tr><td colspan="5" style="color:var(--muted)">No clients yet.</td></tr>';
+}
+
+async function save(){
+  const btn=$('#save');btn.disabled=true;
+  const settings={};
+  for(const k of KEYS){ const v=$('#k-'+k).value.trim(); if(v && !v.startsWith('********')) settings[k]=v; }
+  try{
+    const headers={'Content-Type':'application/json'};
+    try{ const t=(window.parent&&window.parent.hermesCsrfToken)||''; if(t) headers['X-Hermes-CSRF-Token']=t; }catch(e){}
+    const r=await fetch('/api/saas/admin/settings',{method:'POST',credentials:'same-origin',
+      headers, body:JSON.stringify({settings})});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    const m=$('#msg');m.className='msg good';m.style.display='block';m.textContent='Saved: '+(d.saved||[]).join(', ');
+  }catch(e){ const m=$('#msg');m.className='msg badd';m.style.display='block';m.textContent=e.message; }
+  btn.disabled=false;
+}
+load();
+</script>
+</body>
+</html>

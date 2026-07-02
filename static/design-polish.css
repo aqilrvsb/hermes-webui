@@ -103,7 +103,8 @@ button:active,.btn:active{ transform:translateY(1px); }
    right workspace-panel edge toggle (uses :has(); the showing-* class lives on <main>). */
 .layout:has(> main.main.showing-social) .sidebar,
 .layout:has(> main.main.showing-agents) .sidebar,
-.layout:has(> main.main.showing-reporting) .sidebar{ display:none !important; }
+.layout:has(> main.main.showing-reporting) .sidebar,
+.layout:has(> main.main.showing-admin) .sidebar{ display:none !important; }
 /* Floor tab: keep the sidebar and list all agents in it */
 #panelFloor .floor-agents-list{ padding:8px; display:flex; flex-direction:column; gap:8px; overflow:auto; }
 #panelFloor .floor-agent{ display:flex; gap:10px; align-items:center; padding:8px 10px; background:#fff; border:1px solid var(--border); border-radius:12px; }
@@ -126,7 +127,9 @@ button:active,.btn:active{ transform:translateY(1px); }
 .layout:has(> main.main.showing-floor) .workspace-panel-edge-toggle,
 .layout:has(> main.main.showing-social) .workspace-panel,
 .layout:has(> main.main.showing-agents) .workspace-panel,
-.layout:has(> main.main.showing-floor) .workspace-panel{ display:none !important; }
+.layout:has(> main.main.showing-floor) .workspace-panel,
+.layout:has(> main.main.showing-admin) .workspace-panel,
+.layout:has(> main.main.showing-admin) .workspace-panel-edge-toggle{ display:none !important; }
 
 /* Quiet scrollbars for light bg */
 *::-webkit-scrollbar{ width:9px; height:9px; }

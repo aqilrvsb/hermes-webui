@@ -27,7 +27,7 @@ ENV PATH="/opt/node/bin:${PATH}"
 # The developer role deploys with `vercel --token $VERCEL_TOKEN` instead. Fully headless + reliable.
 # GoLogin stack (100% GoLogin): gologin-mcp = profile/proxy mgmt; gologin = cloud-browser SDK (CDP);
 # gologin-agent-browser-cli = AI-agent command surface to drive the cloud browser (open/type/upload/click).
-RUN /opt/node/bin/npm install -g peninglab-mcp gologin-mcp gologin gologin-agent-browser-cli || true
+RUN /opt/node/bin/npm install -g peninglab-mcp gologin-mcp gologin gologin-agent-browser-cli puppeteer-core || true
 
 # Scrapling — stealth web scraping (REPLACES agentql + playwright MCP). Python lib; MCP server = `scrapling mcp` (stdio).
 # StealthyFetcher bypasses Cloudflare/anti-bot (Meta Ad Library) + adaptive self-healing selectors. Free (BSD-3).
@@ -129,8 +129,17 @@ RUN mkdir -p /opt/skills-mkt /opt/skills-dev \
  && (cp -r /opt/skills-extra/cavecrew  /opt/skills-dev/cavecrew || true)
 
 # Boot-time helpers
-# Override backend routes with our edited source (adds /api/social/* — Zernio-backed social connect).
+# Override backend routes with our edited source (adds /api/social/* — GoLogin-backed social connect).
 COPY api/routes.py /apptoo/api/routes.py
+# SaaS layer: Supabase auth + per-client provisioning (Hermes profile + GoLogin MY-residential browser)
+COPY api/saas.py /apptoo/api/saas.py
+COPY admin.html /apptoo/static/admin.html
+# GoLogin cloud-browser driver (chat + agents + social-check all use this ONE engine)
+COPY gologin_helper.js /apptoo/gologin_helper.js
+ENV HERMES_GOLOGIN_HELPER=/apptoo/gologin_helper.js \
+    GOLOGIN_HELPER=/apptoo/gologin_helper.js
+# Auth: allow the SaaS login/register endpoints through the core auth gate (frozenset in api/auth.py)
+RUN sed -i "s#'/api/auth/login', '/api/auth/status',#'/api/auth/login', '/api/auth/status', '/api/saas/login', '/api/saas/register',#" /apptoo/api/auth.py || true
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh

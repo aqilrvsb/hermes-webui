@@ -1459,6 +1459,8 @@ def _csrf_exempt_path(path: str) -> bool:
         "/api/auth/passkey/options",
         "/api/auth/passkey/login",
         "/api/csp-report",
+        "/api/saas/login",      # credential-carrying: no ambient-auth CSRF risk
+        "/api/saas/register",
     }
 
 
@@ -5210,26 +5212,21 @@ def _agents_refine(description, platform):
         model = (get_effective_default_model() or "").strip() or "openai/gpt-4.1"
     except Exception:
         model = "openai/gpt-4.1"
-    acct = ""
-    try:
-        for a in _zernio_accounts():
-            if str(a.get("platform") or "").lower() == platform:
-                acct = str(a.get("_id") or "")
-                break
-    except Exception:
-        pass
     system = (
         "You turn a client's casual request into a precise task prompt for an autonomous "
-        "social-media agent. The agent runs on a schedule with NO human present, and posts via the "
-        "zernio MCP tools. Rules for the prompt you write: (1) The agent posts ONLY to the %s "
-        "account%s using zernio (accounts_list to resolve the account, posts_create to publish; "
-        "media_* tools for images/video if needed). (2) Spell out exactly what content to create "
-        "each run (topic, tone, language, length, hashtags/emoji policy) based on the client's "
-        "request. (3) Deterministic and self-contained: no questions back, no waiting; make "
-        "sensible choices and post. (4) Vary content run-to-run so posts never repeat. "
-        "(5) End with: publish exactly the requested number of posts (default 1) and stop. "
-        "Output ONLY the refined task prompt, no preamble."
-    ) % (platform, (" (account id %s)" % acct) if acct else "")
+        "social-media agent. The agent runs on a schedule with NO human present, and posts through "
+        "the client's own logged-in GoLogin cloud browser via a terminal helper. Rules for the "
+        "prompt you write: (1) The agent posts ONLY to %s, by writing the caption to a file and "
+        "running: node $GOLOGIN_HELPER post %s /path/caption.txt [/path/image.jpg] "
+        "(env GOLOGIN_API_TOKEN, GOLOGIN_PROFILE_ID and GOLOGIN_HELPER are already set; use the "
+        "peninglab MCP generate_image tool first if the post needs a creative, save it locally, "
+        "pass its path). (2) Spell out exactly what content to create each run (topic, tone, "
+        "language, length, hashtags/emoji policy) based on the client's request. (3) Deterministic "
+        "and self-contained: no questions back, no waiting; make sensible choices and post. "
+        "(4) Vary content run-to-run so posts never repeat. (5) Human pace — never more than the "
+        "requested number of posts (default 1); then stop and report the post link printed by the "
+        "helper. Output ONLY the refined task prompt, no preamble."
+    ) % (platform, platform)
     payload = {
         "model": model,
         "messages": [
@@ -5462,6 +5459,17 @@ def _reports_posts(handler, parsed):
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
 
+    # SaaS: force this request's profile from the SERVER-side session mapping
+    # (tamper-proof multi-tenant binding — the hermes_profile cookie never wins).
+    try:
+        from api import saas as _saas
+        _saas.bind_profile(handler)
+        if (parsed.path.startswith("/api/saas/") or parsed.path == "/login") \
+                and _saas.handle_saas_get(handler, parsed):
+            return True
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("saas get hook failed: %s", _e)
+
     if parsed.path.startswith("/session/static/"):
         # Strip the leading "/session" so _serve_static() sees a path that
         # starts with "/static/" (its required prefix). _serve_static enforces
@@ -5637,7 +5645,8 @@ def handle_get(handler, parsed) -> bool:
         return True
 
     if parsed.path == "/api/social/status":
-        _social_status(handler)
+        from api import saas as _saas
+        _saas.saas_social_status(handler)      # GoLogin: cached per-platform login status
         return True
 
     if parsed.path == "/api/agents/list":
@@ -5645,7 +5654,8 @@ def handle_get(handler, parsed) -> bool:
         return True
 
     if parsed.path == "/api/reports/posts":
-        _reports_posts(handler, parsed)
+        from api import saas as _saas
+        _saas.saas_reports_posts(handler, parsed)   # Supabase posts + profile-local jsonl
         return True
 
     if parsed.path == "/api/models":
@@ -7007,6 +7017,12 @@ def handle_get(handler, parsed) -> bool:
 
 def handle_post(handler, parsed) -> bool:
     """Handle all POST routes. Returns True if handled, False for 404."""
+    # SaaS: tamper-proof per-request profile binding (see handle_get).
+    try:
+        from api import saas as _saas
+        _saas.bind_profile(handler)
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("saas post hook failed: %s", _e)
     diag = RequestDiagnostics.maybe_start("POST", parsed.path, logger=logger)
     if parsed.path == "/api/csp-report":
         if diag:
@@ -7238,8 +7254,14 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, str(e))
 
     if parsed.path == "/api/social/connect":
-        _social_connect(handler, body)
+        from api import saas as _saas
+        _saas.saas_social_connect(handler, body)   # GoLogin: start cloud session -> live-view URL
         return True
+
+    if parsed.path.startswith("/api/saas/") or parsed.path in ("/api/social/check", "/api/social/stop"):
+        from api import saas as _saas
+        if _saas.handle_saas_post(handler, parsed, body):
+            return True
 
     if parsed.path == "/api/agents/save":
         _agents_save(handler, body)
@@ -7250,7 +7272,8 @@ def handle_post(handler, parsed) -> bool:
         return True
 
     if parsed.path == "/api/social/disconnect":
-        _social_disconnect(handler, body)
+        from api import saas as _saas
+        _saas.saas_social_stop(handler, body)      # GoLogin: stop the cloud session
         return True
 
     if parsed.path == "/api/default-model":

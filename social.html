@@ -46,8 +46,18 @@
   button.disconnect{background:transparent;color:var(--red);border:1px solid #46262a}
   button.disconnect:hover{background:#2a1618}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0e1620;border:1px solid var(--line);
-    color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+    color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:60}
   .toast.show{opacity:1}
+  /* ── GoLogin live-view modal: your real cloud browser in an iframe ── */
+  .lv{position:fixed;inset:0;background:rgba(20,15,8,.55);display:none;z-index:50;padding:14px}
+  .lv.open{display:flex;flex-direction:column;gap:10px}
+  .lv-bar{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+  .lv-bar .t{font-weight:700;font-size:14.5px}
+  .lv-bar .s{color:var(--muted);font-size:12.5px;flex:1;min-width:0}
+  .lv-bar button{padding:8px 14px;font-size:13px}
+  .lv iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:14px;background:#fff}
+  .checking{display:inline-block;width:12px;height:12px;border:2px solid #F26B21;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .note{margin:22px 2px 0;color:var(--muted);font-size:12.5px;line-height:1.6}
   /* ── premium polish (light + orange) ── */
   body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
@@ -65,12 +75,23 @@
 <div class="wrap">
   <header>
     <h1>Social Connections</h1>
-    <p>Connect your accounts to publish posts through the platform APIs.</p>
+    <p>Your own cloud browser (Malaysia) — log in once per platform, your agents post through it.</p>
   </header>
   <div class="list" id="list"></div>
   <p class="note" id="note"></p>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- GoLogin live-view: the client's real cloud browser, embedded -->
+<div class="lv" id="lv">
+  <div class="lv-bar">
+    <span class="t">Your cloud browser</span>
+    <span class="s" id="lv-hint">Log into your accounts in the browser below, then press “I'm done”.</span>
+    <button id="lv-done" onclick="doneLogin()">I'm done — detect my logins</button>
+    <button class="disconnect" onclick="closeLive()">Close</button>
+  </div>
+  <iframe id="lv-frame" src="about:blank" allow="clipboard-read; clipboard-write"></iframe>
+</div>
 
 <script>
 // Order + brand marks as requested: Facebook, Threads, TikTok, Instagram.
@@ -89,7 +110,13 @@ const $ = s => document.querySelector(s);
 let toastT;
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3000); }
 
-function render(connected){
+function post(url,body){
+  const headers={"Content-Type":"application/json"};
+  try{ const t=(window.parent&&window.parent.hermesCsrfToken)||""; if(t) headers["X-Hermes-CSRF-Token"]=t; }catch(e){}
+  return fetch(url,{method:"POST",credentials:"same-origin",headers,body:JSON.stringify(body||{})});
+}
+
+function render(connected, checkedAt){
   const list=$("#list"); list.innerHTML="";
   PLATFORMS.forEach(p=>{
     const on = !!connected[p.id];
@@ -102,50 +129,58 @@ function render(connected){
         <div class="status"><span class="dot"></span>${on?"Connected":"Not connected"}</div>
       </div>`;
     const btn=document.createElement("button");
-    if(on){ btn.className="disconnect"; btn.textContent="Disconnect"; btn.onclick=()=>disconnect(p); }
-    else  { btn.textContent="Connect"; btn.onclick=()=>connect(p); }
+    btn.textContent = on ? "Manage" : "Connect";
+    btn.onclick = ()=>openLive();
     row.appendChild(btn);
     list.appendChild(row);
   });
+  $("#note").textContent = (checkedAt? ("Last checked: "+checkedAt.replace("T"," ")+" · ") : "")
+    + "One browser, all platforms: press Connect, log into each account in YOUR cloud browser (Malaysia IP), press “I'm done”. Then ask the Chat or an Agent to post.";
 }
 
 async function loadStatus(){
   try{
     const r=await fetch("/api/social/status",{credentials:"same-origin"});
-    if(!r.ok) throw new Error(r.status);
+    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||r.status);
     const d=await r.json();
-    render(d.connected||{});
-    $("#note").textContent="Publish to any connected account from the Chat by asking the agent to post.";
+    render(d.connected||{}, d.checked_at||"");
   }catch(e){
-    render({});
-    $("#note").textContent="⚠ Backend not wired yet — this is the connections screen; Connect/Disconnect activate once the Zernio backend deploys.";
+    render({}, "");
+    $("#note").textContent="⚠ "+e.message;
   }
 }
 
-async function connect(p){
-  toast("Opening "+p.name+" authorization…");
+// ── GoLogin: start the client's cloud browser and embed the live view ──
+async function openLive(){
+  toast("Starting your cloud browser…");
   try{
-    const r=await fetch("/api/social/connect",{method:"POST",credentials:"same-origin",
-      headers:{"Content-Type":"application/json"},body:JSON.stringify({platform:p.id})});
+    const r=await post("/api/social/connect",{});
     const d=await r.json();
-    if(d.authUrl){ window.open(d.authUrl,"_blank","noopener"); pollAfterConnect(); }
-    else toast(d.error||"Could not start connection.");
-  }catch(e){ toast("Connect failed — is the backend deployed?"); }
+    if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
+    $("#lv-frame").src=d.liveUrl;
+    $("#lv").classList.add("open");
+  }catch(e){ toast("Could not start the browser: "+e.message); }
 }
 
-async function disconnect(p){
-  if(!confirm("Disconnect "+p.name+"?")) return;
+function closeLive(){
+  $("#lv").classList.remove("open");
+  $("#lv-frame").src="about:blank";
+}
+
+// "I'm done" → the agent opens each platform in your browser and detects the logins.
+async function doneLogin(){
+  const btn=$("#lv-done");
+  btn.disabled=true; btn.innerHTML='<span class="checking"></span> Detecting logins… (~1 min)';
   try{
-    const r=await fetch("/api/social/disconnect",{method:"POST",credentials:"same-origin",
-      headers:{"Content-Type":"application/json"},body:JSON.stringify({platform:p.id})});
-    if(!r.ok) throw new Error(r.status);
-    toast(p.name+" disconnected."); loadStatus();
-  }catch(e){ toast("Disconnect failed."); }
-}
-
-// After opening the OAuth window, re-check status a few times so the row flips to green automatically.
-function pollAfterConnect(){
-  let n=0; const iv=setInterval(async()=>{ n++; await loadStatus(); if(n>=12) clearInterval(iv); },5000);
+    const r=await post("/api/social/check",{});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
+    const names=Object.keys(d.connected||{}).filter(k=>d.connected[k]);
+    toast(names.length? ("Detected: "+names.join(", ")) : "No logins detected yet — make sure you finished logging in.");
+    render(d.connected||{}, d.checked_at||"");
+    if(names.length) closeLive();
+  }catch(e){ toast("Detect failed: "+e.message); }
+  btn.disabled=false; btn.textContent="I'm done — detect my logins";
 }
 
 loadStatus();

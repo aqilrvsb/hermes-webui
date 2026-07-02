@@ -20,7 +20,25 @@ def E(*keys):
 # 100% rely on gologin"). Posting AND scraping now happen through the GoLogin cloud browser (one real
 # logged-in Chrome per client). peninglab stays — it's the CONTENT engine (image/video generation for
 # post creatives), not a browser/posting tool, so it does not conflict.
-GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_TOKEN") or "").strip()
+# Admin keys live in SUPABASE admin_settings (never in git): fetch them at boot. Env still wins.
+def _supa_settings():
+    import json as _sj, urllib.request as _sr
+    url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
+    key = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip()
+    if not url or not key:
+        return {}
+    try:
+        req = _sr.Request(url + "/rest/v1/admin_settings?select=key,value")
+        req.add_header("apikey", key); req.add_header("Authorization", "Bearer " + key)
+        with _sr.urlopen(req, timeout=15) as resp:
+            rows = _sj.loads(resp.read().decode("utf-8"))
+        return {r["key"]: (r.get("value") or "") for r in rows if isinstance(r, dict)}
+    except Exception as e:
+        print("== mcp_setup: supabase settings fetch failed:", e, "==")
+        return {}
+_SUPA = _supa_settings()
+GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_TOKEN")
+                 or _SUPA.get("gologin_token", "")).strip()
 servers = {
     "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; keep 900s so they finish + don't double-charge
 }
