@@ -59,6 +59,11 @@ RUN git clone --depth 1 https://github.com/obra/superpowers /opt/skills/superpow
 
 # Extra skills (Meta Ads, etc.) + caveman
 COPY railway-skills /opt/skills-extra
+# Unforked: build our edited UI source directly. Native inline Social/Agents/Floor tabs live in these.
+# (Must precede the index.html sed patches below so those still apply on top of our copy.)
+COPY static/index.html /apptoo/static/index.html
+COPY static/style.css /apptoo/static/style.css
+COPY static/panels.js /apptoo/static/panels.js
 # Live AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
 COPY pixel.html /apptoo/static/pixel.html
 # Real Claude-Office room art + character sprites (MIT, W17ant/Claude-Office), web-light (~0.7MB).
@@ -86,20 +91,17 @@ COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 COPY global-model.js /apptoo/static/global-model.js
 RUN sed -i 's#</body>#<script src="static/global-model.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
-# Social Connect tab — connect Facebook/Threads/TikTok/Instagram for posting (Zernio-backed).
+# Social Connect + Agents tab content — served in the NATIVE inline #mainSocial / #mainAgents iframes
+# (rail buttons + main views are baked into our COPY'd static/index.html above; no <a> injection needed).
 COPY social.html /apptoo/static/social.html
-RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/social.html" target="_blank" rel="noopener" data-tooltip="Social Connect" aria-label="Social Connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
-# Agents tab — client-friendly create/edit/delete of scheduled social agents (wraps Hermes crons).
 COPY agents.html /apptoo/static/agents.html
-RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/agents.html" target="_blank" rel="noopener" data-tooltip="Agents" aria-label="Agents"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
 COPY tab-theme.js /apptoo/static/tab-theme.js
 COPY tab-theme.css /apptoo/static/tab-theme.css
 # What's New tab — shows upstream (nesquena/hermes-webui) releases + commits the daily sync pulls in.
 COPY whatsnew.html /apptoo/static/whatsnew.html
 RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/whatsnew.html" target="_blank" rel="noopener" data-tooltip="What'"'"'s New" aria-label="What'"'"'s New"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21l2.3-7.4-6-4.6h7.6z"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
-# Add a pixel 'AI Agents Floor' tab to the left sidebar (opens /static/pixel.html)
-RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/pixel.html" target="_blank" rel="noopener" data-tooltip="AI Agents Floor" aria-label="AI Agents Floor"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
+# AI Agents Floor is now a NATIVE inline tab (#mainFloor iframe -> /static/pixel.html) in our COPY'd index.html.
 RUN git clone --depth 1 https://github.com/JuliusBrussee/caveman /tmp/caveman && cp -r /tmp/caveman/skills/cavecrew /opt/skills-extra/cavecrew && rm -rf /tmp/caveman || true
 # (Removed irinabuht12 marketing-skills + all operational meta-ads how-to skills + marketer/new-client.
 #  The marketer now loads ONLY meta-ads/{playbook-2026, agency-8-agents}; it acts via the zernio MCP.)
