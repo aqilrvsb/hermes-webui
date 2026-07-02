@@ -13,7 +13,7 @@
   header{margin:6px 2px 16px}
   h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
   header p{color:var(--muted);margin:2px 0 0;font-size:13.5px}
-  .drop{border:2px dashed var(--line);border-radius:var(--radius);background:var(--card);padding:26px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:18px}
+  .drop{display:block;width:100%;border:2px dashed var(--line);border-radius:var(--radius);background:var(--card);padding:26px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:18px}
   .drop:hover,.drop.over{border-color:var(--accent);background:#FFF7F0}
   .drop b{color:var(--accent)}
   .drop .sub{color:var(--muted);font-size:12.5px;margin-top:4px}
@@ -29,7 +29,7 @@
   .cell .row{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
   .del{border:0;background:transparent;color:#c0392b;font:inherit;font-size:12px;cursor:pointer;padding:2px 4px}
   .del:hover{text-decoration:underline}
-  .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:40px 20px}
+  .empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:40px 20px}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#0e1620;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}
   .toast.show{opacity:1}
 </style>

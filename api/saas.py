@@ -515,8 +515,74 @@ def saas_admin_settings_post(handler, body):
 def saas_admin_clients(handler):
     if not require_admin(handler):
         return
-    st, rows = _supa("GET", "/rest/v1/clients?select=email,hermes_profile,gologin_profile_id,is_admin,created_at&order=created_at.desc")
+    st, rows = _supa("GET", "/rest/v1/clients?select=id,email,hermes_profile,gologin_profile_id,is_admin,created_at&order=created_at.desc")
     j(handler, {"clients": rows if isinstance(rows, list) else []})
+
+
+def saas_admin_user_create(handler, body):
+    if not require_admin(handler):
+        return
+    email = str((body or {}).get("email") or "").strip().lower()
+    password = str((body or {}).get("password") or "")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) or len(password) < 6:
+        bad(handler, "valid email + password (min 6 chars) required", 400)
+        return
+    st, res = _supa("POST", "/auth/v1/admin/users",
+                    {"email": email, "password": password, "email_confirm": True})
+    if st in (400, 422) and "already" in json.dumps(res).lower():
+        bad(handler, "email already registered", 409)
+        return
+    if st not in (200, 201):
+        bad(handler, "create failed (%s): %s" % (st, json.dumps(res)[:200]), 502)
+        return
+    user_id = res.get("id") or (res.get("user") or {}).get("id")
+    try:
+        client = provision_client(user_id, email)
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "provisioning failed: %s" % e, 502)
+        return
+    j(handler, {"ok": True, "client": client})
+
+
+def saas_admin_user_delete(handler, body):
+    if not require_admin(handler):
+        return
+    uid = str((body or {}).get("id") or "").strip()
+    if not uid:
+        bad(handler, "id required", 400)
+        return
+    c = _client_by_id(uid)
+    if not c:
+        bad(handler, "not found", 404)
+        return
+    if (c.get("email") or "").lower() in _admin_emails():
+        bad(handler, "can't delete an admin account (remove from admin emails first)", 400)
+        return
+    # 1) delete their GoLogin cloud profile
+    pid = c.get("gologin_profile_id") or ""
+    if pid:
+        try:
+            _gologin("DELETE", "/browser/" + pid)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("gologin delete failed for %s: %s", pid, e)
+    # 2) delete the auth user -> clients/media/posts cascade (FK on delete cascade)
+    st, _res = _supa("DELETE", "/auth/v1/admin/users/" + urllib.parse.quote(uid))
+    if st not in (200, 204):
+        # fall back to deleting the clients row directly
+        _supa("DELETE", "/rest/v1/clients?id=eq." + urllib.parse.quote(uid))
+    j(handler, {"ok": True})
+
+
+def saas_admin_user_password(handler, body):
+    if not require_admin(handler):
+        return
+    uid = str((body or {}).get("id") or "").strip()
+    password = str((body or {}).get("password") or "")
+    if not uid or len(password) < 6:
+        bad(handler, "id + password (min 6) required", 400)
+        return
+    st, _res = _supa("PUT", "/auth/v1/admin/users/" + urllib.parse.quote(uid), {"password": password})
+    j(handler, {"ok": st in (200, 204)})
 
 
 # ── Per-client OpenRouter key (Settings tab, only in mode='client') ──────────
@@ -933,6 +999,12 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_logout(handler)
     elif p == "/api/saas/admin/settings":
         saas_admin_settings_post(handler, body)
+    elif p == "/api/saas/admin/user/create":
+        saas_admin_user_create(handler, body)
+    elif p == "/api/saas/admin/user/delete":
+        saas_admin_user_delete(handler, body)
+    elif p == "/api/saas/admin/user/password":
+        saas_admin_user_password(handler, body)
     elif p == "/api/saas/client/openrouter":
         saas_client_openrouter_post(handler, body)
     elif p == "/api/storage/upload":

@@ -57,9 +57,15 @@
 
   <div class="card">
     <h2>Clients</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+      <div class="fld" style="flex:1;min-width:170px;margin:0"><label>New client email</label><input id="nu-email" type="email" placeholder="client@company.com"></div>
+      <div class="fld" style="flex:1;min-width:150px;margin:0"><label>Password</label><input id="nu-pw" type="text" placeholder="min 6 chars"></div>
+      <button class="btn" id="nu-add" onclick="createUser()">Add client</button>
+    </div>
+    <div class="msg" id="umsg"></div>
     <table>
-      <thead><tr><th>Email</th><th>Hermes profile</th><th>GoLogin browser</th><th>Role</th><th>Since</th></tr></thead>
-      <tbody id="clients"><tr><td colspan="5" style="color:var(--muted)">Loading…</td></tr></tbody>
+      <thead><tr><th>Email</th><th>Hermes profile</th><th>GoLogin browser</th><th>Role</th><th>Since</th><th></th></tr></thead>
+      <tbody id="clients"><tr><td colspan="6" style="color:var(--muted)">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -82,8 +88,40 @@ async function load(){
     <td>${esc(c.email)}</td><td>${esc(c.hermes_profile)}</td>
     <td>${c.gologin_profile_id?('<span class="pill ok">'+esc(c.gologin_profile_id.slice(-8))+'</span>'):'<span class="pill">none</span>'}</td>
     <td>${c.is_admin?'<span class="pill">admin</span>':'client'}</td>
-    <td>${esc(String(c.created_at||'').slice(0,10))}</td></tr>`).join('');
-  $('#clients').innerHTML=rows||'<tr><td colspan="5" style="color:var(--muted)">No clients yet.</td></tr>';
+    <td>${esc(String(c.created_at||'').slice(0,10))}</td>
+    <td style="white-space:nowrap;text-align:right">${c.is_admin?'':`
+      <button class="del" style="color:var(--accent)" onclick="resetPw('${esc(c.id)}','${esc(c.email)}')">Reset&nbsp;pw</button>
+      <button class="del" onclick="delUser('${esc(c.id)}','${esc(c.email)}')">Delete</button>`}</td></tr>`).join('');
+  $('#clients').innerHTML=rows||'<tr><td colspan="6" style="color:var(--muted)">No clients yet.</td></tr>';
+}
+function umsg(t,ok){const m=$('#umsg');m.className='msg '+(ok?'good':'badd');m.style.display='block';m.textContent=t;}
+async function createUser(){
+  const email=$('#nu-email').value.trim(), pw=$('#nu-pw').value;
+  if(!email||pw.length<6){ umsg('Enter an email + password (min 6).',false); return; }
+  const btn=$('#nu-add'); btn.disabled=true; umsg('Creating + provisioning Malaysia browser…',true);
+  try{
+    const r=await api('/api/saas/admin/user/create',{email,password:pw});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    $('#nu-email').value=''; $('#nu-pw').value=''; umsg('Created '+email,true); load();
+  }catch(e){ umsg(e.message,false); }
+  btn.disabled=false;
+}
+async function delUser(id,email){
+  if(!confirm('Delete '+email+'? This removes their account, browser profile, images and reports.')) return;
+  try{ const r=await api('/api/saas/admin/user/delete',{id}); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); umsg('Deleted '+email,true); load();
+  }catch(e){ umsg(e.message,false); }
+}
+async function resetPw(id,email){
+  const pw=prompt('New password for '+email+' (min 6):'); if(!pw) return;
+  try{ const r=await api('/api/saas/admin/user/password',{id,password:pw}); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); umsg('Password reset for '+email,true);
+  }catch(e){ umsg(e.message,false); }
+}
+function api(url,body){
+  const headers={'Content-Type':'application/json'};
+  try{ const t=(window.parent&&window.parent.hermesCsrfToken)||''; if(t) headers['X-Hermes-CSRF-Token']=t; }catch(e){}
+  return fetch(url,{method:'POST',credentials:'same-origin',headers,body:JSON.stringify(body)});
 }
 
 async function save(){

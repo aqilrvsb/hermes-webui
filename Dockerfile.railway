@@ -71,6 +71,11 @@ COPY railway-skills /opt/skills-extra
 COPY static/index.html /apptoo/static/index.html
 COPY static/style.css /apptoo/static/style.css
 COPY static/panels.js /apptoo/static/panels.js
+# boot.js + commands.js MUST match our fork index.html/panels.js version — otherwise a base-image
+# version skew makes boot.js throw before it initialises `_SKINS`, and the Settings pane then errors
+# "Cannot access '_SKINS' before initialization". Copying the matching pair fixes it.
+COPY static/boot.js /apptoo/static/boot.js
+COPY static/commands.js /apptoo/static/commands.js
 COPY static/whatsapp.css /apptoo/static/whatsapp.css
 COPY static/design-polish.css /apptoo/static/design-polish.css
 # Live AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
