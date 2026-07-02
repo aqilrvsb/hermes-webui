@@ -400,16 +400,7 @@ async function loadFloor(){
         busy:!!recent,
         status:off?"off":(recent?"work":"duty"),
         mode:off?"sleep":(recent?"work":"sleep")});});   // scheduled-but-waiting agents NAP until their shift
-    // ONE persistent "Hermes Agent" = your live-chat worker (5th character). Reflects the LATEST chat.
-    const cTitle=chat?sessTitle(chat):null;
-    list.push({kind:"hermes",id:"__hermes__",name:"Hermes Agent",role:"Hermes Agent",color:"#b8ff5b",emoji:"💬",
-      desc:chat?("Chat: "+cTitle):"Standby — I handle your live chat tasks. Ask me anything in #office-general.",
-      when:"chat",next:null,last:cts||null,
-      laststatus:chatBusy?"working":(chatRecent?"in chat":"standby"),
-      chatTitle:cTitle,chatBusy:chatBusy,chatRecent:chatRecent,
-      skills:[],prompt:"",busy:chatBusy,
-      status:(chatBusy||chatRecent)?"work":"duty",
-      mode:(chatBusy||chatRecent)?"work":"standby"});
+    // (Removed the persistent "Hermes Agent" chat worker — the office shows ONLY agents from the Agents tab.)
     FLOOR=list;try{const _sp=assignSprites();FLOOR.forEach(a=>a._sprite=_sp[a.id]);}catch(e){}renderAgents();renderFeed();renderStage();
   }catch(e){FLOOR=[];renderAgents();renderFeed();renderStage();}
 }
