@@ -129,8 +129,9 @@ for home in homes():
         OR_BASE = "https://openrouter.ai/api/v1"
         # Pickable models — shown in the chat model dropdown (dynamic pick, live per-chat + per-agent).
         # Add/remove any OpenRouter model id freely; the DEFAULT below is just the startup model.
-        OR_MODELS = ["openai/gpt-4.1", "anthropic/claude-sonnet-4.5", "openrouter/auto",
-                     "google/gemini-2.5-pro", "google/gemini-2.5-flash", "openai/gpt-5.4", "deepseek/deepseek-chat"]
+        OR_MODELS = ["openai/gpt-4.1", "openai/gpt-4.1-mini", "anthropic/claude-sonnet-4.5",
+                     "openrouter/auto", "google/gemini-2.5-pro", "google/gemini-2.5-flash",
+                     "openai/gpt-5.4", "deepseek/deepseek-chat"]
         OR_DEFAULT = os.environ.get("OPENROUTER_DEFAULT_MODEL", "").strip() or "openai/gpt-4.1"
         # Drop any previously-persisted providers we no longer use (minimax/opencode/grsai/aimurah/apipod).
         cps = [c for c in (cfg.get("custom_providers") or [])

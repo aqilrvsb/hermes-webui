@@ -1,0 +1,57 @@
+/* WhatsApp-style chat skin — additive layer, scoped to the chat panel (#mainChat).
+   Targets Hermes's existing .msg-row[data-role] / .msg-body. Safe to remove (unlink) to revert.
+   Assistant bubbles keep a WIDE max-width so code blocks / tool output aren't cramped. */
+
+/* Chat backdrop (WhatsApp-ish) */
+#mainChat{background:#efeae2;}
+:root.dark #mainChat{background:#0b141a;}
+#mainChat .messages, #mainChat .messages-inner{background:transparent;}
+
+/* Tighter, chat-like spacing */
+#mainChat .msg-row{padding:4px 0!important;}
+
+/* ── Incoming (assistant) — left, light bubble ── */
+#mainChat .msg-row[data-role="assistant"]{align-self:flex-start;max-width:94%;}
+#mainChat .msg-row[data-role="assistant"] .msg-body{
+  background:#ffffff!important;
+  color:#111b21!important;
+  border:none!important;
+  border-radius:2px 12px 12px 12px!important;
+  padding:8px 12px!important;
+  box-shadow:0 1px .5px rgba(11,20,26,.13)!important;
+}
+:root.dark #mainChat .msg-row[data-role="assistant"] .msg-body{
+  background:#202c33!important;
+  color:#e9edef!important;
+  box-shadow:0 1px .5px rgba(0,0,0,.28)!important;
+}
+
+/* ── Outgoing (user) — right, WhatsApp green ── */
+#mainChat .msg-row[data-role="user"]{align-self:flex-end;max-width:82%!important;}
+#mainChat .msg-row[data-role="user"] .msg-body{
+  background:#d9fdd3!important;
+  color:#111b21!important;
+  border:none!important;
+  border-radius:12px 2px 12px 12px!important;
+  padding:8px 12px!important;
+  box-shadow:0 1px .5px rgba(11,20,26,.13)!important;
+}
+:root.dark #mainChat .msg-row[data-role="user"] .msg-body{
+  background:#005c4b!important;
+  color:#e9edef!important;
+  box-shadow:0 1px .5px rgba(0,0,0,.28)!important;
+}
+
+/* Keep code/pre readable inside bubbles (don't inherit the green/grey) */
+#mainChat .msg-row .msg-body pre,
+#mainChat .msg-row .msg-body pre code{
+  background:rgba(0,0,0,.06)!important;color:inherit!important;border-radius:8px!important;
+}
+:root.dark #mainChat .msg-row .msg-body pre,
+:root.dark #mainChat .msg-row .msg-body pre code{background:rgba(0,0,0,.28)!important;}
+
+/* Mobile: fuller-width bubbles + comfortable composer */
+@media (max-width:900px){
+  #mainChat .msg-row[data-role="user"]{max-width:88%!important;}
+  #mainChat .msg-row[data-role="assistant"]{max-width:96%;}
+}
