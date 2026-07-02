@@ -35,6 +35,9 @@ const POSTS_LOG = path.join(HERMES_HOME, 'gologin_posts.jsonl');
 const SUPA_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
 const SUPA_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 const CLIENT_ID = (process.env.CLIENT_ID || '').trim();
+// Each agent has its OWN independent execution memory, keyed by this identity (set per agent via
+// GOLOGIN_AGENT). Empty (e.g. instant Chat posts) = the client's default execution memory.
+const AGENT = (process.env.GOLOGIN_AGENT || '').trim();
 
 async function supa(method, pathq, payload, extraHeaders) {
   const headers = Object.assign({
@@ -74,7 +77,8 @@ async function loadMemory(platform) {
   const empty = { selectors: {}, notes: '', runs: 0, _dirty: false };
   if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return empty;
   const r = await supa('GET', '/rest/v1/agent_memory?select=selectors,notes,runs&client_id=eq.'
-    + encodeURIComponent(CLIENT_ID) + '&platform=eq.' + encodeURIComponent(platform));
+    + encodeURIComponent(CLIENT_ID) + '&agent=eq.' + encodeURIComponent(AGENT)
+    + '&platform=eq.' + encodeURIComponent(platform));
   if (r.ok && Array.isArray(r.data) && r.data[0]) {
     return { selectors: r.data[0].selectors || {}, notes: r.data[0].notes || '',
              runs: r.data[0].runs || 0, _dirty: false };
@@ -84,8 +88,8 @@ async function loadMemory(platform) {
 async function saveMemory(platform, mem) {
   if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return;
   await supa('POST', '/rest/v1/agent_memory',
-    { client_id: CLIENT_ID, platform, selectors: mem.selectors || {}, notes: mem.notes || '',
-      runs: (mem.runs || 0) + 1, updated_at: new Date().toISOString() },
+    { client_id: CLIENT_ID, agent: AGENT, platform, selectors: mem.selectors || {},
+      notes: mem.notes || '', runs: (mem.runs || 0) + 1, updated_at: new Date().toISOString() },
     { Prefer: 'resolution=merge-duplicates,return=minimal' });
 }
 // Resolve a step's element: try the LEARNED selector first (fast), else walk candidate selectors
