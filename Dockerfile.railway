@@ -46,6 +46,11 @@ RUN set -e; \
 # No my.telegram.org / api_id / session needed. Set TELEGRAM_BOT_TOKEN in Railway.
 
 ENV HERMES_WEBUI_AGENT_DIR=/opt/hermes
+# Default workspace lives ON the persistent volume (not the ephemeral /workspace symlink). On a FRESH
+# volume the /workspace symlink is dangling → base init's `mkdir -p /workspace` errors "File exists" and
+# hard-exits (crash loop on first boot). Pointing it at the real volume path makes init create it cleanly
+# + it persists across redeploys, and the /workspace symlink then resolves to the same dir.
+ENV HERMES_WEBUI_DEFAULT_WORKSPACE=/home/hermeswebui/.hermes/workspace
 
 # ---- DAILY REFRESH BOUNDARY ----
 # The CI bumps buildstamp.txt each day; that invalidates every layer BELOW this line,
