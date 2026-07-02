@@ -115,13 +115,12 @@ button:active,.btn:active{ transform:translateY(1px); }
 /* Settings: show ONLY the Access Password (change password) — hide the section nav + everything else */
 #settingsMenu{ display:none !important; }
 .settings-pane:not(#settingsPaneSystem){ display:none !important; }
-#settingsPaneSystem{ display:flex !important; }
-#settingsPaneSystem .settings-section-head,
-#settingsPaneSystem #shutdownServerBlock,
-#settingsPaneSystem #passkeysSettingsBlock,
-#settingsPaneSystem #btnDisableAuth,
-#settingsPaneSystem #btnSignOut,
-#settingsPaneSystem .settings-field:has(#settingsDashboardMode){ display:none !important; }
+#settingsPaneSystem{ display:block !important; }
+#settingsPaneSystem .settings-section-head{ display:none !important; }
+#settingsPaneSystem .settings-field{ display:none !important; }         /* hide gateway/MCP/dashboard/shutdown/passkeys */
+#settingsPaneSystem .settings-field:has(#settingsPassword){ display:block !important; }  /* keep ONLY password */
+#settingsPaneSystem #btnDisableAuth, #settingsPaneSystem #btnSignOut{ display:none !important; }
+/* keep the "Save Settings" button visible (it saves the password) */
 .layout:has(> main.main.showing-social) .workspace-panel-edge-toggle,
 .layout:has(> main.main.showing-agents) .workspace-panel-edge-toggle,
 .layout:has(> main.main.showing-floor) .workspace-panel-edge-toggle,
