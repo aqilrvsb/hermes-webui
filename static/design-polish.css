@@ -147,3 +147,7 @@ button:active,.btn:active{ transform:translateY(1px); }
 
 /* Remove the right-edge workspace toggle on every tab */
 .workspace-panel-edge-toggle{ display:none !important; }
+
+/* SaaS: never show the base Hermes "First run" onboarding wizard — clients don't configure
+   providers (admin keys in Supabase do). It rendered dark-on-dark + is irrelevant here. */
+#onboardingOverlay{ display:none !important; }
