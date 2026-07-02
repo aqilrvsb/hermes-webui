@@ -25,7 +25,9 @@ ENV PATH="/opt/node/bin:${PATH}"
 # Pre-install MCP server packages so they start instantly (no boot-time npx download race)
 # NOTE: 'vercel' here is the Vercel CLI (not an MCP server). vercel-mcp was removed — it exited on launch.
 # The developer role deploys with `vercel --token $VERCEL_TOKEN` instead. Fully headless + reliable.
-RUN /opt/node/bin/npm install -g peninglab-mcp || true
+# GoLogin stack (100% GoLogin): gologin-mcp = profile/proxy mgmt; gologin = cloud-browser SDK (CDP);
+# gologin-agent-browser-cli = AI-agent command surface to drive the cloud browser (open/type/upload/click).
+RUN /opt/node/bin/npm install -g peninglab-mcp gologin-mcp gologin gologin-agent-browser-cli || true
 
 # Scrapling — stealth web scraping (REPLACES agentql + playwright MCP). Python lib; MCP server = `scrapling mcp` (stdio).
 # StealthyFetcher bypasses Cloudflare/anti-bot (Meta Ad Library) + adaptive self-healing selectors. Free (BSD-3).
