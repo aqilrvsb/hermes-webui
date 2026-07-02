@@ -5406,22 +5406,41 @@ def _reports_posts(handler, parsed):
                         u = first_str(m.get("url"), m.get("src"), m.get("thumbnailUrl"), m.get("thumbnail"))
                         if u:
                             murls.append(u)
-            plats = p.get("platforms") or ([p.get("platform")] if p.get("platform") else [])
-            if not isinstance(plats, list):
-                plats = [plats]
-            ppu = p.get("platformPostUrl") or p.get("platformPostUrls") or p.get("platform_post_url") or {}
-            for pl in plats:
-                pl = str(pl or "").lower()
+            # Zernio: `platforms` is a list of per-platform TARGET OBJECTS (platform, status, url, ...)
+            targets = []
+            plats = p.get("platforms")
+            if isinstance(plats, list) and plats:
+                for pt in plats:
+                    if isinstance(pt, dict):
+                        targets.append(pt)
+                    elif isinstance(pt, str):
+                        targets.append({"platform": pt})
+            elif p.get("platform"):
+                targets.append({"platform": p.get("platform"), "platformPostUrl": p.get("platformPostUrl")})
+            for pt in targets:
+                if not isinstance(pt, dict):
+                    continue
+                pl = str(pt.get("platform") or "").lower()
                 if not pl:
                     continue
-                link = ""
-                if isinstance(ppu, dict):
-                    link = ppu.get(pl) or ppu.get(pl.capitalize()) or ""
-                elif isinstance(ppu, str):
-                    link = ppu
+                link = first_str(pt.get("platformPostUrl"), pt.get("postUrl"), pt.get("url"),
+                                 p.get("platformPostUrl") if isinstance(p.get("platformPostUrl"), str) else "")
+                pdate = first_str(pt.get("publishedAt"), pt.get("published_at"), pt.get("scheduledFor"),
+                                  pt.get("scheduled_at"), dt)
+                st = str(pt.get("status") or p.get("status") or "").lower()
+                pm = list(murls)
+                cm = pt.get("customMedia") or pt.get("custommedia") or []
+                if isinstance(cm, list):
+                    for m in cm:
+                        if isinstance(m, str):
+                            pm.append(m)
+                        elif isinstance(m, dict):
+                            u = first_str(m.get("url"), m.get("src"))
+                            if u:
+                                pm.append(u)
                 names = agents_by_plat.get(pl) or []
-                out.append({"platform": pl, "date": dt, "content": content, "media": murls,
-                            "link": link, "agent": names[0] if len(names) == 1 else ""})
+                out.append({"platform": pl, "date": pdate, "content": content, "media": pm,
+                            "link": link, "status": st, "agent": names[0] if len(names) == 1 else ""})
 
         def keep(e):
             if plat and plat != "all" and e["platform"] != plat:
