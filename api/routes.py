@@ -5252,27 +5252,24 @@ def _agents_refine(description, platform):
 
 def _agents_list(handler):
     try:
-        from cron.jobs import list_jobs
-        from api.profiles import cron_profile_context
         meta = _agents_meta_load()
         agents = []
-        with cron_profile_context():
-            jobs = list_jobs(include_disabled=True)
-        for job in jobs:
-            jid = str(job.get("id") or "")
-            m = meta.get(jid)
-            if not m:
-                continue  # not created via the Agents tab
+        for aid, m in meta.items():
+            if not isinstance(m, dict):
+                continue
+            times = m.get("times")
+            if not times:
+                t = m.get("time")
+                times = [t] if t else []
             agents.append({
-                "agent_id": jid,
-                "name": job.get("name") or m.get("name") or "Agent",
+                "agent_id": aid,
+                "name": m.get("name") or "Agent",
                 "icon": m.get("icon") or "Claude-1",
                 "platform": m.get("platform") or "",
                 "timezone": m.get("timezone") or "",
-                "time": m.get("time") or "",
+                "times": times,
                 "description": m.get("description") or "",
-                "enabled": job.get("enabled", True),
-                "last_run_at": job.get("last_run_at"),
+                "job_ids": m.get("job_ids") or ([aid] if aid else []),
             })
         j(handler, {"agents": agents})
     except Exception as e:  # noqa: BLE001
@@ -5285,14 +5282,22 @@ def _agents_save(handler, body):
     icon = str(b.get("icon") or "Claude-1").strip()
     platform = str(b.get("platform") or "").lower().strip()
     tz_name = str(b.get("timezone") or "Asia/Kuala_Lumpur").strip()
-    hhmm = str(b.get("time") or "09:00").strip()
     description = str(b.get("description") or "").strip()
     agent_id = str(b.get("agent_id") or "").strip()
+    # Multiple daily run times: accept a list, or fall back to a single "time".
+    times = b.get("times")
+    if not isinstance(times, list) or not times:
+        one = str(b.get("time") or "").strip()
+        times = [one] if one else []
+    times = sorted({str(t).strip() for t in times if str(t).strip()})
     if not name or not description or platform not in _SOCIAL_PLATFORMS:
         bad(handler, "name, description and a valid platform are required", 400)
         return
+    if not times:
+        bad(handler, "at least one run time is required", 400)
+        return
     try:
-        schedule = _agents_schedule(tz_name, hhmm)
+        scheds = [(t, _agents_schedule(tz_name, t)) for t in times]
     except Exception as e:  # noqa: BLE001
         bad(handler, "bad timezone/time: %s" % e, 400)
         return
@@ -5302,21 +5307,31 @@ def _agents_save(handler, body):
         bad(handler, "AI refine failed: %s" % e, 502)
         return
     try:
-        from cron.jobs import create_job, update_job
+        import uuid as _uuid
+        from cron.jobs import create_job, remove_job
         from api.profiles import cron_profile_context
-        with cron_profile_context():
-            if agent_id:
-                job = update_job(agent_id, {"name": name, "prompt": prompt, "schedule": schedule})
-            else:
-                job = create_job(prompt=prompt, schedule=schedule, name=name,
-                                 deliver="local", skills=[], model=None)
-        if not job:
-            bad(handler, "agent not found", 404)
-            return
-        agent_id = str(job.get("id") or agent_id)
         meta = _agents_meta_load()
+        with cron_profile_context():
+            # On edit: remove the agent's existing cron jobs first (one per old time).
+            if agent_id:
+                for jid in ((meta.get(agent_id) or {}).get("job_ids") or [agent_id]):
+                    try:
+                        remove_job(jid)
+                    except Exception:
+                        pass
+            else:
+                agent_id = "agent_" + _uuid.uuid4().hex[:12]
+            # Create one cron job per requested daily time.
+            job_ids = []
+            for t, sched in scheds:
+                jn = name if len(scheds) == 1 else ("%s @ %s" % (name, t))
+                job = create_job(prompt=prompt, schedule=sched, name=jn,
+                                 deliver="local", skills=[], model=None)
+                if job and job.get("id"):
+                    job_ids.append(str(job["id"]))
         meta[agent_id] = {"name": name, "icon": icon, "platform": platform,
-                          "timezone": tz_name, "time": hhmm, "description": description}
+                          "timezone": tz_name, "times": times, "description": description,
+                          "job_ids": job_ids}
         _agents_meta_save(meta)
         j(handler, {"ok": True, "agent_id": agent_id, "prompt": prompt})
     except Exception as e:  # noqa: BLE001
@@ -5331,9 +5346,14 @@ def _agents_delete(handler, body):
     try:
         from cron.jobs import remove_job
         from api.profiles import cron_profile_context
-        with cron_profile_context():
-            remove_job(agent_id)
         meta = _agents_meta_load()
+        ids = (meta.get(agent_id) or {}).get("job_ids") or [agent_id]
+        with cron_profile_context():
+            for jid in ids:
+                try:
+                    remove_job(jid)
+                except Exception:
+                    pass
         if agent_id in meta:
             del meta[agent_id]
             _agents_meta_save(meta)

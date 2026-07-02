@@ -87,7 +87,7 @@ RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" hr
 COPY paste-image.js /apptoo/static/paste-image.js
 RUN sed -i 's#</body>#<script src="static/paste-image.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 # Hide the Kanban + To-Do tabs (unused in this marketing setup) — nav buttons carry data-panel="kanban"/"todos".
-RUN sed -i 's#</head>#<style>button[data-panel="kanban"],button[data-panel="todos"],button[data-panel="skills"],button[data-panel="workspaces"],button[data-panel="profiles"],button[data-panel="insights"],button[data-panel="logs"],a.rail-btn[href="/static/model-config.html"],a.rail-btn[href="/static/instruction.html"],a.rail-btn[href="/static/creatives.html"],a.rail-btn[href="/static/whatsnew.html"]{display:none!important}</style></head>#' /apptoo/static/index.html || true
+RUN sed -i 's#</head>#<style>button[data-panel="kanban"],button[data-panel="todos"],button[data-panel="tasks"],button[data-panel="memory"],button[data-panel="skills"],button[data-panel="workspaces"],button[data-panel="profiles"],button[data-panel="insights"],button[data-panel="logs"],a.rail-btn[href="/static/model-config.html"],a.rail-btn[href="/static/instruction.html"],a.rail-btn[href="/static/creatives.html"],a.rail-btn[href="/static/whatsnew.html"]{display:none!important}</style></head>#' /apptoo/static/index.html || true
 # Open the custom rail tabs IN-PAGE (themed iframe overlay) instead of a new browser tab.
 COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
