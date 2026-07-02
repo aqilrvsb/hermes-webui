@@ -42,7 +42,7 @@
   .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:42px 20px;font-size:14.5px}
   .overlay{position:fixed;inset:0;background:rgba(3,6,10,.72);display:none;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;z-index:50}
   .overlay.show{display:flex}
-  .modal{background:var(--card);border:1px solid var(--line);border-radius:18px;max-width:560px;width:100%;padding:20px}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:18px;max-width:560px;width:100%;padding:20px;max-height:calc(100dvh - 40px);overflow-y:auto}
   .modal h2{margin:0 0 14px;font-size:18px}
   label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:14px 0 6px}
   input,select,textarea{width:100%;font:inherit;color:var(--text);background:var(--card2);
@@ -52,7 +52,7 @@
   .icons{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
   .icons .ic{border:2px solid var(--line);border-radius:12px;background:var(--card2);padding:6px 0;display:grid;place-items:center;cursor:pointer}
   .icons .ic img{height:52px;image-rendering:pixelated}
-  .icons .ic.sel{border-color:var(--green);background:#14251a}
+  .icons .ic.sel{border-color:var(--green);background:#FFF1E6;box-shadow:0 0 0 3px rgba(242,107,33,.15)}
   .time-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .time-row input{flex:1}
   .time-x{flex:0 0 auto;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700}
@@ -96,8 +96,7 @@
     <div class="hint" id="plat-hint"></div>
     <label>Model (AI model this agent uses)</label>
     <select id="f-model"></select>
-    <label>Timezone</label>
-    <select id="f-tz"></select>
+    <div style="display:none"><label>Timezone</label><select id="f-tz"></select></div>
     <label>Run daily at — add one or more times</label>
     <div id="f-times"></div>
     <button type="button" class="btn ghost small" onclick="addTime()">+ Add time</button>
