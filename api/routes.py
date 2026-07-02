@@ -5319,6 +5319,14 @@ def _agents_save(handler, body):
     except Exception as e:  # noqa: BLE001
         bad(handler, "AI refine failed: %s" % e, 502)
         return
+    # Stamp this agent's identity so its posts are attributed to IT in Reporting (not "chat").
+    # (Execution memory stays per-platform/shared; only the post attribution is per-agent.)
+    _ident = (
+        'IDENTITY: You are the agent named "%s". Before running any $GOLOGIN_HELPER command, run:\n'
+        '  export GOLOGIN_AGENT="%s"\n'
+        'so every post you publish is attributed to YOU (by name) in the Reporting timeline.\n\n'
+    ) % (name.replace('"', "'"), name.replace('"', "'"))
+    prompt = _ident + prompt
     try:
         import uuid as _uuid
         from cron.jobs import create_job, remove_job
