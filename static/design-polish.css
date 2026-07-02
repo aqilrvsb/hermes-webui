@@ -59,6 +59,22 @@ button:active,.btn:active{ transform:translateY(1px); }
 /* Headings */
 .panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:-.01em; color:var(--strong); }
 
+/* ══ TOP NAVIGATION BAR (Caleido-style) — the left rail becomes a horizontal top bar, all sizes ══ */
+.app-titlebar{ display:none !important; }
+.layout{ position:relative; flex:1 1 auto; min-height:0; padding-top:56px; box-sizing:border-box; }
+.rail{
+  display:flex !important; position:absolute; top:0; left:0; right:0; z-index:60;
+  width:100% !important; height:56px !important; flex-direction:row !important;
+  align-items:center; gap:6px; padding:0 18px !important;
+  background:#FFFFFF !important; border-right:0 !important;
+  border-bottom:1px solid var(--border) !important; box-shadow:0 1px 2px rgba(34,28,20,.04);
+}
+.rail .rail-spacer{ flex:1 1 auto !important; width:auto !important; height:auto !important; }
+.rail .rail-btn{ width:42px !important; height:42px !important; border-radius:11px !important; }
+/* the mobile top nav is redundant now — the rail top bar serves every screen size */
+.sidebar > .sidebar-nav{ display:none !important; }
+.sidebar{ margin-top:0 !important; }
+
 /* Quiet scrollbars for light bg */
 *::-webkit-scrollbar{ width:9px; height:9px; }
 *::-webkit-scrollbar-thumb{ background:rgba(28,22,12,.18); border-radius:8px; }
