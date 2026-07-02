@@ -65,6 +65,7 @@ COPY static/index.html /apptoo/static/index.html
 COPY static/style.css /apptoo/static/style.css
 COPY static/panels.js /apptoo/static/panels.js
 COPY static/whatsapp.css /apptoo/static/whatsapp.css
+COPY static/design-polish.css /apptoo/static/design-polish.css
 # Live AI-agents dashboard, served same-origin from Hermes at /static/pixel.html
 COPY pixel.html /apptoo/static/pixel.html
 # Real Claude-Office room art + character sprites (MIT, W17ant/Claude-Office), web-light (~0.7MB).

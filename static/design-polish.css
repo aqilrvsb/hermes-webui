@@ -1,0 +1,45 @@
+/* ── Cohesive modern polish — ONE responsive template, app-wide. Refines the design tokens Hermes
+   already uses (--accent, surfaces, radii) so the whole UI re-themes consistently at every screen size.
+   Additive + revertable (just unlink). Pairs with whatsapp.css (chat bubbles). ── */
+
+/* Brand accent = social green — ties the chat, Social Connect and Agents together into one identity.
+   Overrides whatever skin is active (custom properties + !important win over skin vars). */
+:root{
+  --accent:#25c168 !important;
+  --accent-hover:#1fa957 !important;
+  --accent-bg:rgba(37,193,104,.10) !important;
+  --accent-bg-strong:rgba(37,193,104,.20) !important;
+  --accent-text:#1a8f4a !important;
+}
+:root.dark{ --accent-text:#4ade80 !important; }
+
+/* Rounder, softer surfaces across panels/cards/lists */
+.session-item,.cron-item,.cron-card,.kanban-card,.skill-card,.workspace-item,
+.profile-card,.msg-artifact,.settings-section,.insights-card,.card{
+  border-radius:12px !important;
+}
+
+/* Consistent radius on controls */
+button,.btn,.icon-btn,input,select,textarea,.composer-wrap,.composer-flyout{
+  border-radius:11px;
+}
+button,.btn{ transition:filter .15s, background .15s, transform .06s; }
+button:active,.btn:active{ transform:translateY(1px); }
+
+/* Nav: active tab as a soft accent pill (desktop rail + mobile bar) */
+.rail .rail-btn.nav-tab.active,
+.sidebar-nav .nav-tab.active{ background:var(--accent-bg) !important; border-radius:12px !important; }
+.rail .rail-btn.nav-tab{ border-radius:12px; transition:background .15s; }
+.rail .rail-btn.nav-tab:hover{ background:var(--accent-bg); }
+
+/* Panel + section titles a touch stronger */
+.panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:.01em; }
+
+/* Primary buttons feel a bit more substantial */
+.btn,.update-primary,button.primary,.composer-send,.send-btn{ font-weight:600; }
+
+/* Refined, quiet scrollbars */
+*::-webkit-scrollbar{ width:9px; height:9px; }
+*::-webkit-scrollbar-thumb{ background:var(--border); border-radius:8px; }
+*::-webkit-scrollbar-thumb:hover{ background:var(--muted); }
+*::-webkit-scrollbar-track{ background:transparent; }
