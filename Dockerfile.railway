@@ -86,6 +86,9 @@ COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 COPY global-model.js /apptoo/static/global-model.js
 RUN sed -i 's#</body>#<script src="static/global-model.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
+# Social Connect tab — connect Facebook/Threads/TikTok/Instagram for posting (Zernio-backed).
+COPY social.html /apptoo/static/social.html
+RUN sed -i 's#<div class="rail-spacer"></div>#<a class="rail-btn has-tooltip" href="/static/social.html" target="_blank" rel="noopener" data-tooltip="Social Connect" aria-label="Social Connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></a><div class="rail-spacer"></div>#' /apptoo/static/index.html || true
 # Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
 COPY tab-theme.js /apptoo/static/tab-theme.js
 COPY tab-theme.css /apptoo/static/tab-theme.css
