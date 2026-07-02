@@ -1,54 +1,66 @@
-/* ── Premium cohesive theme — ONE responsive template, app-wide. Refines Hermes design tokens
-   (--accent, surfaces, radii, type) so the whole UI feels like a polished product on desktop AND
-   mobile. Additive + revertable. Pairs with whatsapp.css (chat bubbles). ── */
+/* ══ CALEIDO-INSPIRED THEME — warm cream light + orange accent, one responsive template ══
+   Forces the light cream palette + orange accent on BOTH :root and :root.dark (neutralises the
+   dark toggle) so the whole app matches the reference regardless of theme. Token-driven + revertable. */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap');
 
-/* Brand accent = social green — one identity across chat, Social Connect, Agents. Beats any skin. */
-:root{
-  --accent:#25c168 !important;
-  --accent-hover:#1fa957 !important;
-  --accent-bg:rgba(37,193,104,.10) !important;
-  --accent-bg-strong:rgba(37,193,104,.20) !important;
-  --accent-text:#1a8f4a !important;
+:root, :root.dark{
+  /* Surfaces — warm cream, like the reference */
+  --bg:#FDFAF4 !important; --sidebar:#FAF6EE !important; --surface:#F4EFE5 !important;
+  --topbar-bg:rgba(250,246,238,.96) !important; --main-bg:rgba(253,250,244,0.7) !important;
+  --border:#EAE1D1 !important; --border2:rgba(28,22,12,0.12) !important;
+  --border-subtle:rgba(28,22,12,.07) !important; --border-muted:rgba(28,22,12,.12) !important;
+  /* Text */
+  --text:#221C14 !important; --strong:#120D07 !important; --muted:#6E6454 !important; --em:#5C5344 !important;
+  --input-bg:rgba(28,22,12,.03) !important; --hover-bg:rgba(28,22,12,.05) !important;
+  --surface-subtle:rgba(28,22,12,.025) !important; --surface-subtle-hover:rgba(28,22,12,.055) !important;
+  --code-bg:#F4EEE1 !important; --code-inline-bg:rgba(28,22,12,.06) !important; --code-text:#B4530F !important; --pre-text:#221C14 !important;
+  /* Orange accent (Caleido) */
+  --accent:#F26B21 !important; --accent-hover:#DD5A12 !important;
+  --accent-bg:rgba(242,107,33,0.10) !important; --accent-bg-strong:rgba(242,107,33,0.18) !important;
+  --accent-text:#C9500E !important;
+  --focus-ring:rgba(242,107,33,.35) !important; --focus-glow:rgba(242,107,33,.12) !important;
 }
-:root.dark{ --accent-text:#4ade80 !important; }
 
 /* Premium typography */
 body, button, input, select, textarea, .msg-body, .panel-head, .main-view-title{
-  font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif !important;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
 
-/* Rounder, softer surfaces + gentle lift on interactive cards */
+/* Cards: white, rounded, soft warm shadow + gentle hover-lift */
 .session-item,.cron-item,.cron-card,.kanban-card,.skill-card,.workspace-item,.profile-card,
-.msg-artifact,.settings-section,.insights-card,.card{ border-radius:14px !important; }
-.session-item,.cron-card,.kanban-card,.skill-card,.workspace-item,.profile-card{
-  transition:transform .14s ease, box-shadow .18s ease, background .16s ease;
+.msg-artifact,.settings-section,.insights-card,.card{
+  background:#FFFFFF !important; border:1px solid var(--border) !important; border-radius:14px !important;
+  box-shadow:0 1px 2px rgba(34,28,20,.05) !important;
 }
-.session-item:hover,.cron-card:hover,.kanban-card:hover,.skill-card:hover,
-.workspace-item:hover,.profile-card:hover{ transform:translateY(-1px); }
+.session-item,.cron-card,.kanban-card,.skill-card,.workspace-item,.profile-card{
+  transition:transform .14s ease, box-shadow .18s ease;
+}
+.session-item:hover,.cron-card:hover,.kanban-card:hover,.skill-card:hover,.workspace-item:hover,.profile-card:hover{
+  transform:translateY(-1px); box-shadow:0 8px 20px rgba(34,28,20,.10) !important;
+}
 
-/* Controls: consistent radius + smooth press */
+/* Controls */
 button,.btn,.icon-btn,input,select,textarea,.composer-wrap,.composer-flyout{ border-radius:12px; }
 button,.btn{ transition:transform .08s ease, box-shadow .18s ease, filter .18s ease, background .16s ease; }
 button:active,.btn:active{ transform:translateY(1px); }
 
-/* Primary actions: subtle gradient + soft glow (targeted, not every button) */
+/* Primary actions: orange gradient + glow */
 .update-primary,.composer-send,.send-btn,#btnApplyUpdate,button.primary,.btn.primary{
-  background:linear-gradient(180deg,var(--accent),var(--accent-hover)) !important;
-  box-shadow:0 3px 12px rgba(37,193,104,.30) !important; color:#04140a !important; font-weight:600;
+  background:linear-gradient(180deg,#F8863F,#F26B21) !important;
+  box-shadow:0 3px 12px rgba(242,107,33,.30) !important; color:#fff !important; font-weight:600;
 }
 
-/* Navigation: soft accent pills + hover (desktop rail + mobile bar) */
-.rail .rail-btn.nav-tab{ border-radius:13px; transition:background .16s ease, transform .08s ease; }
+/* Navigation: soft orange pills */
+.rail .rail-btn.nav-tab{ border-radius:13px; transition:background .16s ease; }
 .rail .rail-btn.nav-tab:hover{ background:var(--accent-bg); }
-.rail .rail-btn.nav-tab.active,.sidebar-nav .nav-tab.active{ background:var(--accent-bg) !important; border-radius:13px !important; }
+.rail .rail-btn.nav-tab.active,.sidebar-nav .nav-tab.active{ background:var(--accent-bg) !important; color:var(--accent-text) !important; border-radius:13px !important; }
 
-/* Headings a touch tighter/stronger */
-.panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:-.01em; }
+/* Headings */
+.panel-head>span,.panel-head [data-i18n],.main-view-title{ font-weight:700; letter-spacing:-.01em; color:var(--strong); }
 
-/* Refined, quiet scrollbars */
+/* Quiet scrollbars for light bg */
 *::-webkit-scrollbar{ width:9px; height:9px; }
-*::-webkit-scrollbar-thumb{ background:var(--border); border-radius:8px; }
-*::-webkit-scrollbar-thumb:hover{ background:var(--muted); }
+*::-webkit-scrollbar-thumb{ background:rgba(28,22,12,.18); border-radius:8px; }
+*::-webkit-scrollbar-thumb:hover{ background:rgba(28,22,12,.32); }
 *::-webkit-scrollbar-track{ background:transparent; }

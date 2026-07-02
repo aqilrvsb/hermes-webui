@@ -7,8 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0b0f14; --card:#151b23; --card2:#1b232d; --line:#26313d;
-    --text:#e7edf3; --muted:#8a97a6; --green:#25c168; --red:#ef4444;
+    --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1;
+    --text:#221C14; --muted:#6E6454; --green:#F26B21; --red:#ef4444;
     --radius:16px;
   }
   *{box-sizing:border-box}
@@ -63,13 +63,13 @@
     color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:99}
   .toast.show{opacity:1}
   @media(max-width:560px){.icons{grid-template-columns:repeat(5,1fr)}}
-  /* ── premium polish ── */
+  /* ── premium polish (light + orange) ── */
   body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
   h1{letter-spacing:-.02em;}
   .card{transition:transform .16s ease,box-shadow .2s ease,border-color .2s}
-  .card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.32);border-color:#2f3b48}
-  .btn:not(.ghost):not(.danger){background:linear-gradient(180deg,#25c168,#1fa957)!important;box-shadow:0 3px 12px rgba(37,193,104,.30)}
-  .btn:not(.ghost):not(.danger):hover{filter:brightness(1.05);box-shadow:0 5px 16px rgba(37,193,104,.40)}
+  .card:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(34,28,20,.12);border-color:#E0D6C4}
+  .btn:not(.ghost):not(.danger){background:linear-gradient(180deg,#F8863F,#F26B21)!important;color:#fff!important;box-shadow:0 3px 12px rgba(242,107,33,.30)}
+  .btn:not(.ghost):not(.danger):hover{filter:brightness(1.05);box-shadow:0 5px 16px rgba(242,107,33,.42)}
 </style>
 </head>
 <body>
