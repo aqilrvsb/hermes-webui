@@ -36,11 +36,31 @@ def _supa_settings():
     except Exception as e:
         print("== mcp_setup: supabase settings fetch failed:", e, "==")
         return {}
+def _supa_clients():
+    """Map hermes_profile -> that client's own OpenRouter key (for mode='client')."""
+    import json as _sj, urllib.request as _sr
+    url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
+    key = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip()
+    if not url or not key:
+        return {}
+    try:
+        req = _sr.Request(url + "/rest/v1/clients?select=hermes_profile,openrouter_key")
+        req.add_header("apikey", key); req.add_header("Authorization", "Bearer " + key)
+        with _sr.urlopen(req, timeout=15) as resp:
+            rows = _sj.loads(resp.read().decode("utf-8"))
+        return {r["hermes_profile"]: (r.get("openrouter_key") or "")
+                for r in rows if isinstance(r, dict) and r.get("hermes_profile")}
+    except Exception as e:
+        print("== mcp_setup: supabase clients fetch failed:", e, "==")
+        return {}
 _SUPA = _supa_settings()
 GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_TOKEN")
                  or _SUPA.get("gologin_token", "")).strip()
-# OpenRouter key: env first, else the Admin-managed key from Supabase.
+# OpenRouter key: env first, else the Admin-managed shared key from Supabase.
 OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or _SUPA.get("openrouter_key", "")).strip()
+# Mode: 'admin' = everyone uses the shared key; 'client' = each client's own key (from their Settings).
+OPENROUTER_MODE = (_SUPA.get("openrouter_mode") or "admin").strip()
+_CLIENT_OR_KEYS = _supa_clients() if OPENROUTER_MODE == "client" else {}
 servers = {
     "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; keep 900s so they finish + don't double-charge
 }
@@ -118,7 +138,10 @@ for home in homes():
     #   openrouter -> https://openrouter.ai/api/v1   (key ${OPENROUTER_API_KEY}) [alternate + fallback/auto]
     #   grsai      -> https://grsaiapi.com/v1        (key ${GRSAI_API_KEY})      [image/PDF gemini + fallback]
     HAS_OC = bool(os.environ.get("OPENCODE_API_KEY", "").strip())
-    HAS_OR = bool(OPENROUTER_KEY)
+    # Per-profile effective key: client's own (mode='client') else the shared admin key.
+    _PROF_OR = ((_CLIENT_OR_KEYS.get(name, "") or "").strip() if OPENROUTER_MODE == "client" else "") \
+        or OPENROUTER_KEY
+    HAS_OR = bool(_PROF_OR)
     HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
     HAS_AM = bool(os.environ.get("AIMURAH_API_KEY", "").strip())   # AIMurah (aimurah.my.id) — OpenAI-compatible; FREE claude-sonnet-4.5/haiku-4.5
     if HAS_OR:
@@ -129,9 +152,9 @@ for home in homes():
                      "openrouter/auto", "google/gemini-2.5-pro", "google/gemini-2.5-flash",
                      "openai/gpt-5.4", "deepseek/deepseek-chat"]
         OR_DEFAULT = os.environ.get("OPENROUTER_DEFAULT_MODEL", "").strip() or "openai/gpt-4.1"
-        # Use the literal key so it works whether it came from env OR the Admin panel (Supabase);
-        # env-ref "${OPENROUTER_API_KEY}" would NOT resolve for an Admin-provided key.
-        OR_KEY = OPENROUTER_KEY or "${OPENROUTER_API_KEY}"
+        # Use the literal key so it works whether it came from env, the Admin panel, or the client's
+        # own Settings; env-ref "${OPENROUTER_API_KEY}" would NOT resolve for a DB-provided key.
+        OR_KEY = _PROF_OR or "${OPENROUTER_API_KEY}"
         # Drop any previously-persisted providers we no longer use (minimax/opencode/grsai/aimurah/apipod).
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()

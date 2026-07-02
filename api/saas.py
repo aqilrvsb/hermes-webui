@@ -459,9 +459,21 @@ def saas_me(handler):
 
 # ── Admin endpoints ──────────────────────────────────────────────────────────
 
-# Admin exposes ONLY the two keys the user wants to manage: GoLogin + OpenRouter.
-# (proxy country defaults to MY, admin_emails is seeded server-side — both still read by setting().)
-_ADMIN_KEYS = ("gologin_token", "openrouter_key")
+# Admin manages: GoLogin token, the shared OpenRouter key, and the OpenRouter MODE.
+# mode 'admin' -> every client uses the shared key; mode 'client' -> each client fills their own
+# key in their Settings. (proxy country defaults to MY, admin_emails seeded server-side.)
+_ADMIN_KEYS = ("gologin_token", "openrouter_key", "openrouter_mode")
+
+
+def openrouter_key_for(client_info) -> str:
+    """Resolve the OpenRouter key for a client per the admin-selected mode."""
+    mode = setting("openrouter_mode", "admin")
+    if mode == "client" and client_info and client_info.get("id"):
+        c = _client_by_id(client_info["id"])
+        k = ((c or {}).get("openrouter_key") or "").strip()
+        if k:
+            return k
+    return setting("openrouter_key")
 
 
 def saas_admin_settings_get(handler):
@@ -498,6 +510,43 @@ def saas_admin_clients(handler):
         return
     st, rows = _supa("GET", "/rest/v1/clients?select=email,hermes_profile,gologin_profile_id,is_admin,created_at&order=created_at.desc")
     j(handler, {"clients": rows if isinstance(rows, list) else []})
+
+
+# ── Per-client OpenRouter key (Settings tab, only in mode='client') ──────────
+
+def saas_client_openrouter_get(handler):
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    mode = setting("openrouter_mode", "admin")
+    key = ""
+    if mode == "client":
+        c = _client_by_id(info.get("id") or "")
+        key = ((c or {}).get("openrouter_key") or "").strip()
+    j(handler, {"mode": mode, "has_key": bool(key),
+                "masked": ("*" * 8 + key[-6:]) if len(key) > 10 else ""})
+
+
+def saas_client_openrouter_post(handler, body):
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    if setting("openrouter_mode", "admin") != "client":
+        bad(handler, "the shared AI key is managed by the admin", 403)
+        return
+    key = str((body or {}).get("key") or "").strip()
+    if key and not key.startswith("sk-"):
+        bad(handler, "that doesn't look like an OpenRouter key (starts with sk-)", 400)
+        return
+    st, _res = _supa("PATCH", "/rest/v1/clients?id=eq." + urllib.parse.quote(info.get("id") or ""),
+                     {"openrouter_key": key})
+    if st not in (200, 204):
+        bad(handler, "save failed (%s)" % st, 502)
+        return
+    _apply_boot_config()   # rewrite this client's profile config.yaml with their key
+    j(handler, {"ok": True, "has_key": bool(key)})
 
 
 # ── Social Connect (GoLogin cloud browser) ───────────────────────────────────
@@ -760,6 +809,8 @@ def handle_saas_get(handler, parsed) -> bool:
         saas_admin_settings_get(handler)
     elif p == "/api/saas/admin/clients":
         saas_admin_clients(handler)
+    elif p == "/api/saas/client/openrouter":
+        saas_client_openrouter_get(handler)
     else:
         return False
     return True
@@ -775,6 +826,8 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_logout(handler)
     elif p == "/api/saas/admin/settings":
         saas_admin_settings_post(handler, body)
+    elif p == "/api/saas/client/openrouter":
+        saas_client_openrouter_post(handler, body)
     elif p == "/api/social/check":
         saas_social_check(handler, body)
     elif p == "/api/social/stop":

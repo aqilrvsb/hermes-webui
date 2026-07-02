@@ -43,8 +43,14 @@
     <h2>API Keys</h2>
     <div class="fld"><label>GoLogin token</label><input id="k-gologin_token" placeholder="paste a new token to change">
       <div class="hint">Dev token from app.gologin.com → Personal Area → API Token. Powers every client's Malaysia cloud browser.</div></div>
-    <div class="fld"><label>OpenRouter key</label><input id="k-openrouter_key" placeholder="sk-or-v1-…">
-      <div class="hint">Powers the AI for every client's chat + agents.</div></div>
+    <div class="fld"><label>OpenRouter key mode</label>
+      <select id="k-openrouter_mode">
+        <option value="admin">Shared — all clients use this admin key</option>
+        <option value="client">Bring-your-own — each client fills their own key in Settings</option>
+      </select>
+      <div class="hint">In BYO mode, clients without a key fall back to the shared key below.</div></div>
+    <div class="fld"><label>OpenRouter key (shared)</label><input id="k-openrouter_key" placeholder="sk-or-v1-…">
+      <div class="hint">Powers the AI (chat + agents). Used for everyone in Shared mode, and as fallback in BYO mode.</div></div>
     <button class="btn" id="save" onclick="save()">Save keys</button>
     <div class="msg" id="msg"></div>
   </div>
@@ -62,7 +68,7 @@
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const KEYS=['gologin_token','openrouter_key'];
+const KEYS=['gologin_token','openrouter_key','openrouter_mode'];
 
 async function load(){
   const r=await fetch('/api/saas/admin/settings',{credentials:'same-origin'});

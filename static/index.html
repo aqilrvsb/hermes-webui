@@ -1563,6 +1563,42 @@
 fetch('/api/saas/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
   if(d&&d.is_admin) document.querySelectorAll('.saas-admin-only').forEach(el=>el.style.display='');
 }).catch(()=>{});
+
+/* SaaS: in BYO mode, give the client an OpenRouter key field in Settings */
+(function(){
+  function csrfHeaders(){ var h={'Content-Type':'application/json'}; try{ if(window.hermesCsrfToken) h['X-Hermes-CSRF-Token']=window.hermesCsrfToken; }catch(e){} return h; }
+  function inject(d){
+    if(!d || d.mode!=='client') return;
+    var pane=document.getElementById('settingsPaneSystem'); if(!pane || document.getElementById('saasOrCard')) return;
+    var card=document.createElement('div');
+    card.id='saasOrCard';
+    card.style.cssText='background:#fff;border:1px solid var(--border,#EAE1D1);border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:0 1px 2px rgba(34,28,20,.05)';
+    card.innerHTML=''
+      +'<div style="font-weight:700;margin-bottom:4px">Your OpenRouter key</div>'
+      +'<div style="font-size:12.5px;color:var(--muted,#6E6454);margin-bottom:10px">Powers your chat + agents. Get one at openrouter.ai/keys.</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<input id="saasOrKey" type="password" placeholder="'+(d.has_key?('Saved '+(d.masked||'••••')):'sk-or-v1-…')+'" style="flex:1;font:inherit;padding:9px 11px;border:1px solid var(--border,#EAE1D1);border-radius:10px;background:var(--input-bg,#FAF6EE);color:inherit;outline:none">'
+      +'<button id="saasOrSave" style="font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:10px;padding:9px 16px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21)">Save</button>'
+      +'</div><div id="saasOrMsg" style="font-size:12.5px;margin-top:8px"></div>';
+    pane.insertBefore(card, pane.firstChild);
+    document.getElementById('saasOrSave').onclick=function(){
+      var v=document.getElementById('saasOrKey').value.trim(); var m=document.getElementById('saasOrMsg');
+      this.disabled=true;
+      fetch('/api/saas/client/openrouter',{method:'POST',credentials:'same-origin',headers:csrfHeaders(),body:JSON.stringify({key:v})})
+        .then(r=>r.json()).then(res=>{
+          if(res.error) throw new Error(res.error);
+          m.style.color='#1a8f4a'; m.textContent=res.has_key?'Saved — your key is active.':'Cleared — using the shared key.';
+        }).catch(e=>{ m.style.color='#c0392b'; m.textContent=e.message; })
+        .then(function(){ document.getElementById('saasOrSave').disabled=false; });
+    };
+  }
+  fetch('/api/saas/client/openrouter',{credentials:'same-origin'}).then(r=>r.json()).then(function(d){
+    var tries=0; var iv=setInterval(function(){ tries++;
+      if(document.getElementById('settingsPaneSystem')){ clearInterval(iv); inject(d); }
+      else if(tries>40) clearInterval(iv);
+    },300);
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
