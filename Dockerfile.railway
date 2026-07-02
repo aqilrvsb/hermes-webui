@@ -93,6 +93,9 @@ COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 COPY global-model.js /apptoo/static/global-model.js
 RUN sed -i 's#</body>#<script src="static/global-model.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
+# Cache-bust our custom CSS/JS on EVERY build (replace the constant ?v=hermes with a unique build id)
+# so theme/UI changes actually reach browsers instead of serving a stale cached file.
+RUN sed -i "s/?v=hermes/?v=b$(date +%s)/g" /apptoo/static/index.html || true
 # Social Connect + Agents tab content — served in the NATIVE inline #mainSocial / #mainAgents iframes
 # (rail buttons + main views are baked into our COPY'd static/index.html above; no <a> injection needed).
 COPY social.html /apptoo/static/social.html
