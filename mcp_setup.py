@@ -125,67 +125,32 @@ for home in homes():
     HAS_OR = bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
     HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
     HAS_AM = bool(os.environ.get("AIMURAH_API_KEY", "").strip())   # AIMurah (aimurah.my.id) — OpenAI-compatible; FREE claude-sonnet-4.5/haiku-4.5
-    if HAS_OC or HAS_OR or HAS_AM:
-        OC_BASE = "https://opencode.ai/zen/go/v1"
+    if HAS_OR:
         OR_BASE = "https://openrouter.ai/api/v1"
-        GRSAI_BASE = "https://grsaiapi.com/v1"
-        OC_MODELS = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "kimi-k2.6", "kimi-k2.5",
-                     "glm-5.1", "glm-5", "deepseek-v4-pro", "deepseek-v4-flash",
-                     "mimo-v2.5-pro", "qwen3.7-plus", "qwen3.7-max"]
-        OR_MODELS = ["minimax/minimax-m3", "openrouter/auto", "anthropic/claude-sonnet-4.5",
-                     "google/gemini-2.5-flash", "openai/gpt-5.4"]
-        GRSAI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-2.5-flash",
-                        "gemini-2.5-pro", "gpt-image-2", "gpt-5.5"]
-        AM_BASE = "https://aimurah.my.id/api/v1"   # AIMurah — OpenAI-compatible (/chat/completions + /messages). IDs verified live from /v1/models.
-        AM_MODELS = ["claude-sonnet-4.5", "claude-sonnet-4.6", "claude-sonnet-4.5-1m",   # claude-sonnet-4.5 FREE; 4.6 PRO; 1M ctx variant
-                     "oa-DeepSeek-V4-Pro", "oa-Kimi-K2.6", "oa-Qwen3.7-Max", "oa-MiniMax-M2.7",  # FREE strong reasoners
-                     "minimax-m3", "glm-5", "open-agentic",             # FREE
-                     "claude-opus-4.8", "claude-opus-4.8-thinking", "claude-opus-4.7",  # PRO - Opus
-                     "claude-opus-4.7-thinking", "claude-opus-4.6", "claude-opus-4.6-thinking",
-                     "claude-sonnet-4", "gpt-5.5", "gpt-5.4", "gemini-3.1-pro-preview", "gemini-2.5-pro"]  # PRO
+        # Pickable models — shown in the chat model dropdown (dynamic pick, live per-chat + per-agent).
+        # Add/remove any OpenRouter model id freely; the DEFAULT below is just the startup model.
+        OR_MODELS = ["openai/gpt-4.1", "anthropic/claude-sonnet-4.5", "openrouter/auto",
+                     "google/gemini-2.5-pro", "google/gemini-2.5-flash", "openai/gpt-5.4", "deepseek/deepseek-chat"]
+        OR_DEFAULT = os.environ.get("OPENROUTER_DEFAULT_MODEL", "").strip() or "openai/gpt-4.1"
+        # Drop any previously-persisted providers we no longer use (minimax/opencode/grsai/aimurah/apipod).
         cps = [c for c in (cfg.get("custom_providers") or [])
                if isinstance(c, dict) and str(c.get("name") or "").lower()
-               not in ("apipod", "apipod-gpt")]   # drop the old APIPod providers
-        have = {str(c.get("name") or "").lower() for c in cps if isinstance(c, dict)}
-        if HAS_OC and "opencode" not in have:
-            cps.append({"name": "opencode", "base_url": OC_BASE,
-                        "api_key": "${OPENCODE_API_KEY}", "models": OC_MODELS})
-        if HAS_OR and "openrouter" not in have:
-            cps.append({"name": "openrouter", "base_url": OR_BASE,
-                        "api_key": "${OPENROUTER_API_KEY}", "models": OR_MODELS})
-        if HAS_GR and "grsai" not in have:
-            cps.append({"name": "grsai", "base_url": GRSAI_BASE,
-                        "api_key": "${GRSAI_API_KEY}", "models": GRSAI_MODELS})
-        if HAS_AM and "aimurah" not in have:
-            # models MUST be a DICT (model_id -> {}) — resolve_model_provider only reads custom_providers'
-            # models when it's a dict (api/config.py ~L1846). As a list it's ignored -> Hermes can't route
-            # ids that aren't in AIMurah's live /v1/models (e.g. claude-sonnet-4.6) and falls back to minimax.
-            cps.append({"name": "aimurah", "base_url": AM_BASE,
-                        "api_key": "${AIMURAH_API_KEY}", "models": {m: {} for m in AM_MODELS}})
+               not in ("apipod", "apipod-gpt", "opencode", "grsai", "aimurah")]
+        or_entry = {"name": "openrouter", "base_url": OR_BASE,
+                    "api_key": "${OPENROUTER_API_KEY}", "models": OR_MODELS}
+        found = False
+        for c in cps:
+            if isinstance(c, dict) and str(c.get("name") or "").lower() == "openrouter":
+                c.update(or_entry); found = True   # refresh the pick-list (drop stale minimax etc.)
+        if not found:
+            cps.append(or_entry)
         cfg["custom_providers"] = cps
-        # MAIN (chat + agents default). Prefer AIMurah claude-sonnet-4.5 (multimodal -> covers chat AND image/PDF),
-        # then OpenCode minimax-m3, then OpenRouter. (Switchable live in the chat dropdown + per-agent.)
-        if HAS_AM:
-            cfg["model"] = {"provider": "aimurah", "base_url": AM_BASE,
-                            "api_key": "${AIMURAH_API_KEY}", "default": "claude-sonnet-4.5"}
-        elif HAS_OC:
-            cfg["model"] = {"provider": "opencode", "base_url": OC_BASE,
-                            "api_key": "${OPENCODE_API_KEY}", "default": "minimax-m3"}
-        else:
-            cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
-                            "api_key": "${OPENROUTER_API_KEY}", "default": "minimax/minimax-m3"}
-        # FALLBACK on error -> OpenCode minimax-m3 (cheap/reliable), then OpenRouter auto, then GRSAI gemini.
-        fb = []
-        if HAS_OC:
-            fb.append({"provider": "opencode", "model": "minimax-m3",
-                       "base_url": OC_BASE, "api_key": "${OPENCODE_API_KEY}"})
-        if HAS_OR:
-            fb.append({"provider": "openrouter", "model": "openrouter/auto",
-                       "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"})
-        if HAS_GR:
-            fb.append({"provider": "grsai", "model": "gemini-3.1-flash-lite",
-                       "base_url": GRSAI_BASE, "api_key": "${GRSAI_API_KEY}"})
-        cfg["fallback_providers"] = fb
+        # DEFAULT model (chat + agents). Switchable live in the dropdown; override via OPENROUTER_DEFAULT_MODEL.
+        cfg["model"] = {"provider": "openrouter", "base_url": OR_BASE,
+                        "api_key": "${OPENROUTER_API_KEY}", "default": OR_DEFAULT}
+        # Fallback on error -> OpenRouter auto-routing.
+        cfg["fallback_providers"] = [{"provider": "openrouter", "model": "openrouter/auto",
+                                      "base_url": OR_BASE, "api_key": "${OPENROUTER_API_KEY}"}]
     try:
         os.makedirs(home, exist_ok=True)
         yaml.safe_dump(cfg, open(p, "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)

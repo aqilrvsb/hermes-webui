@@ -84,6 +84,8 @@ RUN sed -i 's#</head>#<style>button[data-panel="kanban"],button[data-panel="todo
 # Open the custom rail tabs IN-PAGE (themed iframe overlay) instead of a new browser tab.
 COPY custom-tabs.js /apptoo/static/custom-tabs.js
 RUN sed -i 's#</body>#<script src="static/custom-tabs.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
+COPY global-model.js /apptoo/static/global-model.js
+RUN sed -i 's#</body>#<script src="static/global-model.js?v=hermes"></script></body>#' /apptoo/static/index.html || true
 # Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
 COPY tab-theme.js /apptoo/static/tab-theme.js
 COPY tab-theme.css /apptoo/static/tab-theme.css
