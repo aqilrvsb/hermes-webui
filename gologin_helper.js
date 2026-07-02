@@ -159,6 +159,15 @@ async function cmdLoginStatus(browser, wanted) {
   return { connected: result };
 }
 
+// Navigate the running cloud browser to a URL (used when "Connect <platform>" is clicked so the
+// live-view lands on that platform's login page). Reuses the existing first tab.
+async function cmdOpenUrl(browser, url) {
+  const page = await newPage(browser);
+  try { await page.bringToFront(); } catch (e) {}
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+  return { url, title: await page.title().catch(() => '') };
+}
+
 async function cmdScrape(browser, url, selector) {
   const page = await newPage(browser);
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -250,6 +259,7 @@ async function main() {
     browser = await connect(token, profileId);
     let result;
     if (cmd === 'login-status') result = await cmdLoginStatus(browser, (a1 ? a1.split(',') : []).map((s) => s.trim()).filter(Boolean));
+    else if (cmd === 'open-url') result = await cmdOpenUrl(browser, a1);
     else if (cmd === 'scrape') result = await cmdScrape(browser, a1, a2);
     else if (cmd === 'screenshot') result = await cmdScreenshot(browser, a1, a2);
     else if (cmd === 'post') {

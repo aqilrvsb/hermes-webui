@@ -130,7 +130,7 @@ function render(connected, checkedAt){
       </div>`;
     const btn=document.createElement("button");
     btn.textContent = on ? "Manage" : "Connect";
-    btn.onclick = ()=>openLive();
+    btn.onclick = ()=>openLive(p);
     row.appendChild(btn);
     list.appendChild(row);
   });
@@ -150,13 +150,17 @@ async function loadStatus(){
   }
 }
 
-// ── GoLogin: start the client's cloud browser and embed the live view ──
-async function openLive(){
-  toast("Starting your cloud browser…");
+// ── GoLogin: start the client's cloud browser, land on the platform login, embed the live view ──
+async function openLive(p){
+  const name = p ? p.name : "your accounts";
+  toast("Opening "+name+" in your cloud browser…");
   try{
-    const r=await post("/api/social/connect",{});
+    const r=await post("/api/social/connect",{platform:p?p.id:""});
     const d=await r.json();
     if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
+    $("#lv-hint").textContent = p
+      ? ("Log into "+p.name+" in the browser below (it's opening "+p.name+".com), then press “I'm done”.")
+      : "Log into your accounts in the browser below, then press “I'm done”.";
     $("#lv-frame").src=d.liveUrl;
     $("#lv").classList.add("open");
   }catch(e){ toast("Could not start the browser: "+e.message); }
@@ -165,6 +169,8 @@ async function openLive(){
 function closeLive(){
   $("#lv").classList.remove("open");
   $("#lv-frame").src="about:blank";
+  // stop the cloud session so it doesn't keep burning proxy time
+  post("/api/social/stop",{}).catch(()=>{});
 }
 
 // "I'm done" → the agent opens each platform in your browser and detects the logins.

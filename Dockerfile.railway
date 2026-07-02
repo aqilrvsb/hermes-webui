@@ -151,6 +151,9 @@ ENV HERMES_GOLOGIN_HELPER=/apptoo/gologin_helper.js \
     GOLOGIN_HELPER=/apptoo/gologin_helper.js
 # Auth: allow the SaaS login/register endpoints through the core auth gate (frozenset in api/auth.py)
 RUN sed -i "s#'/api/auth/login', '/api/auth/status',#'/api/auth/login', '/api/auth/status', '/api/saas/login', '/api/saas/register',#" /apptoo/api/auth.py || true
+# CSP: our SaaS tabs are same-origin iframes (index.html frames /static/*.html). frame-ancestors 'none'
+# fires a report-only violation per tab (console noise). Allow same-origin framing (still blocks cross-site).
+RUN sed -i "s/frame-ancestors 'none'/frame-ancestors 'self'/g" /apptoo/api/helpers.py || true
 COPY mcp_setup.py /opt/mcp_setup.py
 COPY start_gateways.sh /opt/start_gateways.sh
 COPY init_workspaces.sh /opt/init_workspaces.sh

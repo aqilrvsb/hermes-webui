@@ -676,8 +676,32 @@ def saas_social_status(handler):
                 "platforms": list(_SOCIAL_PLATFORMS)})
 
 
+# Where each "Connect <platform>" should land the browser (login page).
+_PLATFORM_LOGIN = {
+    "facebook": "https://www.facebook.com/login",
+    "threads": "https://www.threads.net/login",
+    "tiktok": "https://www.tiktok.com/login",
+    "instagram": "https://www.instagram.com/accounts/login/",
+}
+
+
+def _run_helper_detached(pid: str, args: list, profile: str) -> None:
+    """Fire the GoLogin helper without blocking the request (e.g. navigate the live browser)."""
+    helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
+    env = dict(os.environ)
+    env["GOLOGIN_API_TOKEN"] = _gologin_token()
+    env["GOLOGIN_PROFILE_ID"] = pid
+    if profile:
+        env["HERMES_HOME"] = str(_resolve_profile_home_for_name(profile))
+    try:
+        subprocess.Popen([_node_bin(), helper] + args, env=env,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("helper detached run failed: %s", e)
+
+
 def saas_social_connect(handler, body):
-    """Start the client's cloud browser session -> return the live-view URL for the iframe."""
+    """Start the client's cloud browser -> navigate it to the platform login -> return live-view URL."""
     info, pid = _client_gologin_pid(handler)
     if not info:
         bad(handler, "not logged in", 401)
@@ -685,6 +709,7 @@ def saas_social_connect(handler, body):
     if not pid:
         bad(handler, "no GoLogin profile provisioned for this account yet", 409)
         return
+    plat = str((body or {}).get("platform") or "").lower().strip()
     st, res = _gologin("POST", "/browser/%s/web" % pid, {})
     if st not in (200, 201, 202):
         bad(handler, "cloud browser start failed (%s): %s" % (st, json.dumps(res)[:200]), 502)
@@ -693,7 +718,11 @@ def saas_social_connect(handler, body):
     if not url:
         bad(handler, "no live-view url returned", 502)
         return
-    j(handler, {"liveUrl": url, "status": res.get("status") or ""})
+    # Land the (already-streaming) browser on the platform's login page — async so we reply instantly.
+    login_url = _PLATFORM_LOGIN.get(plat)
+    if login_url:
+        _run_helper_detached(pid, ["open-url", login_url], info.get("profile") or "")
+    j(handler, {"liveUrl": url, "status": res.get("status") or "", "platform": plat})
 
 
 def saas_social_stop(handler, body):
