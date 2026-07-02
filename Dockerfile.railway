@@ -103,6 +103,7 @@ RUN sed -i "s/?v=hermes/?v=b$(date +%s)/g" /apptoo/static/index.html || true
 # (rail buttons + main views are baked into our COPY'd static/index.html above; no <a> injection needed).
 COPY social.html /apptoo/static/social.html
 COPY agents.html /apptoo/static/agents.html
+COPY reporting.html /apptoo/static/reporting.html
 # Shared theme files so the custom dashboard tabs follow Hermes's light/dark theme.
 COPY tab-theme.js /apptoo/static/tab-theme.js
 COPY tab-theme.css /apptoo/static/tab-theme.css

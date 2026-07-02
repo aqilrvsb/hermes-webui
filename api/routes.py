@@ -5364,6 +5364,82 @@ def _agents_delete(handler, body):
         bad(handler, "agent delete failed: %s" % e, 500)
 
 
+def _reports_posts(handler, parsed):
+    """Agent Reporting: list published posts from Zernio, filtered by date range + platform."""
+    from urllib.parse import parse_qs
+    q = parse_qs(parsed.query or "")
+    start = (q.get("start") or [""])[0].strip()
+    end = (q.get("end") or [""])[0].strip()
+    plat = (q.get("platform") or ["all"])[0].strip().lower()
+
+    def first_str(*vals):
+        for v in vals:
+            if isinstance(v, str) and v.strip():
+                return v
+        return ""
+    try:
+        data = _zernio_api("GET", "/posts", query={"limit": "100"})
+        raw = data.get("posts") if isinstance(data, dict) else data
+        raw = raw if isinstance(raw, list) else []
+        # best-effort agent attribution: platform -> agent name (exact only when 1 agent per platform)
+        agents_by_plat = {}
+        try:
+            for m in (_agents_meta_load() or {}).values():
+                if isinstance(m, dict):
+                    agents_by_plat.setdefault(str(m.get("platform") or "").lower(), []).append(m.get("name") or "Agent")
+        except Exception:
+            pass
+        out = []
+        for p in raw:
+            if not isinstance(p, dict):
+                continue
+            dt = first_str(p.get("publishedAt"), p.get("published_at"), p.get("scheduledAt"),
+                           p.get("scheduled_at"), p.get("createdAt"), p.get("created_at"))
+            content = first_str(p.get("content"), p.get("text"), p.get("caption"))
+            murls = []
+            media = p.get("media") or p.get("mediaUrls") or p.get("media_urls") or []
+            if isinstance(media, list):
+                for m in media:
+                    if isinstance(m, str):
+                        murls.append(m)
+                    elif isinstance(m, dict):
+                        u = first_str(m.get("url"), m.get("src"), m.get("thumbnailUrl"), m.get("thumbnail"))
+                        if u:
+                            murls.append(u)
+            plats = p.get("platforms") or ([p.get("platform")] if p.get("platform") else [])
+            if not isinstance(plats, list):
+                plats = [plats]
+            ppu = p.get("platformPostUrl") or p.get("platformPostUrls") or p.get("platform_post_url") or {}
+            for pl in plats:
+                pl = str(pl or "").lower()
+                if not pl:
+                    continue
+                link = ""
+                if isinstance(ppu, dict):
+                    link = ppu.get(pl) or ppu.get(pl.capitalize()) or ""
+                elif isinstance(ppu, str):
+                    link = ppu
+                names = agents_by_plat.get(pl) or []
+                out.append({"platform": pl, "date": dt, "content": content, "media": murls,
+                            "link": link, "agent": names[0] if len(names) == 1 else ""})
+
+        def keep(e):
+            if plat and plat != "all" and e["platform"] != plat:
+                return False
+            d = str(e.get("date") or "")[:10]
+            if start and d and d < start:
+                return False
+            if end and d and d > end:
+                return False
+            return True
+        out = [e for e in out if keep(e)]
+        out.sort(key=lambda e: str(e.get("date") or ""), reverse=True)
+        j(handler, {"posts": out,
+                    "note": "Agent attribution is best-effort by platform (exact when one agent runs a platform)."})
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "reports failed: %s" % e, 502)
+
+
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
 
@@ -5547,6 +5623,10 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/agents/list":
         _agents_list(handler)
+        return True
+
+    if parsed.path == "/api/reports/posts":
+        _reports_posts(handler, parsed)
         return True
 
     if parsed.path == "/api/models":

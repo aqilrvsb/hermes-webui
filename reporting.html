@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reporting</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1; --text:#221C14; --muted:#6E6454; --accent:#F26B21; --radius:16px; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:15px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding:max(16px,env(safe-area-inset-top)) 18px 50px}
+  .wrap{max-width:1000px;margin:0 auto}
+  header{margin:6px 2px 16px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
+  header p{color:var(--muted);margin:2px 0 0;font-size:13.5px}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld label{font-size:11.5px;font-weight:600;color:var(--muted)}
+  input,select{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:11px;padding:9px 18px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);box-shadow:0 3px 12px rgba(242,107,33,.3)}
+  .btn:hover{filter:brightness(1.05)} .btn:active{transform:translateY(1px)}
+  .count{margin-left:auto;color:var(--muted);font-size:13px;align-self:center}
+  .grid{display:flex;flex-direction:column;gap:12px}
+  .post{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:0 1px 2px rgba(34,28,20,.05)}
+  .post .thumb{width:88px;height:88px;flex:0 0 88px;border-radius:12px;object-fit:cover;background:var(--card2);border:1px solid var(--line)}
+  .post .thumb.none{display:grid;place-items:center;color:var(--muted);font-size:11px;text-align:center}
+  .pmeta{flex:1;min-width:0}
+  .prow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .badge{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;text-transform:capitalize}
+  .b-facebook{background:#14273f;color:#5ea2ff}.b-instagram{background:#3a1430;color:#ff6ea8}.b-tiktok{background:#1c1c1c;color:#eee}.b-threads{background:#20242a;color:#333}
+  .pdate{color:var(--muted);font-size:12.5px}
+  .pagent{font-size:12px;color:var(--accent);font-weight:600}
+  .copy{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .plink{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none}
+  .plink:hover{text-decoration:underline}
+  .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:42px 20px;font-size:14.5px;line-height:1.6}
+  .note{margin-top:14px;color:var(--muted);font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Agent Reporting</h1>
+    <p>What your agents posted — filter by date range and platform.</p>
+  </header>
+
+  <div class="filters">
+    <div class="fld"><label>Start date</label><input type="date" id="f-start"></div>
+    <div class="fld"><label>End date</label><input type="date" id="f-end"></div>
+    <div class="fld"><label>Platform</label>
+      <select id="f-platform">
+        <option value="all">All platforms</option>
+        <option value="facebook">Facebook</option>
+        <option value="threads">Threads</option>
+        <option value="tiktok">TikTok</option>
+        <option value="instagram">Instagram</option>
+      </select>
+    </div>
+    <button class="btn" onclick="load()">Apply</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+  <p class="note" id="note"></p>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmtDate(d){ if(!d) return '—'; try{ const t=new Date(d); if(isNaN(t)) return String(d).slice(0,16).replace('T',' '); return t.toLocaleString(); }catch(e){ return String(d); } }
+
+// default range: last 30 days
+(function(){
+  const end=new Date(), start=new Date(); start.setDate(start.getDate()-30);
+  const iso=d=>d.toISOString().slice(0,10);
+  $('#f-start').value=iso(start); $('#f-end').value=iso(end);
+})();
+
+async function load(){
+  const start=$('#f-start').value, end=$('#f-end').value, platform=$('#f-platform').value;
+  $('#grid').innerHTML='<div class="empty">Loading…</div>'; $('#count').textContent='';
+  let posts=[];
+  try{
+    const qs=new URLSearchParams({start,end,platform});
+    const r=await fetch('/api/reports/posts?'+qs.toString(),{credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    posts=d.posts||[];
+    $('#note').textContent = d.note || '';
+  }catch(e){
+    $('#grid').innerHTML='<div class="empty">Could not load reports.<br>'+esc(e.message)+'</div>';
+    return;
+  }
+  render(posts);
+}
+
+function render(posts){
+  $('#count').textContent = posts.length ? (posts.length+' post'+(posts.length>1?'s':'')) : '';
+  if(!posts.length){ $('#grid').innerHTML='<div class="empty">No posts in this range.<br>Once your agents publish, their posts appear here.</div>'; return; }
+  $('#grid').innerHTML = posts.map(p=>{
+    const img = (p.media&&p.media[0]) ? `<img class="thumb" src="${esc(p.media[0])}" alt="">` : `<div class="thumb none">no image</div>`;
+    const link = p.link ? `<a class="plink" href="${esc(p.link)}" target="_blank" rel="noopener">View post ↗</a>` : '';
+    const agent = p.agent ? `<span class="pagent">${esc(p.agent)}</span>` : '';
+    return `<div class="post">
+      ${img}
+      <div class="pmeta">
+        <div class="prow"><span class="badge b-${esc(p.platform)}">${esc(p.platform)}</span> ${agent} <span class="pdate">${esc(fmtDate(p.date))}</span></div>
+        <div class="copy">${esc(p.content)||'<span style="color:var(--muted)">(no caption)</span>'}</div>
+        ${link}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+load();
+</script>
+</body>
+</html>
