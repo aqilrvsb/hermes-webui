@@ -466,21 +466,32 @@ def saas_me(handler):
 
 # ── Admin endpoints ──────────────────────────────────────────────────────────
 
-# Admin manages: GoLogin token, the shared OpenRouter key, and the OpenRouter MODE.
+# Admin manages: GoLogin token, shared OpenRouter + PeningLab keys, and each key's MODE.
 # mode 'admin' -> every client uses the shared key; mode 'client' -> each client fills their own
 # key in their Settings. (proxy country defaults to MY, admin_emails seeded server-side.)
-_ADMIN_KEYS = ("gologin_token", "openrouter_key", "openrouter_mode")
+_ADMIN_KEYS = ("gologin_token", "openrouter_key", "openrouter_mode",
+               "peninglab_key", "peninglab_mode")
+
+# Per-client key config: (admin_setting_mode, admin_setting_shared, clients_column)
+_CLIENT_KEY_SPECS = {
+    "openrouter": ("openrouter_mode", "openrouter_key", "openrouter_key"),
+    "peninglab":  ("peninglab_mode", "peninglab_key", "peninglab_key"),
+}
+
+
+def _client_key_for(kind: str, client_info) -> str:
+    """Resolve a client's key for `kind` (openrouter/peninglab) per the admin mode."""
+    mode_k, shared_k, col = _CLIENT_KEY_SPECS[kind]
+    if setting(mode_k, "admin") == "client" and client_info and client_info.get("id"):
+        c = _client_by_id(client_info["id"])
+        k = ((c or {}).get(col) or "").strip()
+        if k:
+            return k
+    return setting(shared_k)
 
 
 def openrouter_key_for(client_info) -> str:
-    """Resolve the OpenRouter key for a client per the admin-selected mode."""
-    mode = setting("openrouter_mode", "admin")
-    if mode == "client" and client_info and client_info.get("id"):
-        c = _client_by_id(client_info["id"])
-        k = ((c or {}).get("openrouter_key") or "").strip()
-        if k:
-            return k
-    return setting("openrouter_key")
+    return _client_key_for("openrouter", client_info)
 
 
 def saas_admin_settings_get(handler):
@@ -587,39 +598,47 @@ def saas_admin_user_password(handler, body):
 
 # ── Per-client OpenRouter key (Settings tab, only in mode='client') ──────────
 
-def saas_client_openrouter_get(handler):
+def saas_client_keys_get(handler):
+    """Both BYO keys (openrouter + peninglab) for the current client's Settings section."""
     info = session_info(handler)
     if not info:
         bad(handler, "not logged in", 401)
         return
-    mode = setting("openrouter_mode", "admin")
-    key = ""
-    if mode == "client":
-        c = _client_by_id(info.get("id") or "")
-        key = ((c or {}).get("openrouter_key") or "").strip()
-    j(handler, {"mode": mode, "has_key": bool(key),
-                "masked": ("*" * 8 + key[-6:]) if len(key) > 10 else ""})
+    c = _client_by_id(info.get("id") or "") or {}
+    out = {}
+    for kind, (mode_k, _shared, col) in _CLIENT_KEY_SPECS.items():
+        mode = setting(mode_k, "admin")
+        key = (c.get(col) or "").strip() if mode == "client" else ""
+        out[kind] = {"mode": mode, "has_key": bool(key),
+                     "masked": ("*" * 8 + key[-6:]) if len(key) > 10 else ""}
+    j(handler, out)
 
 
-def saas_client_openrouter_post(handler, body):
+def saas_client_keys_post(handler, body):
     info = session_info(handler)
     if not info:
         bad(handler, "not logged in", 401)
         return
-    if setting("openrouter_mode", "admin") != "client":
-        bad(handler, "the shared AI key is managed by the admin", 403)
+    b = body or {}
+    kind = str(b.get("kind") or "openrouter").strip()
+    if kind not in _CLIENT_KEY_SPECS:
+        bad(handler, "unknown key", 400)
         return
-    key = str((body or {}).get("key") or "").strip()
+    mode_k, _shared, col = _CLIENT_KEY_SPECS[kind]
+    if setting(mode_k, "admin") != "client":
+        bad(handler, "this key is managed by the admin", 403)
+        return
+    key = str(b.get("key") or "").strip()
     if key and not key.startswith("sk-"):
-        bad(handler, "that doesn't look like an OpenRouter key (starts with sk-)", 400)
+        bad(handler, "that doesn't look like a valid key (starts with sk-)", 400)
         return
     st, _res = _supa("PATCH", "/rest/v1/clients?id=eq." + urllib.parse.quote(info.get("id") or ""),
-                     {"openrouter_key": key})
+                     {col: key})
     if st not in (200, 204):
         bad(handler, "save failed (%s)" % st, 502)
         return
-    _apply_boot_config()   # rewrite this client's profile config.yaml with their key
-    j(handler, {"ok": True, "has_key": bool(key)})
+    _apply_boot_config()   # rewrite this client's profile config with their key(s)
+    j(handler, {"ok": True, "kind": kind, "has_key": bool(key)})
 
 
 # ── Social Connect (GoLogin cloud browser) ───────────────────────────────────
@@ -980,8 +999,8 @@ def handle_saas_get(handler, parsed) -> bool:
         saas_admin_settings_get(handler)
     elif p == "/api/saas/admin/clients":
         saas_admin_clients(handler)
-    elif p == "/api/saas/client/openrouter":
-        saas_client_openrouter_get(handler)
+    elif p == "/api/saas/client/keys":
+        saas_client_keys_get(handler)
     elif p == "/api/storage/list":
         saas_storage_list(handler)
     else:
@@ -1005,8 +1024,8 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_admin_user_delete(handler, body)
     elif p == "/api/saas/admin/user/password":
         saas_admin_user_password(handler, body)
-    elif p == "/api/saas/client/openrouter":
-        saas_client_openrouter_post(handler, body)
+    elif p == "/api/saas/client/keys":
+        saas_client_keys_post(handler, body)
     elif p == "/api/storage/upload":
         saas_storage_upload(handler, body)
     elif p == "/api/storage/delete":

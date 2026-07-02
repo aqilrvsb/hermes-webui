@@ -37,18 +37,19 @@ def _supa_settings():
         print("== mcp_setup: supabase settings fetch failed:", e, "==")
         return {}
 def _supa_clients():
-    """Map hermes_profile -> that client's own OpenRouter key (for mode='client')."""
+    """Map hermes_profile -> {openrouter_key, peninglab_key} (for mode='client')."""
     import json as _sj, urllib.request as _sr
     url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
     key = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip()
     if not url or not key:
         return {}
     try:
-        req = _sr.Request(url + "/rest/v1/clients?select=hermes_profile,openrouter_key")
+        req = _sr.Request(url + "/rest/v1/clients?select=hermes_profile,openrouter_key,peninglab_key")
         req.add_header("apikey", key); req.add_header("Authorization", "Bearer " + key)
         with _sr.urlopen(req, timeout=15) as resp:
             rows = _sj.loads(resp.read().decode("utf-8"))
-        return {r["hermes_profile"]: (r.get("openrouter_key") or "")
+        return {r["hermes_profile"]: {"openrouter_key": r.get("openrouter_key") or "",
+                                      "peninglab_key": r.get("peninglab_key") or ""}
                 for r in rows if isinstance(r, dict) and r.get("hermes_profile")}
     except Exception as e:
         print("== mcp_setup: supabase clients fetch failed:", e, "==")
@@ -60,7 +61,12 @@ GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_
 OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or _SUPA.get("openrouter_key", "")).strip()
 # Mode: 'admin' = everyone uses the shared key; 'client' = each client's own key (from their Settings).
 OPENROUTER_MODE = (_SUPA.get("openrouter_mode") or "admin").strip()
-_CLIENT_OR_KEYS = _supa_clients() if OPENROUTER_MODE == "client" else {}
+PENINGLAB_MODE = (_SUPA.get("peninglab_mode") or "admin").strip()
+PENINGLAB_KEY = (os.environ.get("PENINGLAB_API_KEY") or _SUPA.get("peninglab_key", "")).strip()
+# Fetch per-client keys once if EITHER key is in client mode.
+_CLIENTS = _supa_clients() if (OPENROUTER_MODE == "client" or PENINGLAB_MODE == "client") else {}
+_CLIENT_OR_KEYS = {k: v.get("openrouter_key", "") for k, v in _CLIENTS.items()} if OPENROUTER_MODE == "client" else {}
+_CLIENT_PL_KEYS = {k: v.get("peninglab_key", "") for k, v in _CLIENTS.items()} if PENINGLAB_MODE == "client" else {}
 servers = {
     "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; keep 900s so they finish + don't double-charge
 }
@@ -107,7 +113,13 @@ for home in homes():
     ex = cfg.get("mcp_servers") or {}
     ex.pop("meta_ads", None)
     ex.pop("vercel", None)  # prune the broken stdio vercel server persisted in the volume; Vercel is CLI-only now
-    ex.update(servers)
+    import copy as _copy
+    _srv = _copy.deepcopy(servers)   # per-profile copy so peninglab key can differ per client
+    # Per-profile PeningLab key: client's own (mode='client') else the shared admin/env key.
+    _prof_pl = ((_CLIENT_PL_KEYS.get(name, "") or "").strip() if PENINGLAB_MODE == "client" else "") or PENINGLAB_KEY
+    if "peninglab" in _srv and _prof_pl:
+        _srv["peninglab"].setdefault("env", {})["PENINGLAB_API_KEY"] = _prof_pl
+    ex.update(_srv)
     cfg["mcp_servers"] = ex
     # Per-profile skills: REPLACE external_dirs so each role only sees its own skills.
     sk = cfg.get("skills") or {}
