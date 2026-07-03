@@ -337,31 +337,17 @@ def provision_client(user_id: str, email: str) -> dict:
         if "exists" not in str(e).lower():
             raise
     home = _resolve_profile_home_for_name(prof)
-    gologin_pid = ""
-    gerr = ""
-    try:
-        gologin_pid = gologin_create_client_profile(email)
-    except Exception as e:  # noqa: BLE001
-        gerr = str(e)
-        logger.warning("gologin provisioning failed for %s: %s", email, e)
-    _write_profile_env(home, gologin_pid, user_id)
+    # NO auto-created GoLogin profile — the client adds their own identities (named) in Social Connect.
+    _write_profile_env(home, "", user_id)
     row = {"id": user_id, "email": email, "hermes_profile": prof,
-           "gologin_profile_id": gologin_pid,
+           "gologin_profile_id": "",
            "is_admin": email.lower() in _admin_emails()}
     st, res = _supa("POST", "/rest/v1/clients", row,
                     prefer="resolution=merge-duplicates,return=representation")
     if st not in (200, 201):
         raise RuntimeError("clients insert failed (%s): %s" % (st, res))
-    # Record it as the client's FIRST profile (they can add up to 10 total).
-    if gologin_pid:
-        _supa("POST", "/rest/v1/client_profiles",
-              {"client_id": user_id, "gologin_profile_id": gologin_pid, "name": "Profile 1"},
-              prefer="resolution=merge-duplicates,return=minimal")
     _apply_boot_config()
-    out = res[0] if isinstance(res, list) and res else row
-    if gerr:
-        out["gologin_error"] = gerr
-    return out
+    return res[0] if isinstance(res, list) and res else row
 
 
 def _admin_emails() -> set:

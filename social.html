@@ -131,11 +131,13 @@ function render(profiles){
 }
 
 async function addProfile(){
-  const btn=$('#addBtn'); btn.disabled=true; toast('Creating a new Malaysia profile…');
+  const name=(prompt('Name this profile / identity (e.g. Brand A, My FB account, Client X):')||'').trim();
+  if(!name) return;
+  const btn=$('#addBtn'); btn.disabled=true; toast('Creating “'+name+'” (Malaysia browser)…');
   try{
-    const r=await post('/api/saas/profiles/add',{});
+    const r=await post('/api/saas/profiles/add',{name});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
-    toast('Profile added'); load();
+    toast('“'+name+'” added'); load();
   }catch(e){ toast(e.message); btn.disabled=false; }
 }
 async function delProfile(pid,name){
