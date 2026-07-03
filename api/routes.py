@@ -5281,6 +5281,7 @@ def _agents_list(handler):
                 "times": times,
                 "description": m.get("description") or "",
                 "model": m.get("model") or "",
+                "profile_ids": m.get("profile_ids") or [],
                 "job_ids": m.get("job_ids") or ([aid] if aid else []),
             })
         j(handler, {"agents": agents})
@@ -5297,6 +5298,11 @@ def _agents_save(handler, body):
     description = str(b.get("description") or "").strip()
     agent_id = str(b.get("agent_id") or "").strip()
     model = str(b.get("model") or "").strip() or None  # per-agent model (None = profile default)
+    # Which of the client's GoLogin profiles (identities) this agent posts through (1 or many).
+    profile_ids = b.get("profile_ids")
+    if not isinstance(profile_ids, list):
+        profile_ids = []
+    profile_ids = [str(x).strip() for x in profile_ids if str(x).strip()]
     # Multiple daily run times: accept a list, or fall back to a single "time".
     times = b.get("times")
     if not isinstance(times, list) or not times:
@@ -5326,7 +5332,17 @@ def _agents_save(handler, body):
         '  export GOLOGIN_AGENT="%s"\n'
         'so every post you publish is attributed to YOU (by name) in the Reporting timeline.\n\n'
     ) % (name.replace('"', "'"), name.replace('"', "'"))
-    prompt = _ident + prompt
+    # Post through each selected profile (identity), one at a time.
+    if profile_ids:
+        _ploop = (
+            'PROFILES: You post through these GoLogin profile IDs, ONE AT A TIME (sequentially): %s.\n'
+            'For EACH profile id: first run `export GOLOGIN_PROFILE_ID=<that id>`, then do the FULL '
+            'post flow for it (get-notes, get/generate the image, write the caption, post). Finish one '
+            'profile completely before moving to the next. Never run them in parallel.\n\n'
+        ) % (", ".join(profile_ids))
+        prompt = _ident + _ploop + prompt
+    else:
+        prompt = _ident + prompt
     try:
         import uuid as _uuid
         from cron.jobs import create_job, remove_job
@@ -5352,7 +5368,7 @@ def _agents_save(handler, body):
                     job_ids.append(str(job["id"]))
         meta[agent_id] = {"name": name, "icon": icon, "platform": platform,
                           "timezone": tz_name, "times": times, "description": description,
-                          "model": model or "", "job_ids": job_ids}
+                          "model": model or "", "profile_ids": profile_ids, "job_ids": job_ids}
         _agents_meta_save(meta)
         j(handler, {"ok": True, "agent_id": agent_id, "prompt": prompt})
     except Exception as e:  # noqa: BLE001

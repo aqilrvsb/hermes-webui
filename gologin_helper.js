@@ -287,6 +287,7 @@ async function cmdPost(browser, platform, caption, mediaPath, agent, mediaId, no
     platform, agent: agent || 'chat', caption,
     media: mediaPath ? [mediaPath] : [],
     link: res.url || '', status: 'published', date: nowIso,
+    gologin_profile_id: (process.env.GOLOGIN_PROFILE_ID || '').trim(),
   };
   logPost(rec);
   if (mediaId) { try { await markPosted(mediaId, platform, rec.agent, rec.link, nowIso); } catch (e) {} }

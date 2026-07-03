@@ -92,8 +92,11 @@
     <label>Profile icon</label>
     <div class="icons" id="f-icons"></div>
     <label>Platform</label>
-    <select id="f-platform"></select>
+    <select id="f-platform" onchange="renderProfiles()"></select>
     <div class="hint" id="plat-hint"></div>
+    <label>Post through profiles</label>
+    <div id="f-profiles"></div>
+    <div class="hint">Pick 1 or many identities — the agent posts to the platform above on each one.</div>
     <label>Model (AI model this agent uses)</label>
     <select id="f-model"></select>
     <div style="display:none"><label>Timezone</label><select id="f-tz"></select></div>
@@ -147,14 +150,29 @@ function renderTimes(){
 }
 function addTime(){times.push("12:00");renderTimes();}
 
+let PROFILES=[];   // [{gologin_profile_id,name,connected:{platform:bool}}]
 async function loadConnected(){
-  try{const r=await fetch("/api/social/status",{credentials:"same-origin"});const d=await r.json();connected=d.connected||{};}
-  catch(e){connected={};}
-  $("#f-platform").innerHTML=PLATFORMS.map(p=>{
-    const on=!!connected[p];
-    return `<option value="${p}" ${on?"":"disabled"}>${p[0].toUpperCase()+p.slice(1)}${on?"":" — not connected"}</option>`;
+  try{const r=await fetch("/api/saas/profiles",{credentials:"same-origin"});const d=await r.json();PROFILES=d.profiles||[];}
+  catch(e){PROFILES=[];}
+  $("#f-platform").innerHTML=PLATFORMS.map(p=>`<option value="${p}">${p[0].toUpperCase()+p.slice(1)}</option>`).join("");
+  $("#plat-hint").textContent=PROFILES.length?"":"⚠ No profiles yet — add one in the Social Connect tab first.";
+  renderProfiles();
+}
+function esc2(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function renderProfiles(preselect){
+  const plat=$("#f-platform").value;
+  const box=$("#f-profiles");
+  if(!PROFILES.length){box.innerHTML='<div class="hint">No profiles — add one in Social Connect.</div>';return;}
+  const sel=preselect||null; // array of gologin_profile_ids to check, or null = auto (connected ones)
+  box.innerHTML=PROFILES.map(p=>{
+    const on=!!(p.connected||{})[plat];
+    const checked=sel?sel.includes(p.gologin_profile_id):on;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--card2);cursor:pointer">
+      <input type="checkbox" class="f-prof" value="${esc2(p.gologin_profile_id)}" ${checked?"checked":""}>
+      <span style="flex:1;font-weight:600;font-size:13.5px">${esc2(p.name)}</span>
+      <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;${on?'background:#e6f6ec;color:#1a8f4a':'background:#eee;color:#777'}">${on?'✓ '+plat:'not connected'}</span>
+    </label>`;
   }).join("");
-  $("#plat-hint").textContent=PLATFORMS.some(p=>connected[p])?"":"⚠ No platform connected yet — connect one in the Social Connect tab first.";
 }
 
 async function loadAgents(){
@@ -201,16 +219,19 @@ function openModal(id){
     const opt=[...$("#f-platform").options].find(o=>o.value===a.platform);
     if(opt){opt.disabled=false;$("#f-platform").value=a.platform;}
   }
+  renderProfiles(a&&a.profile_ids&&a.profile_ids.length?a.profile_ids:null);
   $("#overlay").classList.add("show");
 }
 function closeModal(){$("#overlay").classList.remove("show");}
 
 async function save(){
+  const profile_ids=[...document.querySelectorAll(".f-prof:checked")].map(c=>c.value);
   const payload={
     agent_id:editing||undefined,
     name:$("#f-name").value.trim(),
     icon:selIcon,
     platform:$("#f-platform").value,
+    profile_ids,
     timezone:$("#f-tz").value,
     times:times.filter(Boolean),
     model:$("#f-model").value,
@@ -219,6 +240,7 @@ async function save(){
   if(!payload.name)return toast("Give the agent a name.");
   if(!payload.description)return toast("Describe the task.");
   if(!payload.times.length)return toast("Add at least one run time.");
+  if(!profile_ids.length)return toast("Pick at least one profile to post through.");
   const btn=$("#saveBtn");btn.disabled=true;btn.textContent="AI preparing agent…";
   try{
     const r=await fetch("/api/agents/save",{method:"POST",credentials:"same-origin",

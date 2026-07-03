@@ -132,7 +132,7 @@ function render(posts){
       return `<div class="bubble"><div class="dot"></div>
         <div class="bcard">${img}
           <div class="bmain">
-            <div class="brow"><span class="pbadge b-${esc(p.platform)}">${esc(p.platform||'—')}</span> ${st} <span class="when">${esc(fmtWhen(p.date))}</span></div>
+            <div class="brow"><span class="pbadge b-${esc(p.platform)}">${esc(p.platform||'—')}</span> ${st} ${p.profile?('<span class="pbadge" style="background:#efeadf;color:#6E6454">'+esc(p.profile)+'</span>'):''} <span class="when">${esc(fmtWhen(p.date))}</span></div>
             <div class="cap">${esc(p.content)||'<span style="color:var(--muted)">(no caption)</span>'}</div>
             ${link}
           </div></div></div>`;

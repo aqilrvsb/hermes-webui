@@ -865,13 +865,16 @@ def saas_social_check(handler, body):
 
 # ── Reporting (Supabase posts + profile-local jsonl) ─────────────────────────
 
-def log_post_row(client_id: str, rec: dict) -> None:
+def log_post_row(client_id: str, rec: dict, name_by_pid: dict | None = None) -> None:
     try:
+        gpid = rec.get("gologin_profile_id") or ""
+        pname = (name_by_pid or {}).get(gpid, "") if name_by_pid else ""
         _supa("POST", "/rest/v1/posts", {
             "client_id": client_id, "platform": rec.get("platform") or "",
             "agent": rec.get("agent") or "", "caption": rec.get("caption") or "",
             "media": rec.get("media") or [], "link": rec.get("link") or "",
             "status": rec.get("status") or "published",
+            "gologin_profile_id": gpid, "profile_name": pname,
         })
     except Exception as e:  # noqa: BLE001
         logger.warning("post log failed: %s", e)
@@ -886,6 +889,9 @@ def saas_reports_posts(handler, parsed):
     start = (q.get("start") or [""])[0].strip()
     end = (q.get("end") or [""])[0].strip()
     plat = (q.get("platform") or ["all"])[0].strip().lower()
+    # map gologin_profile_id -> profile name (for "which identity posted")
+    name_by_pid = {p.get("gologin_profile_id"): p.get("name")
+                   for p in _client_profiles(info.get("id") or "")}
     posts = []
     # 1) Supabase rows (persist across redeploys)
     try:
@@ -900,6 +906,7 @@ def saas_reports_posts(handler, parsed):
                 posts.append({"platform": r.get("platform") or "", "agent": r.get("agent") or "",
                               "content": r.get("caption") or "", "media": r.get("media") or [],
                               "link": r.get("link") or "", "status": r.get("status") or "published",
+                              "profile": r.get("profile_name") or name_by_pid.get(r.get("gologin_profile_id"), ""),
                               "date": r.get("created_at") or ""})
     except Exception as e:  # noqa: BLE001
         logger.warning("supabase posts read failed: %s", e)
@@ -919,8 +926,9 @@ def saas_reports_posts(handler, parsed):
                 posts.append({"platform": rec.get("platform") or "", "agent": rec.get("agent") or "",
                               "content": rec.get("caption") or "", "media": rec.get("media") or [],
                               "link": rec.get("link") or "", "status": rec.get("status") or "published",
+                              "profile": name_by_pid.get(rec.get("gologin_profile_id"), ""),
                               "date": rec.get("date") or ""})
-                log_post_row(info.get("id") or "", rec)  # persist to Supabase
+                log_post_row(info.get("id") or "", rec, name_by_pid)  # persist to Supabase
     except Exception as e:  # noqa: BLE001
         logger.warning("local posts read failed: %s", e)
     if plat and plat != "all":
