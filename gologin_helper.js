@@ -51,6 +51,14 @@ async function supa(method, pathq, payload, extraHeaders) {
   return { ok: resp.ok, status: resp.status, data };
 }
 
+// List this client's profiles (identities) so the chat/agent knows which to post through.
+async function cmdListProfiles() {
+  if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return { error: 'storage/profiles not configured' };
+  const r = await supa('GET', '/rest/v1/client_profiles?select=name,gologin_profile_id&client_id=eq.'
+    + encodeURIComponent(CLIENT_ID) + '&order=created_at');
+  return { profiles: (r.ok && Array.isArray(r.data)) ? r.data : [] };
+}
+
 // Pull the next Storage image NOT yet posted to this platform; download it locally.
 async function cmdNextImage(platform) {
   if (!SUPA_URL || !SUPA_KEY || !CLIENT_ID) return { error: 'storage not configured (SUPABASE_*/CLIENT_ID)' };
@@ -237,42 +245,97 @@ function logPost(rec) {
   } catch (e) {}
 }
 
-// Facebook text (+ optional single image) post. Uses the self-learning selector memory: stable
-// steps (textbox, file input) are learned + reused; text-labelled buttons fall back to a text scan.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Facebook text (+ optional single image) post. Selectors verified against the live DOM:
+// opener = [role="button"] "What's on your mind"; textbox = [contenteditable][role=textbox];
+// the Post button only appears AFTER text is typed.
 async function postFacebook(page, caption, mediaPath, mem) {
   await page.goto('https://www.facebook.com/', { waitUntil: 'networkidle2', timeout: 60000 });
-  await new Promise((r) => setTimeout(r, 2000));
-  // Open the composer ("What's on your mind?") — text-labelled, so text scan (records a note on miss).
+  await sleep(2500);
+  try { await page.keyboard.press('Escape'); } catch (e) {}   // close any notifications flyout
+  await sleep(600);
+  // Open the composer — click the ROLE=BUTTON opener (not a container div).
   const opened = await page.evaluate(() => {
-    const els = Array.from(document.querySelectorAll('[role="button"], div, span'));
-    const o = els.find((e) => /what's on your mind|apa yang anda fikirkan/i.test(e.textContent || ''));
-    if (o) { o.click(); return true; } return false;
+    const b = Array.from(document.querySelectorAll('[role="button"]'))
+      .find((e) => /^what's on your mind|^apa yang anda fikir|^buat siaran/i.test((e.textContent || '').trim()));
+    if (b) { b.click(); return true; } return false;
   });
-  if (!opened) { mem.notes = (mem.notes + '\n[composer opener not found by text scan — check FB locale/UI]').trim(); mem._dirty = true; }
-  await new Promise((r) => setTimeout(r, 2500));
-  // Type into the composer textbox (STABLE selector → learnable).
+  if (!opened) { mem.notes = (mem.notes + '\n[composer opener [role=button] not found]').trim(); mem._dirty = true; throw new Error('composer opener not found'); }
+  await sleep(3500);
+  // Composer textbox.
   const box = await resolveStep(page, mem, 'fb_textbox', [
-    '[role="dialog"] [contenteditable="true"][role="textbox"]',
-    '[role="dialog"] [contenteditable="true"]',
     '[contenteditable="true"][role="textbox"]',
+    '[role="dialog"] [contenteditable="true"]',
   ]);
   await box.click();
-  await page.keyboard.type(caption, { delay: 15 });
-  await new Promise((r) => setTimeout(r, 800));
+  await sleep(400);
+  await page.keyboard.type(caption, { delay: 12 });
+  await sleep(1000);
   if (mediaPath) {
     const fileInput = await resolveStep(page, mem, 'fb_file', [
-      'input[type="file"][accept*="image"]', '[role="dialog"] input[type="file"]', 'input[type="file"]',
+      'input[type="file"][accept*="image"]', 'input[type="file"]',
     ]).catch(() => null);
-    if (fileInput) { await fileInput.uploadFile(mediaPath); await new Promise((r) => setTimeout(r, 4000)); }
+    if (fileInput) { await fileInput.uploadFile(mediaPath); await sleep(5000); }
   }
-  // Click the Post button (text-labelled, multi-locale).
+  // Submit — the composer may be multi-step (type → Next → Post) or single (Post). Loop: click Post
+  // if present, else Next, until posted.
+  let done = false;
+  for (let i = 0; i < 4 && !done; i++) {
+    const act = await page.evaluate(() => {
+      const on = (b) => b && b.getAttribute('aria-disabled') !== 'true';
+      const all = Array.from(document.querySelectorAll('[role="button"]'));
+      const txt = (b) => (b.textContent || '').trim();
+      const al = (b) => b.getAttribute('aria-label') || '';
+      let post = all.find((b) => (/^(post|share|kongsi|siar|hantar)$/i.test(txt(b)) || /^post$/i.test(al(b))) && on(b));
+      if (post) { post.click(); return 'post'; }
+      let next = all.find((b) => /^(next|seterusnya)$/i.test(txt(b)) && on(b));
+      if (next) { next.click(); return 'next'; }
+      return 'none';
+    });
+    if (act === 'post') done = true;
+    else if (act === 'next') await sleep(2800);
+    else break;
+  }
+  if (!done) { mem.notes = (mem.notes + '\n[submit: no Post/Next button found after typing]').trim(); mem._dirty = true; throw new Error('post button not found'); }
+  await sleep(6000);
+  // success signal: the composer textbox is gone
+  const stillOpen = await page.$('[contenteditable="true"][role="textbox"]').catch(() => null);
+  return { url: page.url(), verified: !stillOpen };
+}
+
+// Threads text post. Malay/English UI: opener "Apakah yang baharu?/What's new?"; button "Siaran/Post".
+async function postThreads(page, caption, mediaPath, mem) {
+  await page.goto('https://www.threads.net/', { waitUntil: 'networkidle2', timeout: 60000 });
+  await sleep(3500);
+  // open composer: click the exact "what's new" placeholder element + its ancestors (proven method)
+  const openComposer = () => page.evaluate(() => {
+    const PH = ['apakah yang baharu?', "what's new?", 'apa yang baharu?'];
+    const el = Array.from(document.querySelectorAll('*'))
+      .find((e) => e.childElementCount < 3 && PH.includes((e.textContent || '').trim().toLowerCase()));
+    if (el) { let c = el; for (let i = 0; i < 4; i++) { if (c) { c.click(); c = c.parentElement; } } return true; }
+    // fallback: the "Create/New thread" nav button (aria-label, multi-locale)
+    const b = Array.from(document.querySelectorAll('[aria-label]'))
+      .find((e) => /cipta|create|bebenang baharu|new thread|karang/i.test(e.getAttribute('aria-label') || ''));
+    if (b) { (b.closest('[role="button"],a,div') || b).click(); return true; }
+    return false;
+  });
+  await openComposer();
+  await sleep(2800);
+  let box = await page.$('[contenteditable="true"][role="textbox"], [role="dialog"] textarea').catch(() => null);
+  if (!box) { await openComposer(); await sleep(2500); box = await page.$('[contenteditable="true"][role="textbox"], [role="dialog"] textarea').catch(() => null); }
+  if (!box) { mem.notes = (mem.notes + '\n[threads composer not found]').trim(); mem._dirty = true; throw new Error('threads composer not found'); }
+  await box.click(); await sleep(400);
+  await page.keyboard.type(caption, { delay: 12 });
+  await sleep(1000);
   const posted = await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll('[role="dialog"] [role="button"]'))
-      .find((b) => /^post$|^kongsi$|^siar/i.test((b.textContent || '').trim()));
+    const on = (b) => b && b.getAttribute('aria-disabled') !== 'true';
+    const btn = Array.from(document.querySelectorAll('[role="dialog"] [role="button"], [role="button"]'))
+      .find((b) => /^(siaran|post|hantar)$/i.test((b.textContent || '').trim()) && on(b));
     if (btn) { btn.click(); return true; } return false;
   });
-  if (!posted) { mem.notes = (mem.notes + '\n[post button not found — labels tried: Post/Kongsi/Siar]').trim(); mem._dirty = true; throw new Error('post button not found'); }
-  await new Promise((r) => setTimeout(r, 5000));
+  if (!posted) { mem.notes = (mem.notes + '\n[threads Siaran/Post button not found]').trim(); mem._dirty = true; throw new Error('threads post button not found'); }
+  await sleep(5000);
   return { url: page.url() };
 }
 
@@ -281,6 +344,7 @@ async function cmdPost(browser, platform, caption, mediaPath, agent, mediaId, no
   const mem = await loadMemory(platform);   // self-learning: recall what worked last time
   let res;
   if (platform === 'facebook') res = await postFacebook(page, caption, mediaPath, mem);
+  else if (platform === 'threads') res = await postThreads(page, caption, mediaPath, mem);
   else throw new Error('posting for "' + platform + '" not wired yet (build against live DOM with the token)');
   try { await saveMemory(platform, mem); } catch (e) {}  // persist learned selectors/notes + bump runs
   const rec = {
@@ -301,6 +365,7 @@ async function main() {
   if (!token) fail('GoLogin token not configured (set GOLOGIN_API_TOKEN or gologin.json)');
   if (cmd === 'stop') { await stopProfile(token, profileId); out({ ok: true }); return; }
   // Storage + self-learning commands need NO browser (pure Supabase):
+  if (cmd === 'list-profiles') { out(await cmdListProfiles()); return; }
   if (cmd === 'next-image') { out(await cmdNextImage(String(a1 || '').toLowerCase())); return; }
   if (cmd === 'mark-posted') { await markPosted(a1, String(a2 || '').toLowerCase(), a3 || 'agent', a4 || '', new Date().toISOString()); out({ ok: true }); return; }
   if (cmd === 'get-notes') { const m = await loadMemory(String(a1 || '').toLowerCase()); out({ platform: a1, notes: m.notes, runs: m.runs, learned: Object.keys(m.selectors || {}) }); return; }
