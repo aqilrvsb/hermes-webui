@@ -37,46 +37,34 @@ def _supa_settings():
         print("== mcp_setup: supabase settings fetch failed:", e, "==")
         return {}
 def _supa_clients():
-    """Map hermes_profile -> {openrouter_key, peninglab_key} (for mode='client')."""
+    """Map hermes_profile -> {openrouter_key, peninglab_key, gologin_token} (all BYO per client)."""
     import json as _sj, urllib.request as _sr
     url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
     key = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip()
     if not url or not key:
         return {}
     try:
-        req = _sr.Request(url + "/rest/v1/clients?select=hermes_profile,openrouter_key,peninglab_key")
+        req = _sr.Request(url + "/rest/v1/clients?select=hermes_profile,openrouter_key,peninglab_key,gologin_token")
         req.add_header("apikey", key); req.add_header("Authorization", "Bearer " + key)
         with _sr.urlopen(req, timeout=15) as resp:
             rows = _sj.loads(resp.read().decode("utf-8"))
         return {r["hermes_profile"]: {"openrouter_key": r.get("openrouter_key") or "",
-                                      "peninglab_key": r.get("peninglab_key") or ""}
+                                      "peninglab_key": r.get("peninglab_key") or "",
+                                      "gologin_token": r.get("gologin_token") or ""}
                 for r in rows if isinstance(r, dict) and r.get("hermes_profile")}
     except Exception as e:
         print("== mcp_setup: supabase clients fetch failed:", e, "==")
         return {}
 _SUPA = _supa_settings()
-GOLOGIN_TOKEN = (os.environ.get("GOLOGIN_API_TOKEN") or os.environ.get("GOLOGIN_TOKEN")
-                 or _SUPA.get("gologin_token", "")).strip()
-# OpenRouter key: env first, else the Admin-managed shared key from Supabase.
-OPENROUTER_KEY = (os.environ.get("OPENROUTER_API_KEY") or _SUPA.get("openrouter_key", "")).strip()
-# Mode: 'admin' = everyone uses the shared key; 'client' = each client's own key (from their Settings).
-OPENROUTER_MODE = (_SUPA.get("openrouter_mode") or "admin").strip()
-PENINGLAB_MODE = (_SUPA.get("peninglab_mode") or "admin").strip()
-PENINGLAB_KEY = (os.environ.get("PENINGLAB_API_KEY") or _SUPA.get("peninglab_key", "")).strip()
-# Fetch per-client keys once if EITHER key is in client mode.
-_CLIENTS = _supa_clients() if (OPENROUTER_MODE == "client" or PENINGLAB_MODE == "client") else {}
-_CLIENT_OR_KEYS = {k: v.get("openrouter_key", "") for k, v in _CLIENTS.items()} if OPENROUTER_MODE == "client" else {}
-_CLIENT_PL_KEYS = {k: v.get("peninglab_key", "") for k, v in _CLIENTS.items()} if PENINGLAB_MODE == "client" else {}
+# 100% BYO — every client brings their OWN GoLogin token + OpenRouter + PeningLab keys. No shared.
+_CLIENTS = _supa_clients()
+_CLIENT_OR_KEYS = {k: v.get("openrouter_key", "") for k, v in _CLIENTS.items()}
+_CLIENT_PL_KEYS = {k: v.get("peninglab_key", "") for k, v in _CLIENTS.items()}
+_CLIENT_GL_KEYS = {k: v.get("gologin_token", "") for k, v in _CLIENTS.items()}
 servers = {
-    "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # generate_* BLOCK minutes; keep 900s so they finish + don't double-charge
+    "peninglab": {"command": BIN+"peninglab-mcp", "args": [], "env": E("PENINGLAB_API_KEY"), "timeout": 900, "connect_timeout": 60},  # per-profile key set in the loop below
 }
-# GoLogin MCP — manage profiles/proxies/fingerprints + start/stop cloud browsers (env API_TOKEN).
-# The actual posting/scraping is driven by the app backend via the GoLogin cloud browser (CDP) — this
-# MCP just lets the chat agent manage the client's profile conversationally. Gated on the token existing.
-if GOLOGIN_TOKEN:
-    _genv = E()
-    _genv["API_TOKEN"] = GOLOGIN_TOKEN
-    servers["gologin"] = {"command": BIN+"gologin-mcp", "args": [], "env": _genv, "timeout": 300, "connect_timeout": 60}
+# GoLogin MCP is added PER-PROFILE in the loop (each client's own token). No shared/global token.
 # Per-profile skill scoping: each role sees ONLY its relevant skills (cleaner Skills tab).
 # Dirs are category-preserving bundles built in Dockerfile.railway.
 # /opt/skills-common holds skills EVERY profile should have (e.g. whatsapp-whacenter messaging).
@@ -114,11 +102,18 @@ for home in homes():
     ex.pop("meta_ads", None)
     ex.pop("vercel", None)  # prune the broken stdio vercel server persisted in the volume; Vercel is CLI-only now
     import copy as _copy
-    _srv = _copy.deepcopy(servers)   # per-profile copy so peninglab key can differ per client
-    # Per-profile PeningLab key: client's own (mode='client') else the shared admin/env key.
-    _prof_pl = ((_CLIENT_PL_KEYS.get(name, "") or "").strip() if PENINGLAB_MODE == "client" else "") or PENINGLAB_KEY
+    _srv = _copy.deepcopy(servers)   # per-profile copy so each client's keys differ
+    # Per-profile PeningLab key (client's own, BYO).
+    _prof_pl = (_CLIENT_PL_KEYS.get(name, "") or "").strip()
     if "peninglab" in _srv and _prof_pl:
         _srv["peninglab"].setdefault("env", {})["PENINGLAB_API_KEY"] = _prof_pl
+    # Per-profile GoLogin MCP (client's own token, BYO) — lets the chat agent manage its profiles.
+    _prof_gl = (_CLIENT_GL_KEYS.get(name, "") or "").strip()
+    if _prof_gl:
+        _genv = E(); _genv["API_TOKEN"] = _prof_gl
+        _srv["gologin"] = {"command": BIN+"gologin-mcp", "args": [], "env": _genv, "timeout": 300, "connect_timeout": 60}
+    else:
+        ex.pop("gologin", None)   # no token yet -> no gologin MCP for this profile
     ex.update(_srv)
     cfg["mcp_servers"] = ex
     # Per-profile skills: REPLACE external_dirs so each role only sees its own skills.
@@ -150,9 +145,8 @@ for home in homes():
     #   openrouter -> https://openrouter.ai/api/v1   (key ${OPENROUTER_API_KEY}) [alternate + fallback/auto]
     #   grsai      -> https://grsaiapi.com/v1        (key ${GRSAI_API_KEY})      [image/PDF gemini + fallback]
     HAS_OC = bool(os.environ.get("OPENCODE_API_KEY", "").strip())
-    # Per-profile effective key: client's own (mode='client') else the shared admin key.
-    _PROF_OR = ((_CLIENT_OR_KEYS.get(name, "") or "").strip() if OPENROUTER_MODE == "client" else "") \
-        or OPENROUTER_KEY
+    # Per-profile OpenRouter key — the client's OWN (BYO). No shared fallback.
+    _PROF_OR = (_CLIENT_OR_KEYS.get(name, "") or "").strip()
     HAS_OR = bool(_PROF_OR)
     HAS_GR = bool(os.environ.get("GRSAI_API_KEY", "").strip())
     HAS_AM = bool(os.environ.get("AIMURAH_API_KEY", "").strip())   # AIMurah (aimurah.my.id) — OpenAI-compatible; FREE claude-sonnet-4.5/haiku-4.5

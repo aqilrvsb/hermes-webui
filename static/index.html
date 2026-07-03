@@ -1570,19 +1570,15 @@ fetch('/api/saas/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
 /* SaaS: in BYO mode, give the client their own key fields (OpenRouter + PeningLab) in Settings */
 (function(){
   function csrfHeaders(){ var h={'Content-Type':'application/json'}; try{ if(window.hermesCsrfToken) h['X-Hermes-CSRF-Token']=window.hermesCsrfToken; }catch(e){} return h; }
-  var META={
-    openrouter:{title:'Your OpenRouter key', hint:'Powers your chat + agents. Get one at openrouter.ai/keys.', ph:'sk-or-v1-…'},
-    peninglab:{title:'Your PeningLab key', hint:'Powers AI image / video generation for your posts.', ph:'sk-…'}
-  };
   function makeCard(kind,d){
-    var meta=META[kind]; var id='saasKey_'+kind;
+    var id='saasKey_'+kind;
     var card=document.createElement('div'); card.id='saasCard_'+kind;
     card.style.cssText='background:#fff;border:1px solid var(--border,#EAE1D1);border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:0 1px 2px rgba(34,28,20,.05)';
     card.innerHTML=''
-      +'<div style="font-weight:700;margin-bottom:4px">'+meta.title+'</div>'
-      +'<div style="font-size:12.5px;color:var(--muted,#6E6454);margin-bottom:10px">'+meta.hint+'</div>'
+      +'<div style="font-weight:700;margin-bottom:4px">'+(d.title||kind)+'</div>'
+      +'<div style="font-size:12.5px;color:var(--muted,#6E6454);margin-bottom:10px">'+(d.hint||'')+'</div>'
       +'<div style="display:flex;gap:8px">'
-      +'<input id="'+id+'" type="password" placeholder="'+(d.has_key?('Saved '+(d.masked||'••••')):meta.ph)+'" style="flex:1;font:inherit;padding:9px 11px;border:1px solid var(--border,#EAE1D1);border-radius:10px;background:var(--input-bg,#FAF6EE);color:inherit;outline:none">'
+      +'<input id="'+id+'" type="password" placeholder="'+(d.has_key?('Saved '+(d.masked||'••••')):(d.ph||''))+'" style="flex:1;font:inherit;padding:9px 11px;border:1px solid var(--border,#EAE1D1);border-radius:10px;background:var(--input-bg,#FAF6EE);color:inherit;outline:none">'
       +'<button id="'+id+'_b" style="font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:10px;padding:9px 16px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21)">Save</button>'
       +'</div><div id="'+id+'_m" style="font-size:12.5px;margin-top:8px"></div>';
     setTimeout(function(){
@@ -1590,7 +1586,7 @@ fetch('/api/saas/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
         var v=document.getElementById(id).value.trim(); var m=document.getElementById(id+'_m'); this.disabled=true;
         fetch('/api/saas/client/keys',{method:'POST',credentials:'same-origin',headers:csrfHeaders(),body:JSON.stringify({kind:kind,key:v})})
           .then(function(r){return r.json();}).then(function(res){ if(res.error) throw new Error(res.error);
-            m.style.color='#1a8f4a'; m.textContent=res.has_key?'Saved — your key is active.':'Cleared — using the shared key.';
+            m.style.color='#1a8f4a'; m.textContent=res.has_key?'Saved — your key is active.':'Cleared.';
           }).catch(function(e){ m.style.color='#c0392b'; m.textContent=e.message; })
           .then(function(){ document.getElementById(id+'_b').disabled=false; });
       };
@@ -1600,8 +1596,10 @@ fetch('/api/saas/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
   function inject(data){
     var pane=document.getElementById('settingsPaneSystem'); if(!pane || document.getElementById('saasKeysWrap')) return;
     var wrap=document.createElement('div'); wrap.id='saasKeysWrap';
-    ['openrouter','peninglab'].forEach(function(kind){ var d=data[kind]; if(d && d.mode==='client') wrap.appendChild(makeCard(kind,d)); });
-    if(wrap.children.length) pane.insertBefore(wrap, pane.firstChild);
+    var h=document.createElement('div'); h.style.cssText='font-weight:800;font-size:15px;margin:0 0 10px'; h.textContent='Your API keys';
+    wrap.appendChild(h);
+    ['gologin','openrouter','peninglab'].forEach(function(kind){ var d=data[kind]; if(d) wrap.appendChild(makeCard(kind,d)); });
+    pane.insertBefore(wrap, pane.firstChild);
   }
   fetch('/api/saas/client/keys',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(data){
     var tries=0; var iv=setInterval(function(){ tries++;

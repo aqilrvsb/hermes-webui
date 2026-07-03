@@ -40,27 +40,9 @@
   </header>
 
   <div class="card">
-    <h2>API Keys</h2>
-    <div class="fld"><label>GoLogin token</label><input id="k-gologin_token" placeholder="paste a new token to change">
-      <div class="hint">Dev token from app.gologin.com → Personal Area → API Token. Powers every client's Malaysia cloud browser.</div></div>
-    <div class="fld"><label>OpenRouter key mode</label>
-      <select id="k-openrouter_mode">
-        <option value="admin">Shared — all clients use this admin key</option>
-        <option value="client">Bring-your-own — each client fills their own key in Settings</option>
-      </select>
-      <div class="hint">In BYO mode, clients without a key fall back to the shared key below.</div></div>
-    <div class="fld"><label>OpenRouter key (shared)</label><input id="k-openrouter_key" placeholder="sk-or-v1-…">
-      <div class="hint">Powers the AI (chat + agents). Used for everyone in Shared mode, and as fallback in BYO mode.</div></div>
-    <div class="fld"><label>PeningLab key mode</label>
-      <select id="k-peninglab_mode">
-        <option value="admin">Shared — all clients use this admin key</option>
-        <option value="client">Bring-your-own — each client fills their own key in Settings</option>
-      </select>
-      <div class="hint">PeningLab powers AI image/video generation for posts.</div></div>
-    <div class="fld"><label>PeningLab key (shared)</label><input id="k-peninglab_key" placeholder="sk-…">
-      <div class="hint">Used for everyone in Shared mode, and as fallback in BYO mode.</div></div>
-    <button class="btn" id="save" onclick="save()">Save keys</button>
-    <div class="msg" id="msg"></div>
+    <h2>API keys are bring-your-own</h2>
+    <div class="hint">Every client sets their <b>own</b> GoLogin token, OpenRouter key, and PeningLab key in
+    <b>their</b> Settings. There are no shared admin keys — each client runs on their own accounts.</div>
   </div>
 
   <div class="card">
@@ -82,15 +64,11 @@
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const KEYS=['gologin_token','openrouter_key','openrouter_mode','peninglab_key','peninglab_mode'];
-
 async function load(){
-  const r=await fetch('/api/saas/admin/settings',{credentials:'same-origin'});
-  if(r.status===403){ $('#denied').style.display='block'; return; }
-  const d=await r.json();
+  const cr0=await fetch('/api/saas/admin/clients',{credentials:'same-origin'});
+  if(cr0.status===403){ $('#denied').style.display='block'; return; }
   $('#root').style.display='block';
-  for(const k of KEYS){ const el=$('#k-'+k); if(el) el.value=(d.settings||{})[k]||''; }
-  const cr=await fetch('/api/saas/admin/clients',{credentials:'same-origin'});
+  const cr=cr0;
   const cd=await cr.json();
   const rows=(cd.clients||[]).map(c=>`<tr>
     <td>${esc(c.email)}</td><td>${esc(c.hermes_profile)}</td>
@@ -132,21 +110,6 @@ function api(url,body){
   return fetch(url,{method:'POST',credentials:'same-origin',headers,body:JSON.stringify(body)});
 }
 
-async function save(){
-  const btn=$('#save');btn.disabled=true;
-  const settings={};
-  for(const k of KEYS){ const v=$('#k-'+k).value.trim(); if(v && !v.startsWith('********')) settings[k]=v; }
-  try{
-    const headers={'Content-Type':'application/json'};
-    try{ const t=(window.parent&&window.parent.hermesCsrfToken)||''; if(t) headers['X-Hermes-CSRF-Token']=t; }catch(e){}
-    const r=await fetch('/api/saas/admin/settings',{method:'POST',credentials:'same-origin',
-      headers, body:JSON.stringify({settings})});
-    const d=await r.json();
-    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
-    const m=$('#msg');m.className='msg good';m.style.display='block';m.textContent='Saved: '+(d.saved||[]).join(', ');
-  }catch(e){ const m=$('#msg');m.className='msg badd';m.style.display='block';m.textContent=e.message; }
-  btn.disabled=false;
-}
 load();
 </script>
 </body>

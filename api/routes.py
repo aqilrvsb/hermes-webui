@@ -5201,18 +5201,12 @@ def _agents_schedule(tz_name, hhmm):
     return "%d %d * * *" % (server_dt.minute, server_dt.hour)
 
 
-def _agents_refine(description, platform):
+def _agents_refine(description, platform, api_key=""):
     """LLM-refine the client's raw description into a precise, tool-driven agent prompt."""
     import json as _json, os as _os, urllib.request as _rq
-    key = (_os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    key = (api_key or _os.environ.get("OPENROUTER_API_KEY") or "").strip()
     if not key:
-        try:
-            from api import saas as _saas
-            key = _saas.setting("openrouter_key")   # Admin-managed key (Supabase)
-        except Exception:
-            key = ""
-    if not key:
-        raise RuntimeError("OpenRouter key not set (Admin → API Keys)")
+        raise RuntimeError("Add your OpenRouter key in Settings first")
     try:
         from api.config import get_effective_default_model
         model = (get_effective_default_model() or "").strip() or "openai/gpt-4.1"
@@ -5321,7 +5315,12 @@ def _agents_save(handler, body):
         bad(handler, "bad timezone/time: %s" % e, 400)
         return
     try:
-        prompt = _agents_refine(description, platform)
+        try:
+            from api import saas as _saas
+            _ck = _saas.openrouter_key_for(_saas.session_info(handler))
+        except Exception:
+            _ck = ""
+        prompt = _agents_refine(description, platform, _ck)
     except Exception as e:  # noqa: BLE001
         bad(handler, "AI refine failed: %s" % e, 502)
         return

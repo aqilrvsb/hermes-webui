@@ -102,15 +102,21 @@ def setting(key: str, default: str = "") -> str:
 
 
 def _gologin_token() -> str:
-    return setting("gologin_token") or (os.environ.get("GOLOGIN_API_TOKEN") or "").strip()
+    """Legacy/system token (env only) — used for nothing client-facing now that GoLogin is BYO."""
+    return (os.environ.get("GOLOGIN_API_TOKEN") or "").strip()
+
+
+def _client_gologin_token(client_info) -> str:
+    """The client's OWN GoLogin token (BYO). Empty if they haven't set it yet."""
+    return _client_key_for("gologin", client_info)
 
 
 # ── GoLogin REST ─────────────────────────────────────────────────────────────
 
-def _gologin(method, path, payload=None, timeout=60):
-    tok = _gologin_token()
+def _gologin(method, path, payload=None, timeout=60, token=None):
+    tok = (token or _gologin_token() or "").strip()   # per-client token when given, else shared admin
     if not tok:
-        raise RuntimeError("gologin_token not set (Admin Settings)")
+        raise RuntimeError("gologin_token not set (Admin Settings or your Settings)")
     req = urllib.request.Request(_GOLOGIN_API + path, method=method)
     req.add_header("Authorization", "Bearer " + tok)
     req.add_header("Content-Type", "application/json")
@@ -127,9 +133,10 @@ def _gologin(method, path, payload=None, timeout=60):
             return e.code, {"error": raw[:400]}
 
 
-def gologin_create_client_profile(email: str) -> str:
-    """Create the client's ONE GoLogin profile + attach the MY residential proxy."""
-    st, prof = _gologin("POST", "/browser/quick", {"os": "win", "name": email})
+def gologin_create_client_profile(name: str, token: str) -> str:
+    """Create a GoLogin profile (own fingerprint) + attach the MY residential proxy, in the
+    client's OWN account (their BYO token)."""
+    st, prof = _gologin("POST", "/browser/quick", {"os": "win", "name": name}, token=token)
     if st not in (200, 201):
         raise RuntimeError("gologin profile create failed (%s): %s" % (st, prof))
     pid = prof.get("id") or prof.get("_id") or ""
@@ -139,12 +146,29 @@ def gologin_create_client_profile(email: str) -> str:
     _cname = {"MY": "Malaysia"}.get(country.upper(), country.upper())
     st2, px = _gologin("POST", "/users-proxies/mobile-proxy", {
         "countryCode": country, "isDc": False, "isMobile": False,
-        "profileIdToLink": pid, "customName": _cname,   # best-effort clean dashboard label
-    })
+        "profileIdToLink": pid, "customName": _cname,
+    }, token=token)
     if st2 not in (200, 201):
-        # profile exists but proxy failed — keep the profile, surface the warning
         logger.warning("gologin proxy attach failed (%s): %s", st2, px)
     return pid
+
+
+def _gologin_wipe_account(token: str) -> int:
+    """Delete ALL profiles in the account behind `token`. Returns count deleted. Caller MUST ensure
+    this is the client's OWN BYO token — used on their FIRST add so the account tallies 1:1 with us."""
+    st, data = _gologin("GET", "/browser/v2", token=token)
+    profs = (data.get("profiles") if isinstance(data, dict) else data) or []
+    n = 0
+    for p in profs:
+        pid = p.get("id") or p.get("_id")
+        if not pid:
+            continue
+        try:
+            _gologin("DELETE", "/browser/" + pid, token=token)
+            n += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("wipe: delete %s failed: %s", pid, e)
+    return n
 
 
 # ── Server-side session→client mapping (tamper-proof profile binding) ───────
@@ -286,12 +310,13 @@ def _client_soul(email: str, gologin_pid: str) -> str:
     ) % (email, gologin_pid)
 
 
-def _write_profile_env(profile_home: Path, gologin_pid: str, client_id: str = "") -> None:
-    """Give the client's agent its GoLogin + Storage env (helper path + ids)."""
+def _write_profile_env(profile_home: Path, gologin_pid: str, client_id: str = "",
+                       gologin_token: str = "") -> None:
+    """Give the client's agent its GoLogin (BYO token) + Storage env (helper path + ids)."""
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
     url, service, _anon = _supa_env()
     lines = {
-        "GOLOGIN_API_TOKEN": _gologin_token(),
+        "GOLOGIN_API_TOKEN": gologin_token,   # the client's OWN token (BYO); agents post with this
         "GOLOGIN_PROFILE_ID": gologin_pid,
         "GOLOGIN_HELPER": helper,
         "CLIENT_ID": client_id,               # scopes Storage image queries to this client
@@ -479,25 +504,28 @@ def saas_me(handler):
 # Admin manages: GoLogin token, shared OpenRouter + PeningLab keys, and each key's MODE.
 # mode 'admin' -> every client uses the shared key; mode 'client' -> each client fills their own
 # key in their Settings. (proxy country defaults to MY, admin_emails seeded server-side.)
-_ADMIN_KEYS = ("gologin_token", "openrouter_key", "openrouter_mode",
-               "peninglab_key", "peninglab_mode")
+# 100% BYO — NO shared admin keys at all. Every client brings their OWN GoLogin token, OpenRouter key,
+# and PeningLab key (in their Settings). Admin holds ZERO shared keys.
+_ADMIN_KEYS = ()
 
-# Per-client key config: (admin_setting_mode, admin_setting_shared, clients_column)
+# Per-client keys shown in each client's Settings. All BYO (no shared fallback). prefix -> light check.
 _CLIENT_KEY_SPECS = {
-    "openrouter": ("openrouter_mode", "openrouter_key", "openrouter_key"),
-    "peninglab":  ("peninglab_mode", "peninglab_key", "peninglab_key"),
+    "gologin":    {"col": "gologin_token", "prefix": "eyJ",
+                   "title": "Your GoLogin token", "hint": "Your OWN GoLogin dev token (app.gologin.com → API Token). Runs your Malaysia browsers.", "ph": "eyJhbGci…"},
+    "openrouter": {"col": "openrouter_key", "prefix": "sk-",
+                   "title": "Your OpenRouter key", "hint": "Powers your chat + agents. openrouter.ai/keys.", "ph": "sk-or-v1-…"},
+    "peninglab":  {"col": "peninglab_key", "prefix": "sk-",
+                   "title": "Your PeningLab key", "hint": "AI image / video generation for your posts.", "ph": "sk-…"},
 }
 
 
 def _client_key_for(kind: str, client_info) -> str:
-    """Resolve a client's key for `kind` (openrouter/peninglab) per the admin mode."""
-    mode_k, shared_k, col = _CLIENT_KEY_SPECS[kind]
-    if setting(mode_k, "admin") == "client" and client_info and client_info.get("id"):
+    """Resolve a client's OWN key (BYO). No shared fallback."""
+    spec = _CLIENT_KEY_SPECS[kind]
+    if client_info and client_info.get("id"):
         c = _client_by_id(client_info["id"])
-        k = ((c or {}).get(col) or "").strip()
-        if k:
-            return k
-    return setting(shared_k)
+        return ((c or {}).get(spec["col"]) or "").strip()
+    return ""
 
 
 def openrouter_key_for(client_info) -> str:
@@ -579,14 +607,17 @@ def saas_admin_user_delete(handler, body):
     if (c.get("email") or "").lower() in _admin_emails():
         bad(handler, "can't delete an admin account (remove from admin emails first)", 400)
         return
-    # 1) delete their GoLogin cloud profile
-    pid = c.get("gologin_profile_id") or ""
-    if pid:
-        try:
-            _gologin("DELETE", "/browser/" + pid)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("gologin delete failed for %s: %s", pid, e)
-    # 2) delete the auth user -> clients/media/posts cascade (FK on delete cascade)
+    # 1) delete ALL their GoLogin profiles (in their OWN BYO account)
+    ctoken = (c.get("gologin_token") or "").strip()
+    if ctoken:
+        for pr in _client_profiles(uid):
+            gp = pr.get("gologin_profile_id")
+            if gp:
+                try:
+                    _gologin("DELETE", "/browser/" + gp, token=ctoken)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("gologin delete failed for %s: %s", gp, e)
+    # 2) delete the auth user -> clients/media/posts/client_profiles cascade (FK on delete cascade)
     st, _res = _supa("DELETE", "/auth/v1/admin/users/" + urllib.parse.quote(uid))
     if st not in (200, 204):
         # fall back to deleting the clients row directly
@@ -606,21 +637,21 @@ def saas_admin_user_password(handler, body):
     j(handler, {"ok": st in (200, 204)})
 
 
-# ── Per-client OpenRouter key (Settings tab, only in mode='client') ──────────
+# ── Per-client BYO keys (GoLogin + OpenRouter + PeningLab) in the client's Settings ──
 
 def saas_client_keys_get(handler):
-    """Both BYO keys (openrouter + peninglab) for the current client's Settings section."""
+    """All 3 BYO keys for the client's Settings section (title/hint/placeholder + status)."""
     info = session_info(handler)
     if not info:
         bad(handler, "not logged in", 401)
         return
     c = _client_by_id(info.get("id") or "") or {}
     out = {}
-    for kind, (mode_k, _shared, col) in _CLIENT_KEY_SPECS.items():
-        mode = setting(mode_k, "admin")
-        key = (c.get(col) or "").strip() if mode == "client" else ""
-        out[kind] = {"mode": mode, "has_key": bool(key),
-                     "masked": ("*" * 8 + key[-6:]) if len(key) > 10 else ""}
+    for kind, spec in _CLIENT_KEY_SPECS.items():
+        key = (c.get(spec["col"]) or "").strip()
+        out[kind] = {"mode": "client", "has_key": bool(key),
+                     "masked": ("*" * 8 + key[-6:]) if len(key) > 10 else "",
+                     "title": spec["title"], "hint": spec["hint"], "ph": spec["ph"]}
     j(handler, out)
 
 
@@ -630,24 +661,29 @@ def saas_client_keys_post(handler, body):
         bad(handler, "not logged in", 401)
         return
     b = body or {}
-    kind = str(b.get("kind") or "openrouter").strip()
-    if kind not in _CLIENT_KEY_SPECS:
+    kind = str(b.get("kind") or "").strip()
+    spec = _CLIENT_KEY_SPECS.get(kind)
+    if not spec:
         bad(handler, "unknown key", 400)
         return
-    mode_k, _shared, col = _CLIENT_KEY_SPECS[kind]
-    if setting(mode_k, "admin") != "client":
-        bad(handler, "this key is managed by the admin", 403)
-        return
     key = str(b.get("key") or "").strip()
-    if key and not key.startswith("sk-"):
-        bad(handler, "that doesn't look like a valid key (starts with sk-)", 400)
+    if key and spec.get("prefix") and not key.startswith(spec["prefix"]):
+        bad(handler, "that doesn't look like a valid %s key" % kind, 400)
         return
     st, _res = _supa("PATCH", "/rest/v1/clients?id=eq." + urllib.parse.quote(info.get("id") or ""),
-                     {col: key})
+                     {spec["col"]: key})
     if st not in (200, 204):
         bad(handler, "save failed (%s)" % st, 502)
         return
-    _apply_boot_config()   # rewrite this client's profile config with their key(s)
+    # GoLogin token also drives the agent shell → rewrite this client's profile .env with it.
+    if kind == "gologin":
+        try:
+            info2 = dict(info)  # session copy; the fresh token now lives in the DB
+            home = _resolve_profile_home_for_name(info.get("profile") or "")
+            _write_profile_env(home, "", info.get("id") or "", gologin_token=key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("profile env rewrite (gologin) failed: %s", e)
+    _apply_boot_config()   # re-run mcp_setup → applies OpenRouter/PeningLab per profile
     j(handler, {"ok": True, "kind": kind, "has_key": bool(key)})
 
 
@@ -710,18 +746,32 @@ def saas_profiles_list(handler):
 
 
 def saas_profiles_add(handler, body):
-    """Create a NEW GoLogin profile (own fingerprint + MY proxy) for this client, up to the cap."""
+    """Create a NEW GoLogin profile (own fingerprint + MY proxy) in the client's OWN account.
+    On the client's FIRST add, WIPE their GoLogin account clean first so it tallies 1:1 with us
+    and they get the full 10 slots. (BYO-only → the wipe can only ever hit the client's own account.)"""
     info = session_info(handler)
     if not info:
         bad(handler, "not logged in", 401)
+        return
+    token = _client_gologin_token(info)
+    if not token:
+        bad(handler, "add your GoLogin token in Settings first (Settings → Your GoLogin token)", 409)
         return
     profs = _client_profiles(info.get("id") or "")
     if len(profs) >= _MAX_PROFILES:
         bad(handler, "you've reached the max of %d profiles" % _MAX_PROFILES, 409)
         return
+    first_add = (len(profs) == 0)
+    wiped = 0
+    if first_add:
+        # First profile ever → clean their account so it's fully hermess-managed + all 10 free.
+        try:
+            wiped = _gologin_wipe_account(token)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("first-add wipe failed (continuing): %s", e)
     name = str((body or {}).get("name") or "").strip() or ("Profile %d" % (len(profs) + 1))
     try:
-        pid = gologin_create_client_profile(info.get("email") or name)
+        pid = gologin_create_client_profile(name, token)
     except Exception as e:  # noqa: BLE001
         bad(handler, "GoLogin profile create failed: %s" % e, 502)
         return
@@ -731,8 +781,9 @@ def saas_profiles_add(handler, body):
     if st not in (200, 201):
         bad(handler, "profile save failed (%s)" % st, 502)
         return
-    j(handler, {"ok": True, "profile": (res[0] if isinstance(res, list) and res else
-                                        {"gologin_profile_id": pid, "name": name})})
+    j(handler, {"ok": True, "wiped": wiped, "first": first_add,
+                "profile": (res[0] if isinstance(res, list) and res else
+                            {"gologin_profile_id": pid, "name": name})})
 
 
 def saas_profiles_delete(handler, body):
@@ -746,7 +797,7 @@ def saas_profiles_delete(handler, body):
         bad(handler, "not found", 404)
         return
     try:
-        _gologin("DELETE", "/browser/" + pid)
+        _gologin("DELETE", "/browser/" + pid, token=_client_gologin_token(info))
     except Exception as e:  # noqa: BLE001
         logger.warning("gologin delete failed: %s", e)
     _supa("DELETE", "/rest/v1/client_profiles?client_id=eq.%s&gologin_profile_id=eq.%s"
@@ -763,11 +814,11 @@ _PLATFORM_LOGIN = {
 }
 
 
-def _run_helper_detached(pid: str, args: list, profile: str) -> None:
+def _run_helper_detached(pid: str, args: list, profile: str, token: str = "") -> None:
     """Fire the GoLogin helper without blocking the request (e.g. navigate the live browser)."""
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
     env = dict(os.environ)
-    env["GOLOGIN_API_TOKEN"] = _gologin_token()
+    env["GOLOGIN_API_TOKEN"] = token or _gologin_token()
     env["GOLOGIN_PROFILE_ID"] = pid
     if profile:
         env["HERMES_HOME"] = str(_resolve_profile_home_for_name(profile))
@@ -788,7 +839,8 @@ def saas_social_connect(handler, body):
         bad(handler, "unknown profile", 404)
         return
     plat = str((body or {}).get("platform") or "").lower().strip()
-    st, res = _gologin("POST", "/browser/%s/web" % pid, {})
+    token = _client_gologin_token(info)
+    st, res = _gologin("POST", "/browser/%s/web" % pid, {}, token=token)
     if st not in (200, 201, 202):
         bad(handler, "cloud browser start failed (%s): %s" % (st, json.dumps(res)[:200]), 502)
         return
@@ -798,7 +850,7 @@ def saas_social_connect(handler, body):
         return
     login_url = _PLATFORM_LOGIN.get(plat)
     if login_url:
-        _run_helper_detached(pid, ["open-url", login_url], info.get("profile") or "")
+        _run_helper_detached(pid, ["open-url", login_url], info.get("profile") or "", token)
     j(handler, {"liveUrl": url, "status": res.get("status") or "", "platform": plat, "gologin_profile_id": pid})
 
 
@@ -807,7 +859,7 @@ def saas_social_stop(handler, body):
     if not info or not pid:
         bad(handler, "not logged in / no profile", 401)
         return
-    st, _res = _gologin("DELETE", "/browser/%s/web" % pid)
+    st, _res = _gologin("DELETE", "/browser/%s/web" % pid, token=_client_gologin_token(info))
     j(handler, {"ok": st in (200, 202, 204)})
 
 
@@ -823,7 +875,7 @@ def saas_social_check(handler, body):
     plat = str((body or {}).get("platform") or "").lower().strip()
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
     env = dict(os.environ)
-    env["GOLOGIN_API_TOKEN"] = _gologin_token()
+    env["GOLOGIN_API_TOKEN"] = _client_gologin_token(info)
     env["GOLOGIN_PROFILE_ID"] = pid
     env["HERMES_HOME"] = str(_resolve_profile_home_for_name(info["profile"]))
     # Check ONLY the platform being connected (don't touch/navigate the others).
