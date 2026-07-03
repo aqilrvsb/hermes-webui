@@ -39,6 +39,7 @@ from api.profiles import (
 logger = logging.getLogger(__name__)
 
 _SOCIAL_PLATFORMS = ("facebook", "threads", "tiktok", "instagram")
+_MAX_PROFILES = 10          # each client can utilise their full BYO GoLogin plan (10 identities)
 _GOLOGIN_API = "https://api.gologin.com"
 _SETTINGS_CACHE: dict = {"at": 0.0, "data": {}}
 _SESS_LOCK = threading.Lock()
@@ -351,6 +352,11 @@ def provision_client(user_id: str, email: str) -> dict:
                     prefer="resolution=merge-duplicates,return=representation")
     if st not in (200, 201):
         raise RuntimeError("clients insert failed (%s): %s" % (st, res))
+    # Record it as the client's FIRST profile (they can add up to 10 total).
+    if gologin_pid:
+        _supa("POST", "/rest/v1/client_profiles",
+              {"client_id": user_id, "gologin_profile_id": gologin_pid, "name": "Profile 1"},
+              prefer="resolution=merge-duplicates,return=minimal")
     _apply_boot_config()
     out = res[0] if isinstance(res, list) and res else row
     if gerr:
@@ -659,39 +665,107 @@ def saas_client_keys_post(handler, body):
     j(handler, {"ok": True, "kind": kind, "has_key": bool(key)})
 
 
-# ── Social Connect (GoLogin cloud browser) ───────────────────────────────────
+# ── Profiles (each client up to 10 identities) + Social Connect (GoLogin) ────
 
-def _client_gologin_pid(handler) -> tuple[dict | None, str]:
+def _node_bin() -> str:
+    for c in ("/opt/node/bin/node", "/usr/local/bin/node", "node"):
+        if c == "node" or os.path.exists(c):
+            return c
+    return "node"
+
+
+def _client_profiles(client_id: str) -> list:
+    st, rows = _supa("GET", "/rest/v1/client_profiles?select=id,gologin_profile_id,name,created_at"
+                     "&client_id=eq.%s&order=created_at" % urllib.parse.quote(client_id))
+    return rows if (st == 200 and isinstance(rows, list)) else []
+
+
+def _resolve_profile(handler, gologin_pid: str = ""):
+    """Return (info, gologin_pid, profile_row). Validates the pid belongs to the client;
+    defaults to their first profile. Legacy fallback to clients.gologin_profile_id."""
     info = session_info(handler)
     if not info:
-        return None, ""
-    pid = info.get("gologin") or ""
-    if not pid:
-        # refresh from DB (may have been provisioned after login)
-        c = _client_by_id(info.get("id") or "")
-        pid = (c or {}).get("gologin_profile_id") or ""
-    return info, pid
+        return None, "", None
+    profs = _client_profiles(info.get("id") or "")
+    if not profs:
+        return info, (info.get("gologin") or ""), None
+    if gologin_pid:
+        m = next((p for p in profs if p.get("gologin_profile_id") == gologin_pid), None)
+        return (info, gologin_pid, m) if m else (info, "", None)
+    return info, profs[0].get("gologin_profile_id") or "", profs[0]
 
 
-def _status_cache_path(profile: str) -> Path:
-    return _resolve_profile_home_for_name(profile) / "social_status.json"
+def _status_cache_path(profile: str, pid: str) -> Path:
+    return _resolve_profile_home_for_name(profile) / ("social_status_%s.json" % pid)
 
 
-def saas_social_status(handler):
-    info, pid = _client_gologin_pid(handler)
+def _read_status(profile: str, pid: str) -> dict:
+    try:
+        with open(_status_cache_path(profile, pid), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def saas_profiles_list(handler):
+    """All of the client's profiles, each with its cached per-platform login status."""
+    info = session_info(handler)
     if not info:
         bad(handler, "not logged in", 401)
         return
-    cached = {}
+    profs = _client_profiles(info.get("id") or "")
+    out = []
+    for p in profs:
+        pid = p.get("gologin_profile_id") or ""
+        cached = _read_status(info.get("profile") or "", pid)
+        out.append({"id": p.get("id"), "gologin_profile_id": pid, "name": p.get("name") or "Profile",
+                    "connected": cached.get("connected") or {}, "checked_at": cached.get("checked_at") or ""})
+    j(handler, {"profiles": out, "max": _MAX_PROFILES, "platforms": list(_SOCIAL_PLATFORMS)})
+
+
+def saas_profiles_add(handler, body):
+    """Create a NEW GoLogin profile (own fingerprint + MY proxy) for this client, up to the cap."""
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    profs = _client_profiles(info.get("id") or "")
+    if len(profs) >= _MAX_PROFILES:
+        bad(handler, "you've reached the max of %d profiles" % _MAX_PROFILES, 409)
+        return
+    name = str((body or {}).get("name") or "").strip() or ("Profile %d" % (len(profs) + 1))
     try:
-        with open(_status_cache_path(info["profile"]), encoding="utf-8") as f:
-            cached = json.load(f)
-    except Exception:
-        cached = {}
-    j(handler, {"connected": cached.get("connected") or {},
-                "checked_at": cached.get("checked_at") or "",
-                "gologin_profile_id": pid,
-                "platforms": list(_SOCIAL_PLATFORMS)})
+        pid = gologin_create_client_profile(info.get("email") or name)
+    except Exception as e:  # noqa: BLE001
+        bad(handler, "GoLogin profile create failed: %s" % e, 502)
+        return
+    st, res = _supa("POST", "/rest/v1/client_profiles",
+                    {"client_id": info.get("id"), "gologin_profile_id": pid, "name": name},
+                    prefer="return=representation")
+    if st not in (200, 201):
+        bad(handler, "profile save failed (%s)" % st, 502)
+        return
+    j(handler, {"ok": True, "profile": (res[0] if isinstance(res, list) and res else
+                                        {"gologin_profile_id": pid, "name": name})})
+
+
+def saas_profiles_delete(handler, body):
+    info = session_info(handler)
+    if not info:
+        bad(handler, "not logged in", 401)
+        return
+    pid = str((body or {}).get("gologin_profile_id") or "").strip()
+    profs = _client_profiles(info.get("id") or "")
+    if not any(p.get("gologin_profile_id") == pid for p in profs):
+        bad(handler, "not found", 404)
+        return
+    try:
+        _gologin("DELETE", "/browser/" + pid)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("gologin delete failed: %s", e)
+    _supa("DELETE", "/rest/v1/client_profiles?client_id=eq.%s&gologin_profile_id=eq.%s"
+          % (urllib.parse.quote(info.get("id") or ""), urllib.parse.quote(pid)))
+    j(handler, {"ok": True})
 
 
 # Where each "Connect <platform>" should land the browser (login page).
@@ -719,13 +793,13 @@ def _run_helper_detached(pid: str, args: list, profile: str) -> None:
 
 
 def saas_social_connect(handler, body):
-    """Start the client's cloud browser -> navigate it to the platform login -> return live-view URL."""
-    info, pid = _client_gologin_pid(handler)
+    """Start a specific profile's cloud browser -> land on the platform login -> return live-view URL."""
+    info, pid, _row = _resolve_profile(handler, str((body or {}).get("profileId") or "").strip())
     if not info:
         bad(handler, "not logged in", 401)
         return
     if not pid:
-        bad(handler, "no GoLogin profile provisioned for this account yet", 409)
+        bad(handler, "unknown profile", 404)
         return
     plat = str((body or {}).get("platform") or "").lower().strip()
     st, res = _gologin("POST", "/browser/%s/web" % pid, {})
@@ -736,15 +810,14 @@ def saas_social_connect(handler, body):
     if not url:
         bad(handler, "no live-view url returned", 502)
         return
-    # Land the (already-streaming) browser on the platform's login page — async so we reply instantly.
     login_url = _PLATFORM_LOGIN.get(plat)
     if login_url:
         _run_helper_detached(pid, ["open-url", login_url], info.get("profile") or "")
-    j(handler, {"liveUrl": url, "status": res.get("status") or "", "platform": plat})
+    j(handler, {"liveUrl": url, "status": res.get("status") or "", "platform": plat, "gologin_profile_id": pid})
 
 
 def saas_social_stop(handler, body):
-    info, pid = _client_gologin_pid(handler)
+    info, pid, _row = _resolve_profile(handler, str((body or {}).get("profileId") or "").strip())
     if not info or not pid:
         bad(handler, "not logged in / no profile", 401)
         return
@@ -752,21 +825,14 @@ def saas_social_stop(handler, body):
     j(handler, {"ok": st in (200, 202, 204)})
 
 
-def _node_bin() -> str:
-    for c in ("/opt/node/bin/node", "/usr/local/bin/node", "node"):
-        if c == "node" or os.path.exists(c):
-            return c
-    return "node"
-
-
 def saas_social_check(handler, body):
-    """Live login-status check via the GoLogin helper (opens the cloud browser). Slow (~60s)."""
-    info, pid = _client_gologin_pid(handler)
+    """Live login-status check for a specific profile via the helper (~60s). Caches per profile."""
+    info, pid, _row = _resolve_profile(handler, str((body or {}).get("profileId") or "").strip())
     if not info:
         bad(handler, "not logged in", 401)
         return
     if not pid:
-        bad(handler, "no GoLogin profile provisioned", 409)
+        bad(handler, "unknown profile", 404)
         return
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
     env = dict(os.environ)
@@ -789,12 +855,12 @@ def saas_social_check(handler, body):
     connected = out.get("connected") or {}
     rec = {"connected": connected, "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     try:
-        cp = _status_cache_path(info["profile"])
+        cp = _status_cache_path(info["profile"], pid)
         cp.parent.mkdir(parents=True, exist_ok=True)
         cp.write_text(json.dumps(rec), encoding="utf-8")
     except Exception:
         pass
-    j(handler, rec)
+    j(handler, {"gologin_profile_id": pid, **rec})
 
 
 # ── Reporting (Supabase posts + profile-local jsonl) ─────────────────────────
@@ -1048,6 +1114,8 @@ def handle_saas_get(handler, parsed) -> bool:
         saas_admin_clients(handler)
     elif p == "/api/saas/client/keys":
         saas_client_keys_get(handler)
+    elif p == "/api/saas/profiles":
+        saas_profiles_list(handler)
     elif p == "/api/storage/list":
         saas_storage_list(handler)
     else:
@@ -1073,6 +1141,10 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_admin_user_password(handler, body)
     elif p == "/api/saas/client/keys":
         saas_client_keys_post(handler, body)
+    elif p == "/api/saas/profiles/add":
+        saas_profiles_add(handler, body)
+    elif p == "/api/saas/profiles/delete":
+        saas_profiles_delete(handler, body)
     elif p == "/api/storage/upload":
         saas_storage_upload(handler, body)
     elif p == "/api/storage/delete":

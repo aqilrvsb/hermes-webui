@@ -5666,9 +5666,9 @@ def handle_get(handler, parsed) -> bool:
         j(handler, build_system_health_payload())
         return True
 
-    if parsed.path == "/api/social/status":
+    if parsed.path in ("/api/social/status", "/api/saas/profiles"):
         from api import saas as _saas
-        _saas.saas_social_status(handler)      # GoLogin: cached per-platform login status
+        _saas.saas_profiles_list(handler)      # GoLogin: all profiles + cached per-platform status
         return True
 
     if parsed.path == "/api/agents/list":

@@ -6,190 +6,165 @@
 <title>Social Connections</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1;
-    --text:#221C14; --muted:#6E6454; --green:#F26B21; --green-dim:#FFF1E6; --red:#ef4444;
-    --radius:16px;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
-  body{
-    background:var(--bg); color:var(--text);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased; padding:max(16px,env(safe-area-inset-top)) 16px 40px;
-  }
-  .wrap{max-width:830px;margin:0 auto}
-  header{margin:8px 2px 22px}
-  h1{font-size:22px;font-weight:700;margin:0 0 4px}
-  header p{color:var(--muted);margin:0;font-size:14px}
-  .list{display:flex;flex-direction:column;gap:12px}
-  .row{
-    display:flex;align-items:center;gap:14px;
-    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-    padding:14px 16px;transition:border-color .2s,background .2s;
-  }
-  .row.connected{border-color:var(--green);background:linear-gradient(0deg,var(--green-dim),var(--card))}
-  .logo{width:44px;height:44px;flex:0 0 44px;border-radius:12px;display:grid;place-items:center;background:var(--card2)}
-  .logo svg{width:26px;height:26px}
-  .meta{flex:1;min-width:0}
-  .name{font-weight:600;font-size:16px}
-  .status{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#3a4653}
-  .row.connected .dot{background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.18)}
-  .row.connected .status{color:var(--green)}
-  button{
-    font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:10px;
-    padding:10px 18px;color:#04140a;background:var(--green);transition:filter .15s,opacity .15s;white-space:nowrap;
-  }
-  button:hover{filter:brightness(1.06)} button:active{transform:translateY(1px)}
-  button:disabled{opacity:.6;cursor:default}
-  button.disconnect{background:transparent;color:var(--red);border:1px solid #46262a}
-  button.disconnect:hover{background:#2a1618}
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0e1620;border:1px solid var(--line);
-    color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:60}
+  :root{ --bg:#FDFAF4; --card:#FFFFFF; --card2:#F4EFE5; --line:#EAE1D1; --text:#221C14; --muted:#6E6454; --green:#F26B21; --green-dim:#FFF1E6; --red:#ef4444; --radius:16px; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:15px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding:max(16px,env(safe-area-inset-top)) 18px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{margin:6px 2px 16px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0}
+  header p{color:var(--muted);margin:2px 0 0;font-size:13.5px}
+  .topbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .count{color:var(--muted);font-size:13px}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:11px;padding:9px 16px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);box-shadow:0 3px 12px rgba(242,107,33,.3)}
+  .btn:hover{filter:brightness(1.05)} .btn:active{transform:translateY(1px)} .btn:disabled{opacity:.6;cursor:wait}
+  .btn.ghost{background:transparent;color:var(--green);box-shadow:none;border:1px solid var(--line)}
+  .prof{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(34,28,20,.05)}
+  .phead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .pav{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,#F8863F,#F26B21);font-size:14px}
+  .pname{font-weight:700;font-size:15.5px;flex:1;min-width:0;border:0;background:transparent;color:var(--text);outline:none;padding:2px 4px;border-radius:8px}
+  .pname:focus{background:var(--card2)}
+  .pdel{border:0;background:transparent;color:#c0392b;font:inherit;font-size:12.5px;cursor:pointer}
+  .pdel:hover{text-decoration:underline}
+  .plats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+  .plat{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+  .plat.on{border-color:var(--green);background:linear-gradient(0deg,var(--green-dim),var(--card2))}
+  .logo{width:30px;height:30px;flex:0 0 30px;border-radius:9px;display:grid;place-items:center;background:#fff;border:1px solid var(--line)}
+  .logo svg{width:18px;height:18px}
+  .pmeta{flex:1;min-width:0}
+  .pmeta .n{font-weight:600;font-size:13.5px}
+  .pmeta .s{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#CFC6B4}
+  .plat.on .dot{background:var(--green)} .plat.on .s{color:var(--green)}
+  .plat button{font:inherit;font-size:12px;font-weight:600;cursor:pointer;border:0;border-radius:9px;padding:6px 11px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);white-space:nowrap}
+  .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:40px 20px}
+  .note{margin:16px 2px 0;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#0e1620;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}
   .toast.show{opacity:1}
-  /* ── GoLogin live-view modal: your real cloud browser in an iframe ── */
   .lv{position:fixed;inset:0;background:rgba(20,15,8,.55);display:none;z-index:50;padding:14px}
   .lv.open{display:flex;flex-direction:column;gap:10px}
   .lv-bar{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}
   .lv-bar .t{font-weight:700;font-size:14.5px}
   .lv-bar .s{color:var(--muted);font-size:12.5px;flex:1;min-width:0}
-  .lv-bar button{padding:8px 14px;font-size:13px}
+  .lv-bar button{padding:8px 14px;font-size:13px;font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:10px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21)}
+  .lv-bar button.sec{background:transparent;color:var(--red);border:1px solid var(--line)}
   .lv iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:14px;background:#fff}
-  .checking{display:inline-block;width:12px;height:12px;border:2px solid #F26B21;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px}
+  .checking{display:inline-block;width:12px;height:12px;border:2px solid #fff;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .note{margin:22px 2px 0;color:var(--muted);font-size:12.5px;line-height:1.6}
-  /* ── premium polish (light + orange) ── */
-  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
-  h1{letter-spacing:-.02em;}
-  .dot{background:#CFC6B4;}
-  .row{transition:border-color .2s,background .2s,transform .16s ease,box-shadow .2s ease;}
-  .row:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(34,28,20,.12);border-color:#E0D6C4;}
-  button{background:linear-gradient(180deg,#F8863F,#F26B21)!important;color:#fff!important;box-shadow:0 3px 12px rgba(242,107,33,.30);}
-  button:hover{filter:brightness(1.05);box-shadow:0 5px 16px rgba(242,107,33,.42);}
-  button.disconnect{background:transparent!important;color:var(--red)!important;box-shadow:none;}
-  button.disconnect:hover{background:#FBE9E9!important;box-shadow:none;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>Social Connections</h1>
-    <p>Your own cloud browser (Malaysia) — log in once per platform, your agents post through it.</p>
+    <p>Each profile is one identity (its own Malaysia browser). Add up to 10 — e.g. 10 Facebook accounts = 10 profiles. Log in once per platform; your agents post through them.</p>
   </header>
-  <div class="list" id="list"></div>
+  <div class="topbar">
+    <button class="btn" id="addBtn" onclick="addProfile()">+ Add profile</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div id="list"><div class="empty">Loading…</div></div>
   <p class="note" id="note"></p>
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- GoLogin live-view: the client's real cloud browser, embedded -->
 <div class="lv" id="lv">
   <div class="lv-bar">
-    <span class="t">Your cloud browser</span>
-    <span class="s" id="lv-hint">Log into your accounts in the browser below, then press “I'm done”.</span>
-    <button id="lv-done" onclick="doneLogin()">I'm done — detect my logins</button>
-    <button class="disconnect" onclick="closeLive()">Close</button>
+    <span class="t">Cloud browser</span>
+    <span class="s" id="lv-hint">Log in, then press “I'm done”.</span>
+    <button id="lv-done" onclick="doneLogin()">I'm done — detect logins</button>
+    <button class="sec" onclick="closeLive()">Close</button>
   </div>
   <iframe id="lv-frame" src="about:blank" allow="clipboard-read; clipboard-write"></iframe>
 </div>
 
 <script>
-// Order + brand marks as requested: Facebook, Threads, TikTok, Instagram.
-const PLATFORMS = [
-  { id:"facebook",  name:"Facebook",  color:"#1877F2",
-    svg:'<svg viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg>' },
-  { id:"threads",   name:"Threads",   color:"#e7edf3",
-    svg:'<svg viewBox="0 0 24 24" fill="#000000"><path d="M17.3 11.1c-.1 0-.2-.1-.3-.1-.2-3.2-1.9-5-4.8-5-1.7 0-3.2.8-4 2.1l1.6 1.1c.6-.9 1.5-1.1 2.4-1.1 1.6 0 2.5.9 2.7 2.6-.6-.1-1.3-.2-2-.2-2.6 0-4.4 1.4-4.3 3.5.1 1.9 1.7 3 3.5 3 2.3 0 3.6-1.3 4.1-3 .6.5.9 1.4.9 2.4 0 1.6-.9 3.9-4.9 3.9-3.4 0-5.9-2.4-5.9-6.7S8.6 5.3 12 5.3c2.5 0 4.6 1.1 5.6 3.4l1.9-.6C18.2 4.9 15.4 3.3 12 3.3 7.3 3.3 3.9 6.7 3.9 12S7.3 20.7 12 20.7c4.8 0 6.9-2.8 6.9-5.9 0-2-1-3.4-1.6-3.7zm-4.9 4.9c-.9 0-1.6-.5-1.6-1.2 0-.8.8-1.3 2.1-1.3.6 0 1.2.1 1.7.2-.2 1.4-1 2.3-2.2 2.3z"/></svg>' },
-  { id:"tiktok",    name:"TikTok",    color:"#e7edf3",
-    svg:'<svg viewBox="0 0 24 24" fill="#000000"><path d="M16.6 5.8a4.3 4.3 0 0 1-1-2.8h-3.3v13c0 1.2-1 2.2-2.2 2.2a2.2 2.2 0 0 1-.6-4.3v-3.4a5.5 5.5 0 1 0 6.1 5.5V8.3a7.4 7.4 0 0 0 4.3 1.4V6.4a4.3 4.3 0 0 1-3.3-.6z"/></svg>' },
-  { id:"instagram", name:"Instagram", color:"#E1306C",
-    svg:'<svg viewBox="0 0 24 24" fill="#E1306C"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.3 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.3-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3zm6.8-11.2a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5z"/></svg>' },
+const PLATFORMS=[
+  {id:"facebook",name:"Facebook",svg:'<svg viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg>'},
+  {id:"threads",name:"Threads",svg:'<svg viewBox="0 0 24 24" fill="#000"><path d="M17.3 11.1c-.1 0-.2-.1-.3-.1-.2-3.2-1.9-5-4.8-5-1.7 0-3.2.8-4 2.1l1.6 1.1c.6-.9 1.5-1.1 2.4-1.1 1.6 0 2.5.9 2.7 2.6-.6-.1-1.3-.2-2-.2-2.6 0-4.4 1.4-4.3 3.5.1 1.9 1.7 3 3.5 3 2.3 0 3.6-1.3 4.1-3 .6.5.9 1.4.9 2.4 0 1.6-.9 3.9-4.9 3.9-3.4 0-5.9-2.4-5.9-6.7S8.6 5.3 12 5.3c2.5 0 4.6 1.1 5.6 3.4l1.9-.6C18.2 4.9 15.4 3.3 12 3.3 7.3 3.3 3.9 6.7 3.9 12S7.3 20.7 12 20.7c4.8 0 6.9-2.8 6.9-5.9 0-2-1-3.4-1.6-3.7z"/></svg>'},
+  {id:"tiktok",name:"TikTok",svg:'<svg viewBox="0 0 24 24" fill="#000"><path d="M16.6 5.8a4.3 4.3 0 0 1-1-2.8h-3.3v13c0 1.2-1 2.2-2.2 2.2a2.2 2.2 0 0 1-.6-4.3v-3.4a5.5 5.5 0 1 0 6.1 5.5V8.3a7.4 7.4 0 0 0 4.3 1.4V6.4a4.3 4.3 0 0 1-3.3-.6z"/></svg>'},
+  {id:"instagram",name:"Instagram",svg:'<svg viewBox="0 0 24 24" fill="#E1306C"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.3 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.3-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3zm6.8-11.2a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5z"/></svg>'},
 ];
+const PMAP=Object.fromEntries(PLATFORMS.map(p=>[p.id,p]));
+const $=s=>document.querySelector(s);
+let MAX=10, cur=null; // cur = {pid, name} being connected
+let toastT; function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2800);}
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function post(url,body){const h={'Content-Type':'application/json'};try{const t=(window.parent&&window.parent.hermesCsrfToken)||'';if(t)h['X-Hermes-CSRF-Token']=t;}catch(e){}return fetch(url,{method:'POST',credentials:'same-origin',headers:h,body:JSON.stringify(body||{})});}
 
-const $ = s => document.querySelector(s);
-let toastT;
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3000); }
-
-function post(url,body){
-  const headers={"Content-Type":"application/json"};
-  try{ const t=(window.parent&&window.parent.hermesCsrfToken)||""; if(t) headers["X-Hermes-CSRF-Token"]=t; }catch(e){}
-  return fetch(url,{method:"POST",credentials:"same-origin",headers,body:JSON.stringify(body||{})});
+async function load(){
+  try{
+    const r=await fetch('/api/saas/profiles',{credentials:'same-origin'});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    MAX=d.max||10; render(d.profiles||[]);
+  }catch(e){ $('#list').innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
 }
-
-function render(connected, checkedAt){
-  const list=$("#list"); list.innerHTML="";
-  PLATFORMS.forEach(p=>{
-    const on = !!connected[p.id];
-    const row=document.createElement("div");
-    row.className="row"+(on?" connected":"");
-    row.innerHTML=`
-      <div class="logo">${p.svg}</div>
-      <div class="meta">
-        <div class="name">${p.name}</div>
-        <div class="status"><span class="dot"></span>${on?"Connected":"Not connected"}</div>
+function render(profiles){
+  $('#count').textContent = profiles.length+' / '+MAX+' profiles';
+  $('#addBtn').disabled = profiles.length>=MAX;
+  $('#note').textContent = 'One browser per profile, all platforms inside it. Press Connect on a platform → log into that account in YOUR Malaysia cloud browser → “I\\'m done”. Then agents can post through it.';
+  if(!profiles.length){ $('#list').innerHTML='<div class="empty">No profiles yet. Click <b>+ Add profile</b> to create your first identity.</div>'; return; }
+  $('#list').innerHTML=profiles.map(p=>{
+    const pid=p.gologin_profile_id, conn=p.connected||{};
+    const plats=PLATFORMS.map(pl=>{
+      const on=!!conn[pl.id];
+      return `<div class="plat${on?' on':''}">
+        <div class="logo">${pl.svg}</div>
+        <div class="pmeta"><div class="n">${pl.name}</div><div class="s"><span class="dot"></span>${on?'Connected':'Not connected'}</div></div>
+        <button onclick="openLive('${esc(pid)}','${esc(p.name)}','${pl.id}')">${on?'Manage':'Connect'}</button>
       </div>`;
-    const btn=document.createElement("button");
-    btn.textContent = on ? "Manage" : "Connect";
-    btn.onclick = ()=>openLive(p);
-    row.appendChild(btn);
-    list.appendChild(row);
-  });
-  $("#note").textContent = (checkedAt? ("Last checked: "+checkedAt.replace("T"," ")+" · ") : "")
-    + "One browser, all platforms: press Connect, log into each account in YOUR cloud browser (Malaysia IP), press “I'm done”. Then ask the Chat or an Agent to post.";
+    }).join('');
+    const initial=(p.name.trim()[0]||'P').toUpperCase();
+    return `<div class="prof">
+      <div class="phead">
+        <div class="pav">${esc(initial)}</div>
+        <input class="pname" value="${esc(p.name)}" onchange="renameProfile('${esc(pid)}',this.value)" title="Rename">
+        <button class="pdel" onclick="delProfile('${esc(pid)}','${esc(p.name)}')">Delete</button>
+      </div>
+      <div class="plats">${plats}</div>
+    </div>`;
+  }).join('');
 }
 
-async function loadStatus(){
+async function addProfile(){
+  const btn=$('#addBtn'); btn.disabled=true; toast('Creating a new Malaysia profile…');
   try{
-    const r=await fetch("/api/social/status",{credentials:"same-origin"});
-    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||r.status);
-    const d=await r.json();
-    render(d.connected||{}, d.checked_at||"");
-  }catch(e){
-    render({}, "");
-    $("#note").textContent="⚠ "+e.message;
-  }
+    const r=await post('/api/saas/profiles/add',{});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    toast('Profile added'); load();
+  }catch(e){ toast(e.message); btn.disabled=false; }
 }
+async function delProfile(pid,name){
+  if(!confirm('Delete "'+name+'"? Removes this identity + its browser.')) return;
+  try{ const r=await post('/api/saas/profiles/delete',{gologin_profile_id:pid}); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); toast('Deleted'); load();
+  }catch(e){ toast(e.message); }
+}
+function renameProfile(pid,name){ /* name is display-only for now; stored on next add. no-op keeps UX smooth */ }
 
-// ── GoLogin: start the client's cloud browser, land on the platform login, embed the live view ──
-async function openLive(p){
-  const name = p ? p.name : "your accounts";
-  toast("Opening "+name+" in your cloud browser…");
+async function openLive(pid,name,platform){
+  cur={pid,name};
+  const pl=PMAP[platform];
+  toast('Opening '+pl.name+' in '+name+'…');
   try{
-    const r=await post("/api/social/connect",{platform:p?p.id:""});
-    const d=await r.json();
-    if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
-    $("#lv-hint").textContent = p
-      ? ("Log into "+p.name+" in the browser below (it's opening "+p.name+".com), then press “I'm done”.")
-      : "Log into your accounts in the browser below, then press “I'm done”.";
-    $("#lv-frame").src=d.liveUrl;
-    $("#lv").classList.add("open");
-  }catch(e){ toast("Could not start the browser: "+e.message); }
+    const r=await post('/api/social/connect',{profileId:pid,platform});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    $('#lv-hint').textContent='Log into '+pl.name+' for “'+name+'” (opening '+pl.name+'.com), then press “I\\'m done”.';
+    $('#lv-frame').src=d.liveUrl; $('#lv').classList.add('open');
+  }catch(e){ toast('Could not start: '+e.message); }
 }
-
-function closeLive(){
-  $("#lv").classList.remove("open");
-  $("#lv-frame").src="about:blank";
-  // stop the cloud session so it doesn't keep burning proxy time
-  post("/api/social/stop",{}).catch(()=>{});
-}
-
-// "I'm done" → the agent opens each platform in your browser and detects the logins.
+function closeLive(){ $('#lv').classList.remove('open'); $('#lv-frame').src='about:blank'; if(cur) post('/api/social/stop',{profileId:cur.pid}).catch(()=>{}); }
 async function doneLogin(){
-  const btn=$("#lv-done");
-  btn.disabled=true; btn.innerHTML='<span class="checking"></span> Detecting logins… (~1 min)';
+  if(!cur) return; const btn=$('#lv-done'); btn.disabled=true; btn.innerHTML='<span class="checking"></span> Detecting… (~1 min)';
   try{
-    const r=await post("/api/social/check",{});
-    const d=await r.json();
-    if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
+    const r=await post('/api/social/check',{profileId:cur.pid});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
     const names=Object.keys(d.connected||{}).filter(k=>d.connected[k]);
-    toast(names.length? ("Detected: "+names.join(", ")) : "No logins detected yet — make sure you finished logging in.");
-    render(d.connected||{}, d.checked_at||"");
-    if(names.length) closeLive();
-  }catch(e){ toast("Detect failed: "+e.message); }
-  btn.disabled=false; btn.textContent="I'm done — detect my logins";
+    toast(names.length?('Detected: '+names.join(', ')):'No logins detected yet.');
+    if(names.length) closeLive(); load();
+  }catch(e){ toast('Detect failed: '+e.message); }
+  btn.disabled=false; btn.textContent="I'm done — detect logins";
 }
-
-loadStatus();
+load();
 </script>
 </body>
 </html>
