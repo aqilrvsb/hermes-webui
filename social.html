@@ -101,7 +101,7 @@ async function load(){
 function render(profiles){
   $('#count').textContent = profiles.length+' / '+MAX+' profiles';
   $('#addBtn').disabled = profiles.length>=MAX;
-  $('#note').textContent = 'One browser per profile, all platforms inside it. Press Connect on a platform → log into that account in YOUR Malaysia cloud browser → “I\\'m done”. Then agents can post through it.';
+  $('#note').textContent = 'One browser per profile, all platforms inside it. Press Connect on a platform → log into that account in YOUR Malaysia cloud browser → “I’m done”. Then agents can post through it.';
   if(!profiles.length){ $('#list').innerHTML='<div class="empty">No profiles yet. Click <b>+ Add profile</b> to create your first identity.</div>'; return; }
   $('#list').innerHTML=profiles.map(p=>{
     const pid=p.gologin_profile_id, conn=p.connected||{};
@@ -148,7 +148,7 @@ async function openLive(pid,name,platform){
   try{
     const r=await post('/api/social/connect',{profileId:pid,platform});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
-    $('#lv-hint').textContent='Log into '+pl.name+' for “'+name+'” (opening '+pl.name+'.com), then press “I\\'m done”.';
+    $('#lv-hint').textContent='Log into '+pl.name+' for “'+name+'” (opening '+pl.name+'.com), then press “I’m done”.';
     $('#lv-frame').src=d.liveUrl; $('#lv').classList.add('open');
   }catch(e){ toast('Could not start: '+e.message); }
 }
