@@ -194,7 +194,7 @@ async function cmdLoginStatus(browser, wanted) {
     try {
       const page = await newPage(browser);
       await page.goto(def.home, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 3000));   // let redirects + the proxy interstitial settle
       result[plat] = await isLoggedIn(page, def);
     } catch (e) { result[plat] = false; }
   }

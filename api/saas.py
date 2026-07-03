@@ -826,7 +826,7 @@ def saas_social_stop(handler, body):
 
 
 def saas_social_check(handler, body):
-    """Live login-status check for a specific profile via the helper (~60s). Caches per profile."""
+    """Verify login for ONE platform of a profile (the one just connected). Merges into the cache."""
     info, pid, _row = _resolve_profile(handler, str((body or {}).get("profileId") or "").strip())
     if not info:
         bad(handler, "not logged in", 401)
@@ -834,14 +834,16 @@ def saas_social_check(handler, body):
     if not pid:
         bad(handler, "unknown profile", 404)
         return
+    plat = str((body or {}).get("platform") or "").lower().strip()
     helper = os.environ.get("HERMES_GOLOGIN_HELPER") or "/apptoo/gologin_helper.js"
     env = dict(os.environ)
     env["GOLOGIN_API_TOKEN"] = _gologin_token()
     env["GOLOGIN_PROFILE_ID"] = pid
     env["HERMES_HOME"] = str(_resolve_profile_home_for_name(info["profile"]))
+    # Check ONLY the platform being connected (don't touch/navigate the others).
+    args = [_node_bin(), helper, "login-status"] + ([plat] if plat in _SOCIAL_PLATFORMS else [])
     try:
-        p = subprocess.run([_node_bin(), helper, "login-status"],
-                           capture_output=True, text=True, timeout=180, env=env)
+        p = subprocess.run(args, capture_output=True, text=True, timeout=180, env=env)
         out = json.loads((p.stdout or "").strip() or "{}")
     except subprocess.TimeoutExpired:
         bad(handler, "status check timed out", 504)
@@ -852,7 +854,10 @@ def saas_social_check(handler, body):
     if out.get("error"):
         bad(handler, "status check failed: %s" % out["error"], 502)
         return
-    connected = out.get("connected") or {}
+    checked = out.get("connected") or {}
+    # MERGE — keep the other platforms' existing statuses, only update the checked one(s).
+    connected = _read_status(info["profile"], pid).get("connected") or {}
+    connected.update(checked)
     rec = {"connected": connected, "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     try:
         cp = _status_cache_path(info["profile"], pid)
@@ -860,7 +865,27 @@ def saas_social_check(handler, body):
         cp.write_text(json.dumps(rec), encoding="utf-8")
     except Exception:
         pass
-    j(handler, {"gologin_profile_id": pid, **rec})
+    j(handler, {"gologin_profile_id": pid, "just_checked": plat, **rec})
+
+
+def saas_social_disconnect_platform(handler, body):
+    """Mark ONE platform of a profile as disconnected (clears its cached login status)."""
+    info, pid, _row = _resolve_profile(handler, str((body or {}).get("profileId") or "").strip())
+    if not info or not pid:
+        bad(handler, "not logged in / unknown profile", 401)
+        return
+    plat = str((body or {}).get("platform") or "").lower().strip()
+    cache = _read_status(info["profile"], pid)
+    connected = cache.get("connected") or {}
+    connected.pop(plat, None)
+    rec = {"connected": connected, "checked_at": cache.get("checked_at") or ""}
+    try:
+        cp = _status_cache_path(info["profile"], pid)
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps(rec), encoding="utf-8")
+    except Exception:
+        pass
+    j(handler, {"ok": True, **rec})
 
 
 # ── Reporting (Supabase posts + profile-local jsonl) ─────────────────────────
@@ -1159,6 +1184,8 @@ def handle_saas_post(handler, parsed, body) -> bool:
         saas_storage_delete(handler, body)
     elif p == "/api/social/check":
         saas_social_check(handler, body)
+    elif p == "/api/social/disconnect-platform":
+        saas_social_disconnect_platform(handler, body)
     elif p == "/api/social/stop":
         saas_social_stop(handler, body)
     else:

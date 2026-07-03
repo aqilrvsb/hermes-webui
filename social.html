@@ -36,6 +36,8 @@
   .dot{width:7px;height:7px;border-radius:50%;background:#CFC6B4}
   .plat.on .dot{background:var(--green)} .plat.on .s{color:var(--green)}
   .plat button{font:inherit;font-size:12px;font-weight:600;cursor:pointer;border:0;border-radius:9px;padding:6px 11px;color:#fff;background:linear-gradient(180deg,#F8863F,#F26B21);white-space:nowrap}
+  .plat button.dc{background:transparent;color:var(--red);border:1px solid #f0cccc}
+  .plat button.dc:hover{background:#FBE9E9}
   .empty{border:1px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center;padding:40px 20px}
   .note{margin:16px 2px 0;color:var(--muted);font-size:12.5px;line-height:1.6}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#0e1620;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}
@@ -107,10 +109,13 @@ function render(profiles){
     const pid=p.gologin_profile_id, conn=p.connected||{};
     const plats=PLATFORMS.map(pl=>{
       const on=!!conn[pl.id];
+      const btn = on
+        ? `<button class="dc" onclick="disc('${esc(pid)}','${pl.id}','${esc(pl.name)}')">Disconnect</button>`
+        : `<button onclick="openLive('${esc(pid)}','${esc(p.name)}','${pl.id}')">Connect</button>`;
       return `<div class="plat${on?' on':''}">
         <div class="logo">${pl.svg}</div>
         <div class="pmeta"><div class="n">${pl.name}</div><div class="s"><span class="dot"></span>${on?'Connected':'Not connected'}</div></div>
-        <button onclick="openLive('${esc(pid)}','${esc(p.name)}','${pl.id}')">${on?'Manage':'Connect'}</button>
+        ${btn}
       </div>`;
     }).join('');
     const initial=(p.name.trim()[0]||'P').toUpperCase();
@@ -142,7 +147,7 @@ async function delProfile(pid,name){
 function renameProfile(pid,name){ /* name is display-only for now; stored on next add. no-op keeps UX smooth */ }
 
 async function openLive(pid,name,platform){
-  cur={pid,name};
+  cur={pid,name,platform};
   const pl=PMAP[platform];
   toast('Opening '+pl.name+' in '+name+'…');
   try{
@@ -154,15 +159,23 @@ async function openLive(pid,name,platform){
 }
 function closeLive(){ $('#lv').classList.remove('open'); $('#lv-frame').src='about:blank'; if(cur) post('/api/social/stop',{profileId:cur.pid}).catch(()=>{}); }
 async function doneLogin(){
-  if(!cur) return; const btn=$('#lv-done'); btn.disabled=true; btn.innerHTML='<span class="checking"></span> Detecting… (~1 min)';
+  if(!cur) return; const btn=$('#lv-done'); const pl=PMAP[cur.platform];
+  btn.disabled=true; btn.innerHTML='<span class="checking"></span> Checking '+(pl?pl.name:'')+'…';
   try{
-    const r=await post('/api/social/check',{profileId:cur.pid});
+    // verify ONLY the platform we just connected — don't touch the others
+    const r=await post('/api/social/check',{profileId:cur.pid,platform:cur.platform});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
-    const names=Object.keys(d.connected||{}).filter(k=>d.connected[k]);
-    toast(names.length?('Detected: '+names.join(', ')):'No logins detected yet.');
-    if(names.length) closeLive(); load();
-  }catch(e){ toast('Detect failed: '+e.message); }
-  btn.disabled=false; btn.textContent="I'm done — detect logins";
+    const ok=!!(d.connected||{})[cur.platform];
+    toast(ok?((pl?pl.name:'It')+' connected ✓'):((pl?pl.name:'That')+' not detected — finish logging in, then try again.'));
+    if(ok) closeLive(); load();
+  }catch(e){ toast('Check failed: '+e.message); }
+  btn.disabled=false; btn.textContent="I'm done — detect login";
+}
+async function disc(pid,platform,pname){
+  if(!confirm('Disconnect '+pname+'? Your agents will stop posting to it until you reconnect.')) return;
+  try{ const r=await post('/api/social/disconnect-platform',{profileId:pid,platform}); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); toast(pname+' disconnected'); load();
+  }catch(e){ toast('Disconnect failed: '+e.message); }
 }
 load();
 </script>
